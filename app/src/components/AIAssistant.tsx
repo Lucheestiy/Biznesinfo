@@ -1,8 +1,15 @@
  "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
+
+interface AttachedFile {
+  id: string;
+  file: File;
+  preview?: string;
+  type: "image" | "document";
+}
 
 interface AIAssistantProps {
   floating?: boolean;
@@ -11,6 +18,21 @@ interface AIAssistantProps {
   isActive?: boolean;
   hideFloatingButton?: boolean;
 }
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILES = 10;
+const ALLOWED_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+];
 
 export default function AIAssistant({
   floating = false,
@@ -27,12 +49,16 @@ export default function AIAssistant({
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<{
     senderCompanyName?: string;
     contactPerson?: string;
     position?: string;
     phone?: string;
     message?: string;
+    files?: string;
   }>({});
 
   useEffect(() => {
@@ -71,6 +97,118 @@ export default function AIAssistant({
     return Object.keys(nextErrors).length === 0;
   };
 
+  const processFiles = useCallback((files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    const newFiles: AttachedFile[] = [];
+    let errorMsg = "";
+
+    for (const file of fileArray) {
+      if (attachedFiles.length + newFiles.length >= MAX_FILES) {
+        errorMsg = t("ai.form.maxFilesError") || `Максимум ${MAX_FILES} файлов`;
+        break;
+      }
+
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        errorMsg = t("ai.form.fileTypeError") || "Неподдерживаемый формат файла";
+        continue;
+      }
+
+      if (file.size > MAX_FILE_SIZE) {
+        errorMsg = t("ai.form.fileSizeError") || "Файл слишком большой (макс. 10 МБ)";
+        continue;
+      }
+
+      const isImage = file.type.startsWith("image/");
+      const newFile: AttachedFile = {
+        id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        file,
+        type: isImage ? "image" : "document",
+      };
+
+      if (isImage) {
+        newFile.preview = URL.createObjectURL(file);
+      }
+
+      newFiles.push(newFile);
+    }
+
+    if (errorMsg) {
+      setErrors((prev) => ({ ...prev, files: errorMsg }));
+    } else {
+      setErrors((prev) => ({ ...prev, files: undefined }));
+    }
+
+    if (newFiles.length > 0) {
+      setAttachedFiles((prev) => [...prev, ...newFiles]);
+    }
+  }, [attachedFiles.length, t]);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      processFiles(e.target.files);
+      e.target.value = "";
+    }
+  };
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      processFiles(e.dataTransfer.files);
+    }
+  }, [processFiles]);
+
+  const removeFile = (fileId: string) => {
+    setAttachedFiles((prev) => {
+      const file = prev.find((f) => f.id === fileId);
+      if (file?.preview) {
+        URL.revokeObjectURL(file.preview);
+      }
+      return prev.filter((f) => f.id !== fileId);
+    });
+    setErrors((prev) => ({ ...prev, files: undefined }));
+  };
+
+  const getFileIcon = (file: AttachedFile) => {
+    if (file.type === "image") return null;
+    const ext = file.file.name.split(".").pop()?.toLowerCase();
+    if (ext === "pdf") return "📄";
+    if (["doc", "docx"].includes(ext || "")) return "📝";
+    if (["xls", "xlsx"].includes(ext || "")) return "📊";
+    return "📎";
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  // Cleanup previews on unmount
+  useEffect(() => {
+    return () => {
+      attachedFiles.forEach((file) => {
+        if (file.preview) {
+          URL.revokeObjectURL(file.preview);
+        }
+      });
+    };
+  }, []);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
@@ -84,9 +222,21 @@ export default function AIAssistant({
       message,
       companyName,
       companyId,
+      files: attachedFiles.map((f) => ({
+        name: f.file.name,
+        size: f.file.size,
+        type: f.file.type,
+      })),
     });
     setSubmitted(true);
     setMessage("");
+    // Cleanup file previews
+    attachedFiles.forEach((file) => {
+      if (file.preview) {
+        URL.revokeObjectURL(file.preview);
+      }
+    });
+    setAttachedFiles([]);
     setErrors({});
 
     setTimeout(() => {
@@ -274,6 +424,94 @@ export default function AIAssistant({
                       />
                       {errors.message && <p className="mt-1 text-sm text-red-600">{errors.message}</p>}
                     </div>
+
+                    {/* File Upload Section */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {t("ai.form.attachFiles") || "Прикрепить файлы"}
+                      </label>
+                      <div
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`relative border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${
+                          isDragging
+                            ? "border-[#820251] bg-pink-50"
+                            : "border-gray-300 hover:border-[#820251] hover:bg-gray-50"
+                        }`}
+                      >
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          multiple
+                          accept={ALLOWED_TYPES.join(",")}
+                          onChange={handleFileSelect}
+                          className="hidden"
+                        />
+                        <div className="flex flex-col items-center gap-2">
+                          <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                          <p className="text-sm text-gray-600">
+                            {t("ai.form.dragOrClick") || "Перетащите файлы или нажмите для выбора"}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            {t("ai.form.fileFormats") || "Фото, PDF, Word, Excel (макс. 10 МБ)"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* File Previews */}
+                      {attachedFiles.length > 0 && (
+                        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {attachedFiles.map((file) => (
+                            <div
+                              key={file.id}
+                              className="relative group bg-gray-100 rounded-lg p-2 flex flex-col items-center"
+                            >
+                              {file.type === "image" && file.preview ? (
+                                <img
+                                  src={file.preview}
+                                  alt={file.file.name}
+                                  className="w-full h-16 object-cover rounded"
+                                />
+                              ) : (
+                                <div className="w-full h-16 flex items-center justify-center text-3xl">
+                                  {getFileIcon(file)}
+                                </div>
+                              )}
+                              <p className="text-xs text-gray-600 truncate w-full text-center mt-1">
+                                {file.file.name}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                {formatFileSize(file.file.size)}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeFile(file.id);
+                                }}
+                                className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {errors.files && <p className="mt-1 text-sm text-red-600">{errors.files}</p>}
+                      {attachedFiles.length > 0 && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          {attachedFiles.length} / {MAX_FILES} {t("ai.form.filesAttached") || "файлов прикреплено"}
+                        </p>
+                      )}
+                    </div>
+
                     <button
                       type="submit"
                       className="w-full mt-4 bg-[#820251] text-white py-3 rounded-lg font-semibold hover:bg-[#6a0143] transition-colors"
@@ -472,6 +710,94 @@ export default function AIAssistant({
                     />
                     {errors.message && <p className="mt-1 text-sm text-red-600">{errors.message}</p>}
                   </div>
+
+                  {/* File Upload Section */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {t("ai.form.attachFiles") || "Прикрепить файлы"}
+                    </label>
+                    <div
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`relative border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${
+                        isDragging
+                          ? "border-[#820251] bg-pink-50"
+                          : "border-gray-300 hover:border-[#820251] hover:bg-gray-50"
+                      }`}
+                    >
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        accept={ALLOWED_TYPES.join(",")}
+                        onChange={handleFileSelect}
+                        className="hidden"
+                      />
+                      <div className="flex flex-col items-center gap-2">
+                        <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <p className="text-sm text-gray-600">
+                          {t("ai.form.dragOrClick") || "Перетащите файлы или нажмите для выбора"}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {t("ai.form.fileFormats") || "Фото, PDF, Word, Excel (макс. 10 МБ)"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* File Previews */}
+                    {attachedFiles.length > 0 && (
+                      <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {attachedFiles.map((file) => (
+                          <div
+                            key={file.id}
+                            className="relative group bg-gray-100 rounded-lg p-2 flex flex-col items-center"
+                          >
+                            {file.type === "image" && file.preview ? (
+                              <img
+                                src={file.preview}
+                                alt={file.file.name}
+                                className="w-full h-16 object-cover rounded"
+                              />
+                            ) : (
+                              <div className="w-full h-16 flex items-center justify-center text-3xl">
+                                {getFileIcon(file)}
+                              </div>
+                            )}
+                            <p className="text-xs text-gray-600 truncate w-full text-center mt-1">
+                              {file.file.name}
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              {formatFileSize(file.file.size)}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeFile(file.id);
+                              }}
+                              className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {errors.files && <p className="mt-1 text-sm text-red-600">{errors.files}</p>}
+                    {attachedFiles.length > 0 && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        {attachedFiles.length} / {MAX_FILES} {t("ai.form.filesAttached") || "файлов прикреплено"}
+                      </p>
+                    )}
+                  </div>
+
                   <button
                     type="submit"
                     className="w-full mt-4 bg-[#820251] text-white py-3 rounded-lg font-semibold hover:bg-[#6a0143] transition-colors"

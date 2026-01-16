@@ -20,9 +20,11 @@ const translations: Record<Language, Record<string, string>> = {
     "nav.catalog": "Каталог",
     "nav.news": "Новости",
     "nav.promotions": "Акции",
-    "nav.about": "О проекте",
+    "nav.about": "Услуги компании",
     "nav.addCompany": "Добавить организацию",
     "nav.favorites": "Избранное",
+    "nav.mobile.contacts": "Контактная информация",
+    "nav.mobile.submitRequest": "Подать заявку на размещение",
 
     // Common
     "common.more": "ещё",
@@ -108,6 +110,13 @@ const translations: Record<Language, Record<string, string>> = {
     "ai.form.required": "Это поле обязательно",
     "ai.form.phoneInvalid": "Введите корректный номер телефона",
     "ai.form.login": "Войти в личный кабинет",
+    "ai.form.attachFiles": "Прикрепить файлы",
+    "ai.form.dragOrClick": "Перетащите файлы или нажмите для выбора",
+    "ai.form.fileFormats": "Фото, PDF, Word, Excel (макс. 10 МБ)",
+    "ai.form.maxFilesError": "Максимум 10 файлов",
+    "ai.form.fileTypeError": "Неподдерживаемый формат файла",
+    "ai.form.fileSizeError": "Файл слишком большой (макс. 10 МБ)",
+    "ai.form.filesAttached": "файлов прикреплено",
     "cabinet.title": "Личный кабинет",
     "cabinet.soon": "Раздел в разработке. Пока вы можете отправлять заявки через AI-ассистент.",
 
@@ -266,11 +275,22 @@ const translations: Record<Language, Record<string, string>> = {
     "news.alutech.excerpt": "Производитель алюминиевых профилей и роллетных систем открывает представительства в Казахстане и Узбекистане. Компания планирует удвоить экспорт к 2027 году.",
 
     // Services section
-    "services.title": "Услуги ООО «БизнесСтатус»",
-    "services.subtitle": "Комплексные решения для развития и продвижения вашего бизнеса",
+    "services.title": "Наши услуги по развитию и продвижению вашего бизнеса",
+    "services.subtitle": "",
     "services.consultation": "Нужна консультация?",
     "services.consultationDesc": "Подберём оптимальное решение для вашего бизнеса",
     "services.contactUs": "Написать нам",
+    "services.expand": "Показать все услуги",
+    "services.collapse": "Свернуть услуги",
+    "services.readMore": "Подробнее",
+    "services.backToServices": "Вернуться к услугам",
+    "services.article.benefits": "Преимущества для вашего бизнеса",
+    "services.article.details": "Подробное описание",
+    "services.article.features": "Что входит в услугу",
+    "services.article.cta.title": "Готовы начать?",
+    "services.article.cta.description": "Оставьте заявку, и мы свяжемся с вами для обсуждения деталей и расчёта стоимости.",
+    "services.article.cta.button": "Оставить заявку",
+    "services.article.cta.otherServices": "Другие услуги",
 
     // News
     "news.corporate": "Новости компаний Беларуси",
@@ -285,7 +305,7 @@ const translations: Record<Language, Record<string, string>> = {
     "about.directContact": "Прямой контакт",
     "about.directContactDesc": "Связывайтесь с компаниями напрямую через телефон, email, мессенджеры.",
     "about.aiExplanation": "Если вам необходимо приобрести товар или услугу, вы можете оставить заявку через нашего AI-ассистента. Ассистент автоматически разошлёт ваш запрос компаниям и организациям, которые предлагают данный товар или услугу.",
-    "about.aiPlatform": "BiznesInfo — это не справочник, а AI-платформа, соединяющая клиентов и бизнес.",
+    "about.aiPlatform": "Это AI-платформа, соединяющая клиентов и бизнес.",
     "about.submitRequest": "отправить заявку",
 
     // Services categories
@@ -597,9 +617,11 @@ const translations: Record<Language, Record<string, string>> = {
     "nav.catalog": "Catalog",
     "nav.news": "News",
     "nav.promotions": "Promotions",
-    "nav.about": "About",
+    "nav.about": "Company Services",
     "nav.addCompany": "Add organization",
     "nav.favorites": "Favorites",
+    "nav.mobile.contacts": "Contact Information",
+    "nav.mobile.submitRequest": "Submit Placement Request",
 
     // Common
     "common.more": "more",
@@ -684,6 +706,13 @@ const translations: Record<Language, Record<string, string>> = {
     "ai.form.required": "This field is required",
     "ai.form.phoneInvalid": "Enter a valid phone number",
     "ai.form.login": "Sign in to your account",
+    "ai.form.attachFiles": "Attach files",
+    "ai.form.dragOrClick": "Drag files here or click to select",
+    "ai.form.fileFormats": "Photos, PDF, Word, Excel (max 10 MB)",
+    "ai.form.maxFilesError": "Maximum 10 files",
+    "ai.form.fileTypeError": "Unsupported file format",
+    "ai.form.fileSizeError": "File too large (max 10 MB)",
+    "ai.form.filesAttached": "files attached",
     "cabinet.title": "Account",
     "cabinet.soon": "This section is under development. For now, you can send requests via the AI assistant.",
 
@@ -847,6 +876,8 @@ const translations: Record<Language, Record<string, string>> = {
     "services.consultation": "Need consultation?",
     "services.consultationDesc": "We will find the optimal solution for your business",
     "services.contactUs": "Contact Us",
+    "services.expand": "Show all services",
+    "services.collapse": "Hide services",
 
     // News
     "news.corporate": "Belarus Corporate News",
@@ -1173,11 +1204,13 @@ const translations: Record<Language, Record<string, string>> = {
     "nav.catalog": "Каталог",
     "nav.news": "Навіны",
     "nav.promotions": "Акцыі",
-    "nav.about": "Пра праект",
+    "nav.about": "Паслугі кампаніі",
     "nav.addCompany": "Дадаць арганізацыю",
     "nav.favorites": "Абранае",
+    "nav.mobile.contacts": "Кантактная інфармацыя",
+    "nav.mobile.submitRequest": "Падаць заяўку на размяшчэнне",
 
-    // Search
+    // Common
     "search.placeholder": "Назва кампаніі або паслуга",
     "search.companyPlaceholder": "Назва кампаніі",
     "search.servicePlaceholder": "Паслугі",
@@ -1256,6 +1289,13 @@ const translations: Record<Language, Record<string, string>> = {
     "ai.form.required": "Гэта поле абавязковае",
     "ai.form.phoneInvalid": "Увядзіце карэктны нумар тэлефона",
     "ai.form.login": "Увайсці ў асабісты кабінет",
+    "ai.form.attachFiles": "Прымацаваць файлы",
+    "ai.form.dragOrClick": "Перацягніце файлы або націсніце для выбару",
+    "ai.form.fileFormats": "Фота, PDF, Word, Excel (макс. 10 МБ)",
+    "ai.form.maxFilesError": "Максімум 10 файлаў",
+    "ai.form.fileTypeError": "Непадтрымліваемы фармат файла",
+    "ai.form.fileSizeError": "Файл занадта вялікі (макс. 10 МБ)",
+    "ai.form.filesAttached": "файлаў прымацавана",
     "cabinet.title": "Асабісты кабінет",
     "cabinet.soon": "Раздзел у распрацоўцы. Пакуль вы можаце адпраўляць заяўкі праз AI-асістэнта.",
 
@@ -1419,6 +1459,8 @@ const translations: Record<Language, Record<string, string>> = {
     "services.consultation": "Патрэбна кансультацыя?",
     "services.consultationDesc": "Падбяром аптымальнае рашэнне для вашага бізнесу",
     "services.contactUs": "Напісаць нам",
+    "services.expand": "Паказаць усе паслугі",
+    "services.collapse": "Згарнуць паслугі",
 
     // News
     "news.corporate": "Навіны кампаній Беларусі",
@@ -1745,11 +1787,13 @@ const translations: Record<Language, Record<string, string>> = {
     "nav.catalog": "目录",
     "nav.news": "新闻",
     "nav.promotions": "促销",
-    "nav.about": "关于项目",
+    "nav.about": "公司服务",
     "nav.addCompany": "添加组织",
     "nav.favorites": "收藏夹",
+    "nav.mobile.contacts": "联系信息",
+    "nav.mobile.submitRequest": "提交投放申请",
 
-    // Search
+    // Common
     "search.placeholder": "公司名称或服务",
     "search.companyPlaceholder": "公司名称",
     "search.servicePlaceholder": "服务",
@@ -1828,6 +1872,13 @@ const translations: Record<Language, Record<string, string>> = {
     "ai.form.required": "必填项",
     "ai.form.phoneInvalid": "请输入正确的手机号",
     "ai.form.login": "登录个人中心",
+    "ai.form.attachFiles": "附加文件",
+    "ai.form.dragOrClick": "拖拽文件到此处或点击选择",
+    "ai.form.fileFormats": "图片、PDF、Word、Excel（最大10 MB）",
+    "ai.form.maxFilesError": "最多10个文件",
+    "ai.form.fileTypeError": "不支持的文件格式",
+    "ai.form.fileSizeError": "文件太大（最大10 MB）",
+    "ai.form.filesAttached": "个文件已附加",
     "cabinet.title": "个人中心",
     "cabinet.soon": "该功能正在开发中。您目前可以通过AI助手发送请求。",
 
@@ -1991,6 +2042,8 @@ const translations: Record<Language, Record<string, string>> = {
     "services.consultation": "需要咨询?",
     "services.consultationDesc": "我们将为您的业务找到最佳解决方案",
     "services.contactUs": "联系我们",
+    "services.expand": "显示所有服务",
+    "services.collapse": "隐藏服务",
 
     // News
     "news.corporate": "白俄罗斯企业新闻",

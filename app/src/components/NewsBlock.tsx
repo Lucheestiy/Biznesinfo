@@ -34,7 +34,7 @@ export default function NewsBlock() {
 
     async function fetchNews() {
       try {
-        const res = await fetch("/api/news?limit=3");
+        const res = await fetch("/api/news?limit=6");
         if (!res.ok) throw new Error("Failed to fetch news");
         const data = await res.json();
         if (isMounted && data.news) {
@@ -78,7 +78,7 @@ export default function NewsBlock() {
           Новости партнёров
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-          {[1, 2, 3].map((i) => (
+          {[1, 2, 3, 4, 5, 6].map((i) => (
             <div key={i} className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden animate-pulse">
               <div className="bg-gray-200 h-48 w-full"></div>
               <div className="p-5">
@@ -114,22 +114,35 @@ export default function NewsBlock() {
             href={item.link}
             target="_blank"
             rel="noopener noreferrer"
-            className="block group"
+            className="block group relative"
           >
-            <article className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg hover:border-[#820251] transition-all cursor-pointer h-[420px] flex flex-col">
+            {/* Animated running border */}
+            <div className="absolute inset-0 rounded-2xl p-[2px] overflow-hidden">
+              <div
+                className="absolute inset-[-100%] animate-[spin_3s_linear_infinite]"
+                style={{
+                  background: 'conic-gradient(from 0deg, transparent 0%, #facc15 10%, #fef08a 20%, transparent 30%, transparent 70%, #facc15 80%, #fef08a 90%, transparent 100%)',
+                }}
+              />
+              <div className="absolute inset-[2px] bg-white rounded-[14px]" />
+            </div>
+
+            <article className="relative bg-white rounded-2xl shadow-lg overflow-hidden
+              hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 cursor-pointer h-[420px] flex flex-col">
               {/* News Image */}
               <div className="relative w-full h-48 bg-gray-100 overflow-hidden flex-shrink-0">
                 <img
                   src={item.image || PLACEHOLDER_IMAGE}
                   alt={item.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE;
                   }}
                   loading="lazy"
                 />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="absolute top-3 left-3 flex gap-2">
-                  <span className="bg-[#820251] text-white text-xs px-2 py-1 rounded">
+                  <span className="bg-[#820251] text-white text-xs px-3 py-1.5 rounded-full font-medium shadow-lg">
                     {item.category || "БелТА"}
                   </span>
                 </div>
@@ -137,25 +150,26 @@ export default function NewsBlock() {
 
               <div className="p-5 flex-grow flex flex-col">
                 {/* Date */}
-                <time className="text-xs text-[#374151] mb-2">
+                <time className="text-xs text-gray-500 mb-2 font-medium">
                   {formatDate(item.pubDate)}
                 </time>
 
                 {/* Title */}
-                <h3 className="font-bold text-[#374151] mb-3 line-clamp-2 leading-tight group-hover:text-[#820251] transition-colors">
+                <h3 className="font-bold text-gray-800 mb-3 line-clamp-2 leading-tight group-hover:text-[#820251] transition-colors">
                   {item.title}
                 </h3>
 
                 {/* Description */}
-                <p className="text-[#374151] text-sm line-clamp-3 flex-grow">
+                <p className="text-gray-600 text-sm line-clamp-3 flex-grow">
                   {item.description}
                 </p>
 
                 {/* Read more link */}
-                <div className="mt-4 text-[#374151] text-sm font-medium flex items-center gap-1">
+                <div className="mt-4 text-[#820251] text-sm font-semibold flex items-center gap-1
+                  group-hover:gap-2 transition-all">
                   Читать далее
                   <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
                 </div>
               </div>

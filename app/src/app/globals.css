@@ -200,3 +200,56 @@ form.w-full.max-w-4xl .md\:hidden.flex-col.gap-3 > div:nth-child(1) button[type=
 .animate-gradient {
   animation: gradient 3s ease infinite;
 }
+
+/* Floating animation for logo */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+/* Glow pulse animation */
+@keyframes glowPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px rgba(253, 230, 138, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(253, 230, 138, 0.9));
+  }
+}
+
+/* Shimmer animation for service cards */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Wave animation for letters */
+@keyframes wave {
+  0%, 100% {
+    transform: translateY(0);
+    color: inherit;
+  }
+  50% {
+    transform: translateY(-3px);
+    color: #fde047;
+    text-shadow: 0 0 10px rgba(253, 224, 71, 0.6);
+  }
+}
+
+/* Bounce X animation for arrow */
+@keyframes bounceX {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(5px);
+  }
+}

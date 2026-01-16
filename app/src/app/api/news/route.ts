@@ -69,9 +69,9 @@ async function fetchRSS(): Promise<NewsItem[]> {
     const xml = await response.text();
     const newsWithoutImages = parseRSS(xml);
 
-    // Fetch images for first 5 news items in parallel
+    // Fetch images for first 6 news items in parallel
     const newsWithImages = await Promise.all(
-      newsWithoutImages.slice(0, 5).map(async (item) => {
+      newsWithoutImages.slice(0, 6).map(async (item) => {
         const image = await fetchImageFromPage(item.link);
         return { ...item, image };
       })

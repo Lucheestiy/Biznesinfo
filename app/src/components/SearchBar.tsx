@@ -33,7 +33,6 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [keywordsQuery, setKeywordsQuery] = useState("");
   const companyInputRef = useRef<HTMLInputElement>(null);
-  const serviceInputRef = useRef<HTMLInputElement>(null);
   const keywordsInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
@@ -225,7 +224,9 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
       <div className="flex md:hidden flex-col gap-3">
         {/* Search input card */}
         <div className="relative">
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden
+            hover:shadow-xl hover:scale-[1.01]
+            transition-all duration-300">
             <div className="flex items-center">
               <div className="pl-4 text-[#820251]">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -249,10 +250,12 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
               {/* Search button inside input */}
               <button
                 type="submit"
-                className="m-2 w-10 h-10 flex items-center justify-center bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-xl shadow-md hover:shadow-lg active:scale-95 transition-all"
+                className="m-2 w-10 h-10 flex items-center justify-center bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-xl shadow-md
+                  hover:shadow-[0_0_20px_rgba(255,255,255,0.6)] hover:scale-110
+                  active:scale-95 transition-all duration-300 group/btn"
                 title={t("search.find")}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 transition-all duration-300 group-hover/btn:text-yellow-400 group-hover/btn:drop-shadow-[0_0_10px_rgba(255,255,255,0.9)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </button>
@@ -291,7 +294,9 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
         </div>
 
         {/* Keywords input card - mobile */}
-        <div className="relative bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="relative bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden
+          hover:shadow-xl hover:scale-[1.01]
+          transition-all duration-300">
           <div className="flex items-center">
             <div className="pl-4 text-[#820251]">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -314,8 +319,10 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
       {/* Desktop layout - separate cards in row */}
       <div className="hidden md:flex items-stretch gap-4">
         {/* Search by company input card */}
-        <div className="flex-1 basis-0 min-w-0 relative">
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 h-[68px] overflow-hidden hover:shadow-xl transition-shadow">
+        <div className="flex-1 basis-0 min-w-0 relative group/company">
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 h-[68px] overflow-hidden
+            hover:shadow-xl hover:scale-[1.02]
+            transition-all duration-300 cursor-text">
             <div className="flex items-center h-full">
               <div className="pl-5 text-[#820251]">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -376,75 +383,17 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
           )}
         </div>
 
-        {/* Search by service input card */}
-        <div className="flex-1 basis-0 min-w-0 relative">
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 h-[68px] overflow-hidden hover:shadow-xl transition-shadow">
-            <div className="flex items-center h-full">
-              <div className="pl-5 text-[#820251]">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <input
-                ref={serviceInputRef}
-                type="text"
-                placeholder={t("search.servicePlaceholder")}
-                value={serviceQuery}
-                onChange={(e) => {
-                  setServiceQuery(e.target.value);
-                  setActiveInput("service");
-                  setShowSuggestions(true);
-                }}
-                onFocus={() => {
-                  setActiveInput("service");
-                  setShowSuggestions(true);
-                }}
-                onKeyDown={handleKeyDown}
-                autoComplete="off"
-                className="portal-dialog-typography search-input-hero flex-grow py-5 px-4 text-[#4b5563] focus:outline-none text-lg bg-transparent"
-              />
-            </div>
-          </div>
-
-          {/* Autocomplete suggestions for service search */}
-          {showSuggestions && activeInput === "service" && suggestions.length > 0 && (
-            <div
-              className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-2xl shadow-2xl mt-2 z-50 overflow-hidden"
-            >
-              {suggestions.map((suggestion, idx) => (
-                <button
-                  key={`${suggestion.type}-${suggestion.url}`}
-                  type="button"
-                  onClick={() => handleSuggestionClick(suggestion.url)}
-                  className={`w-full px-5 py-4 text-left flex items-center gap-4 hover:bg-gray-50 transition-colors ${
-                    idx === selectedIndex ? "bg-gray-100" : ""
-                  } ${idx > 0 ? "border-t border-gray-100" : ""}`}
-                >
-                  <span className="text-2xl flex-shrink-0">{suggestion.icon}</span>
-                  <div className="flex-grow min-w-0">
-                    <div className="font-medium text-gray-800 truncate text-lg">{suggestion.text}</div>
-                    {suggestion.subtitle && (
-                      <div className="text-sm text-gray-500 truncate">{suggestion.subtitle}</div>
-                    )}
-                  </div>
-                  <span
-                    className="text-xs px-3 py-1.5 rounded-full flex-shrink-0 font-medium bg-blue-100 text-blue-700"
-                  >
-                    {t("search.service")}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Search by service input card - REMOVED per user request */}
 
         {/* Keywords input card */}
-        <div className="flex-1 basis-0 min-w-0 relative">
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 h-[68px] overflow-hidden hover:shadow-xl transition-shadow">
+        <div className="flex-1 basis-0 min-w-0 relative group/keywords">
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 h-[68px] overflow-hidden
+            hover:shadow-xl hover:scale-[1.02]
+            transition-all duration-300 cursor-text">
             <div className="flex items-center h-full">
               <div className="pl-5 text-[#820251]">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </div>
               <input
@@ -463,52 +412,97 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
         {/* Search button */}
         <button
           type="submit"
-          className="flex-shrink-0 w-16 bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-2xl shadow-lg hover:shadow-xl active:scale-95 transition-all flex items-center justify-center"
+          className="flex-shrink-0 w-16 bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-2xl shadow-lg
+            hover:shadow-[0_0_25px_rgba(255,255,255,0.6)] hover:scale-110
+            active:scale-95 transition-all duration-300 flex items-center justify-center group/btn"
           title={t("search.find")}
         >
-          <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-7 h-7 transition-all duration-300 group-hover/btn:scale-110 group-hover/btn:text-yellow-400 group-hover/btn:drop-shadow-[0_0_12px_rgba(255,255,255,0.9)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
         </button>
       </div>
 
       {/* Inline Rubricator - third window, same width as search row (without button) */}
-      <div className="md:mr-20">
+      <div className="">
         <Rubricator inline floating={false} />
       </div>
 
       {/* AI Assistant info block - clickable */}
-      <button
-        type="button"
-        onClick={() => {
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new Event("aiassistant:open"));
-          }
-        }}
-        className="mt-3 w-full bg-gradient-to-r from-[#820251] via-[#a80368] to-[#820251] bg-[length:200%_100%] animate-gradient rounded-2xl p-4 md:p-5 text-white shadow-xl hover:shadow-2xl transition-all hover:scale-[1.02] active:scale-[0.98] border-2 border-yellow-400/50 group"
-      >
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 md:w-16 md:h-16 bg-yellow-400 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform animate-pulse">
-            <svg className="w-7 h-7 md:w-8 md:h-8 text-[#820251]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-            </svg>
-          </div>
-          <div className="flex-grow min-w-0 text-left">
-            <h3 className="font-bold text-lg md:text-xl mb-1 flex items-center gap-2">
-              {t("ai.title")}
-              <span className="text-xs bg-yellow-400 text-[#820251] px-2 py-0.5 rounded-full font-bold uppercase">New</span>
-            </h3>
-            <p className="text-pink-100 text-sm md:text-base leading-relaxed">
-              {t("ai.shortDesc")}
-            </p>
-          </div>
-          <div className="flex-shrink-0">
-            <svg className="w-6 h-6 md:w-8 md:h-8 text-yellow-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-          </div>
+      <div className="mt-3 w-full relative group/consult">
+        {/* Animated running border */}
+        <div className="absolute inset-0 rounded-2xl p-[2px] overflow-hidden">
+          <div
+            className="absolute inset-[-100%] animate-[spin_3s_linear_infinite]"
+            style={{
+              background: 'conic-gradient(from 0deg, transparent 0%, #facc15 10%, #fef08a 20%, #fff 25%, transparent 30%, transparent 70%, #facc15 75%, #fef08a 85%, #fff 90%, transparent 95%)',
+            }}
+          />
+          <div className="absolute inset-[2px] bg-gradient-to-r from-[#820251] via-[#a80368] to-[#820251] rounded-[14px]" />
         </div>
-      </button>
+
+        {/* Outer glow on hover */}
+        <div className="absolute inset-0 rounded-2xl bg-yellow-400/0 group-hover/consult:bg-yellow-400/10 blur-xl transition-all duration-500" />
+
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new Event("aiassistant:open"));
+            }
+          }}
+          className="relative w-full bg-gradient-to-r from-[#820251] via-[#a80368] to-[#820251] bg-[length:200%_100%] animate-gradient rounded-2xl p-5 md:p-6 text-white
+            shadow-[0_10px_40px_rgba(130,2,81,0.4)] group-hover/consult:shadow-[0_20px_60px_rgba(130,2,81,0.5)]
+            transition-all duration-300 group-hover/consult:scale-[1.02] active:scale-[0.98] overflow-hidden"
+        >
+          {/* Background particles */}
+          <div className="absolute inset-0 overflow-hidden">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-yellow-400/10 rounded-full blur-3xl animate-pulse" />
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-pink-400/10 rounded-full blur-2xl animate-pulse" style={{animationDelay: '1s'}} />
+          </div>
+
+          <div className="relative flex items-center gap-5">
+            {/* Glowing lightbulb */}
+            <div className="relative flex-shrink-0">
+              {/* Glow layers */}
+              <div className="absolute inset-[-12px] bg-yellow-400/20 rounded-full blur-xl animate-[pulse_2s_ease-in-out_infinite]" />
+              <div className="absolute inset-[-6px] bg-yellow-300/25 rounded-full blur-lg animate-[pulse_1.5s_ease-in-out_infinite]" />
+
+              <div className="relative w-14 h-14 md:w-16 md:h-16 bg-gradient-to-br from-yellow-200 via-yellow-400 to-yellow-500 rounded-xl flex items-center justify-center
+                shadow-[0_0_20px_rgba(250,204,21,0.5),0_0_40px_rgba(250,204,21,0.2)]
+                group-hover/consult:shadow-[0_0_30px_rgba(250,204,21,0.7),0_0_60px_rgba(250,204,21,0.3)]
+                group-hover/consult:scale-110 transition-all duration-300 animate-[pulse_2s_ease-in-out_infinite]">
+                <svg className="w-7 h-7 md:w-8 md:h-8 text-[#820251]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              </div>
+            </div>
+
+            <div className="flex-grow min-w-0 text-left">
+              <h3 className="font-bold text-lg md:text-xl mb-1 flex items-center gap-2 group-hover/consult:text-yellow-300 transition-colors">
+                {t("ai.title")}
+                <span className="text-xs bg-gradient-to-r from-yellow-300 to-yellow-500 text-[#820251] px-2.5 py-1 rounded-full font-bold uppercase
+                  shadow-[0_0_10px_rgba(250,204,21,0.4)] animate-pulse">New</span>
+              </h3>
+              <p className="text-pink-100 text-sm md:text-base leading-relaxed group-hover/consult:text-white transition-colors">
+                {t("ai.shortDesc")}
+              </p>
+            </div>
+
+            <div className="flex-shrink-0">
+              <svg className="w-6 h-6 md:w-8 md:h-8 text-yellow-400 group-hover/consult:translate-x-2 group-hover/consult:text-yellow-300 transition-all duration-300
+                drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Sparkles */}
+          <div className="absolute top-2 left-3 text-yellow-400 animate-ping opacity-60 text-sm">✦</div>
+          <div className="absolute bottom-2 right-3 text-yellow-300 animate-ping opacity-50 text-xs" style={{animationDelay: '0.5s'}}>✦</div>
+          <div className="absolute top-1/2 right-1/4 text-yellow-400 animate-ping opacity-40 text-xs" style={{animationDelay: '1s'}}>✦</div>
+        </button>
+      </div>
     </form>
   );
 }

@@ -7,14 +7,17 @@ export default function Footer() {
   const { t } = useLanguage();
 
   return (
-    <footer className="bg-[#2d2d2d] text-gray-400 py-10">
+    <footer id="contacts" className="bg-[#2d2d2d] text-gray-400 py-10">
       <div className="container mx-auto px-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
           {/* Logo and description */}
           <div>
-            <h4 className="text-white font-bold text-lg mb-4">
-              <span className="text-yellow-400">Biznes</span>.lucheestiy.com
+            <h4 className="text-white font-bold text-lg mb-2">
+              <span className="text-yellow-400">Biznesinfo</span>.by
             </h4>
+            <p className="text-sm text-gray-300 mb-4">
+              ООО «Бизнесстатус»
+            </p>
             <p className="text-sm mb-4">
               {t("hero.subtitle")}
             </p>
@@ -27,6 +30,15 @@ export default function Footer() {
                 className="hover:text-white transition-colors"
               >
                 surdoe@yandex.ru
+              </a>
+            </p>
+            <p className="text-sm mt-2">
+              Тел:{" "}
+              <a
+                href="tel:+375000000"
+                className="hover:text-white transition-colors"
+              >
+                +375000000
               </a>
             </p>
           </div>
@@ -55,7 +67,7 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-gray-700 pt-6 text-center text-sm">
-          &copy; 2026 Biznes.lucheestiy.com. {t("footer.rights")}.
+          &copy; 2026 Biznesinfo.by. {t("footer.rights")}.
         </div>
       </div>
     </footer>

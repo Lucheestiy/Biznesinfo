@@ -73,7 +73,9 @@ export default function Rubricator({ floating = true, inline = false }: Rubricat
         <button
           type="button"
           onClick={handleToggle}
-          className="w-full bg-white rounded-2xl shadow-lg border border-gray-100 h-[56px] md:h-[68px] overflow-hidden hover:shadow-xl transition-all"
+          className="w-full bg-white rounded-2xl shadow-lg border border-gray-100 h-[56px] md:h-[68px] overflow-hidden
+            hover:shadow-xl hover:scale-[1.02]
+            transition-all duration-300"
         >
           <div className="flex items-center h-full px-4 md:px-5">
             <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-gradient-to-r from-[#820251] to-[#a80368] flex items-center justify-center mr-3 flex-shrink-0">
