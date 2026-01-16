@@ -1,0 +1,202 @@
+@import "tailwindcss";
+
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+  touch-action: pan-y;
+}
+
+/* Общая типографика для трёх «окон» поиска (mobile-first) */
+:root {
+  --portal-dialog-font-family: var(--font-playfair), Georgia, serif;
+  --portal-dialog-font-size: 1rem;
+  --portal-dialog-line-height: 1.5rem;
+  --portal-dialog-font-weight: 500;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --portal-dialog-font-size: 1.125rem;
+    --portal-dialog-line-height: 1.75rem;
+  }
+}
+
+.portal-dialog-typography {
+  font-family: var(--portal-dialog-font-family);
+  font-size: var(--portal-dialog-font-size);
+  line-height: var(--portal-dialog-line-height);
+  font-weight: var(--portal-dialog-font-weight);
+  font-style: italic;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-synthesis: none;
+}
+
+.portal-dialog-typography::placeholder {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+  font-style: inherit;
+  color: #4b5563;
+  opacity: 1;
+}
+
+.portal-dialog-typography.search-input-on-dark {
+  color: #fff;
+}
+
+.portal-dialog-typography.search-input-on-dark::placeholder {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.portal-dialog-typography.search-input-on-dark:focus::placeholder {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.portal-dialog-typography.search-input::placeholder,
+.portal-dialog-typography.search-input-hero::placeholder,
+.portal-dialog-typography.search-input-mobile::placeholder {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+  font-style: inherit;
+}
+
+/* Elegant search font */
+.search-elegant {
+  font-family: var(--font-playfair), Georgia, serif !important;
+  font-style: italic !important;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* Force Playfair Display on select elements */
+select.search-elegant {
+  font-family: var(--font-playfair), Georgia, serif !important;
+  font-style: italic !important;
+  font-weight: 500;
+}
+
+select.search-elegant option {
+  font-family: var(--font-playfair), Georgia, serif;
+  font-style: italic;
+}
+
+/* Search input placeholder styling */
+.search-input::placeholder {
+  color: #4b5563;
+  font-style: inherit;
+  font-weight: inherit;
+  letter-spacing: 0.01em;
+  opacity: 1;
+}
+
+.search-input:focus::placeholder {
+  color: #6b7280;
+  transition: color 0.2s ease;
+}
+
+/* Hero search input - larger placeholder with Playfair Display */
+.search-input-hero::placeholder {
+  font-family: var(--font-playfair), Georgia, serif;
+  color: #4b5563;
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  opacity: 1;
+}
+
+.search-input-hero:focus::placeholder {
+  color: #6b7280;
+  transition: color 0.2s ease;
+}
+
+/* Mobile search input */
+.search-input-mobile::placeholder {
+  color: #4b5563;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+  opacity: 1;
+}
+
+.search-input-mobile:focus::placeholder {
+  color: #6b7280;
+  transition: color 0.2s ease;
+}
+
+/* Mobile: magnifier for both inputs submits the form (CSS-only, reuses the existing submit button) */
+form.w-full.max-w-4xl .md\:hidden.flex-col.gap-3 > div:nth-child(1) > div.bg-white {
+  overflow: visible;
+}
+
+form.w-full.max-w-4xl .md\:hidden.flex-col.gap-3 > div:nth-child(1) input.search-input-mobile {
+  padding-right: 4rem;
+}
+
+form.w-full.max-w-4xl .md\:hidden.flex-col.gap-3 > div:nth-child(2) input {
+  padding-right: 4rem;
+}
+
+form.w-full.max-w-4xl .md\:hidden.flex-col.gap-3 > div:nth-child(1) button[type="submit"] {
+  position: absolute;
+  right: 0.5rem;
+  top: 0.5rem;
+  margin: 0;
+  padding: 0;
+  width: 2.5rem;
+  height: 6.625rem; /* 2 * 2.5rem buttons + 1.625rem (align with 2nd card center) */
+  background: transparent;
+  box-shadow: none;
+  display: block;
+  z-index: 20;
+}
+
+form.w-full.max-w-4xl .md\:hidden.flex-col.gap-3 > div:nth-child(1) button[type="submit"] svg {
+  display: none;
+}
+
+form.w-full.max-w-4xl .md\:hidden.flex-col.gap-3 > div:nth-child(1) button[type="submit"]::before,
+form.w-full.max-w-4xl .md\:hidden.flex-col.gap-3 > div:nth-child(1) button[type="submit"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  background:
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20fill%3D%27none%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cpath%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%20stroke-width%3D%272.5%27%20stroke%3D%27%23fff%27%20d%3D%27M21%2021l-6-6m2-5a7%207%200%2011-14%200%207%207%200%200114%200z%27/%3E%3C/svg%3E")
+      center/1.25rem 1.25rem no-repeat,
+    linear-gradient(to right, #820251, #a80368);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
+}
+
+form.w-full.max-w-4xl .md\:hidden.flex-col.gap-3 > div:nth-child(1) button[type="submit"]::before {
+  top: 0;
+}
+
+form.w-full.max-w-4xl .md\:hidden.flex-col.gap-3 > div:nth-child(1) button[type="submit"]::after {
+  bottom: 0;
+}
+
+/* Animated gradient background */
+@keyframes gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient {
+  animation: gradient 3s ease infinite;
+}

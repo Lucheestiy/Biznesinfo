@@ -1,0 +1,16 @@
+.DS_Store
+*.log
+
+# env (keep example)
+.env
+.env.*
+!.env.example
+
+# editor
+.vscode/
+
+# app build/deps (also covered by app/.gitignore)
+app/node_modules/
+app/.next/
+app/.cache/
+app/out/

@@ -1,0 +1,272 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useFavorites } from "@/contexts/FavoritesContext";
+import AIAssistant from "./AIAssistant";
+import MessageModal from "./MessageModal";
+import type { IbizCompanySummary } from "@/lib/ibiz/types";
+import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
+
+interface CompanyCardProps {
+  company: IbizCompanySummary;
+  showCategory?: boolean;
+}
+
+function displayUrl(raw: string): string {
+  const s = (raw || "").trim();
+  if (!s) return "";
+  try {
+    const u = new URL(s);
+    return u.hostname || s;
+  } catch {
+    return s.replace(/^https?:\/\//i, "").split("/")[0] || s;
+  }
+}
+
+function normalizeWebsiteHref(raw: string): string | null {
+  const s = (raw || "").trim();
+  if (!s) return null;
+  const candidate = s.split(/[\s,;]+/)[0] || "";
+  if (!candidate) return null;
+
+  try {
+    const u = new URL(candidate);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.toString() : null;
+  } catch {
+    try {
+      const u = new URL(`https://${candidate}`);
+      return u.toString();
+    } catch {
+      return null;
+    }
+  }
+}
+
+export default function CompanyCard({ company, showCategory = false }: CompanyCardProps) {
+  const { t } = useLanguage();
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const [messageModalOpen, setMessageModalOpen] = useState(false);
+  const [phonesExpanded, setPhonesExpanded] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
+  const [logoLoaded, setLogoLoaded] = useState(false);
+
+  const favorite = isFavorite(company.id);
+  const primaryWebsite = company.websites?.[0] || "";
+  const primaryWebsiteHref = useMemo(() => normalizeWebsiteHref(primaryWebsite), [primaryWebsite]);
+  const primaryEmail = company.emails?.[0] || "";
+  const primaryPhone = company.phones?.[0] || company.phones_ext?.[0]?.number || "";
+
+  const phones = useMemo(() => {
+    if (company.phones_ext && company.phones_ext.length > 0) return company.phones_ext;
+    return (company.phones || []).map((number) => ({ number, labels: [] as string[] }));
+  }, [company.phones, company.phones_ext]);
+
+  const workStatus = (company.work_hours?.status || "").trim();
+  const workTime = (company.work_hours?.work_time || "").trim();
+  const workHoursText = [workStatus, workTime && !workStatus.includes(workTime) ? workTime : ""].filter(Boolean).join(" • ");
+
+  const icon = company.primary_category_slug ? IBIZ_CATEGORY_ICONS[company.primary_category_slug] || "🏢" : "🏢";
+  const logoUrl = (company.logo_url || "").trim();
+  const logoSrc = useMemo(() => (logoUrl ? `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}` : ""), [logoUrl]);
+  const showLogo = Boolean(logoUrl) && !logoFailed;
+
+  useEffect(() => {
+    setLogoFailed(false);
+    setLogoLoaded(false);
+  }, [logoSrc]);
+
+  return (
+    <>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 hover:shadow-lg transition-all overflow-hidden relative flex flex-col h-full">
+        {/* Favorite button */}
+        <button
+          onClick={() => toggleFavorite(company.id)}
+          className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow-sm hover:shadow-md transition-all"
+          title={favorite ? t("favorites.remove") : t("favorites.add")}
+        >
+          <svg
+            className={`w-5 h-5 ${favorite ? "text-red-500 fill-current" : "text-gray-400"}`}
+            fill={favorite ? "currentColor" : "none"}
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+            />
+          </svg>
+        </button>
+
+        {/* Header */}
+        <div className="bg-gradient-to-r from-[#820251] to-[#6a0143] p-4 pr-12">
+          <div className="flex items-start gap-3">
+            <div className="w-12 h-12 rounded bg-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+              {showLogo ? (
+                <div className="w-full h-full relative flex items-center justify-center">
+                  <span
+                    className={`text-white text-2xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}
+                  >
+                    {icon}
+                  </span>
+                  <img
+                    src={logoSrc}
+                    alt={company.name}
+                    className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
+                    decoding="async"
+                    loading="lazy"
+                    onLoad={() => setLogoLoaded(true)}
+                    onError={() => setLogoFailed(true)}
+                  />
+                </div>
+              ) : (
+                <span className="text-white text-2xl">{icon}</span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-bold text-white text-lg leading-tight">
+                {company.name}
+                {company.source === "belarusinfo" && (
+                  <span
+                    aria-hidden
+                    className="ml-2 inline-block w-2 h-2 rounded-full bg-white/40 align-middle"
+                  />
+                )}
+              </h3>
+              {showCategory && company.primary_rubric_name && (
+                <span className="inline-block mt-2 text-xs text-pink-200 bg-white/10 px-2 py-1 rounded">
+                  {company.primary_rubric_name}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-4 flex-1 flex flex-col">
+          {/* Address */}
+          <div className="flex items-start gap-2 mb-3 text-sm">
+            <span className="text-[#820251] mt-0.5">📍</span>
+            <span className="text-gray-700 leading-tight">{company.address || company.city}</span>
+          </div>
+
+          {(company.work_hours?.status || company.work_hours?.work_time) && (
+            <div className="flex items-start gap-2 mb-3 text-sm">
+              <span className="text-[#820251] mt-0.5">⏰</span>
+              <span className="text-gray-700 leading-tight line-clamp-2">
+                {workHoursText}
+              </span>
+            </div>
+          )}
+
+          {company.description && (
+            <div className="text-sm text-gray-600 line-clamp-2">{company.description}</div>
+          )}
+
+          <div className="border-t border-gray-100 my-3"></div>
+
+          {/* Contacts */}
+          <div className="space-y-2 text-sm mb-4">
+            {primaryWebsiteHref && (
+              <div className="flex items-center gap-2">
+                <span className="text-[#820251] w-5 text-center">🌐</span>
+                <a
+                  href={primaryWebsiteHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#820251] font-medium hover:underline truncate"
+                >
+                  {displayUrl(primaryWebsiteHref)}
+                </a>
+              </div>
+            )}
+
+            {primaryEmail && (
+              <div className="flex items-center gap-2">
+                <span className="text-[#820251] w-5 text-center">✉️</span>
+                <a
+                  href={`https://mail.yandex.ru/compose?to=${encodeURIComponent(primaryEmail)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-700 hover:text-[#820251] truncate"
+                >
+                  {primaryEmail}
+                </a>
+              </div>
+            )}
+
+            {phones.length > 0 && (
+              <div className="flex items-start gap-2">
+                <span className="text-[#820251] w-5 text-center mt-0.5">📞</span>
+                <div className="flex flex-col gap-1">
+                  {(phonesExpanded ? phones : phones.slice(0, 3)).map((p, idx) => (
+                    <a
+                      key={idx}
+                      href={`tel:${p.number}`}
+                      className="text-[#820251] font-medium hover:underline"
+                    >
+                      {p.number}
+                      {p.labels && p.labels.length > 0 && (
+                        <span className="text-gray-500 font-normal"> ({p.labels.join(", ")})</span>
+                      )}
+                    </a>
+                  ))}
+                  {phones.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => setPhonesExpanded((v) => !v)}
+                      className="text-left text-xs text-gray-400 hover:text-[#820251] hover:underline"
+                    >
+                      {phonesExpanded ? t("common.hide") : `+${phones.length - 3} ${t("common.more")}`}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-wrap gap-2 mt-auto">
+            <a
+              href={primaryPhone ? `tel:${primaryPhone}` : undefined}
+              className="flex-1 min-w-[100px] bg-green-600 text-white px-3 py-2 rounded text-sm font-medium hover:bg-green-700 transition-colors text-center"
+            >
+              {t("company.call")}
+            </a>
+            <button
+              onClick={() => setMessageModalOpen(true)}
+              className="flex-1 min-w-[100px] border-2 border-[#820251] text-[#820251] px-3 py-2 rounded text-sm font-medium hover:bg-[#820251] hover:text-white transition-colors"
+            >
+              {t("company.write")}
+            </button>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-2">
+          <AIAssistant companyName={company.name} companyId={company.id} isActive={false} />
+          <Link
+            href={`/company/${encodeURIComponent(company.id)}`}
+            className="bg-[#820251] text-white px-4 py-2 rounded text-sm font-medium hover:bg-[#6a0143] transition-colors"
+          >
+            {t("company.details")}
+          </Link>
+        </div>
+
+      </div>
+
+      <MessageModal
+        isOpen={messageModalOpen}
+        onClose={() => setMessageModalOpen(false)}
+        companyName={company.name}
+        companyId={company.id}
+        email={primaryEmail || undefined}
+        phone={primaryPhone || undefined}
+        hasAI={false}
+      />
+    </>
+  );
+}
