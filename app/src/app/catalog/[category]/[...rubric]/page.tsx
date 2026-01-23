@@ -10,6 +10,7 @@ import { useRegion } from "@/contexts/RegionContext";
 import { regions } from "@/data/regions";
 import type { IbizRubricResponse } from "@/lib/ibiz/types";
 import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
+import { formatCompanyCount } from "@/lib/utils/plural";
 
 interface PageProps {
   params: Promise<{ category: string; rubric: string[] }>;
@@ -85,7 +86,7 @@ export default function SubcategoryPage({ params }: PageProps) {
                 <p className="text-pink-200 mt-1">
                   {data?.rubric?.category_name || category}
                   {" • "}
-                  {isLoading ? "…" : (data?.page?.total ?? 0)} {t("catalog.companies").toLowerCase()}
+                  {isLoading ? "…" : formatCompanyCount(data?.page?.total ?? 0)}
                   {selectedRegion && ` • ${regionName}`}
                 </p>
               </div>
@@ -127,7 +128,7 @@ export default function SubcategoryPage({ params }: PageProps) {
         <div className="container mx-auto py-10 px-4">
           <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
             <span className="w-1 h-6 bg-[#820251] rounded"></span>
-            {t("catalog.companies")} ({isLoading ? "…" : (data?.page?.total ?? 0)})
+            {formatCompanyCount(data?.page?.total ?? 0)}
             {selectedRegion && (
               <span className="text-sm font-normal text-gray-500">
                 — {regionName}

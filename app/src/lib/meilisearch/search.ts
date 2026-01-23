@@ -20,6 +20,7 @@ function documentToSummary(doc: MeiliCompanyDocument): IbizCompanySummary {
     emails: doc.emails,
     websites: doc.websites,
     description: doc.description,
+    about: doc.about || "",
     logo_url: doc.logo_url,
     primary_category_slug: doc.primary_category_slug,
     primary_category_name: doc.primary_category_name,
@@ -65,7 +66,7 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
     filter: filter.length > 0 ? filter : undefined,
     attributesToSearchOn,
     attributesToRetrieve: [
-      "id", "source", "name", "description", "address", "city", "region",
+      "id", "source", "name", "description", "about", "address", "city", "region",
       "phones", "phones_ext", "emails", "websites", "logo_url",
       "primary_category_slug", "primary_category_name",
       "primary_rubric_slug", "primary_rubric_name",

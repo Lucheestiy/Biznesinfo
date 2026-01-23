@@ -73,8 +73,23 @@ const PRODUCT_INDICATORS = [
   "поставка", "реализация", "торговля", "ассортимент", "продукция",
 ];
 
+function extractCompanyNameTokens(companyName: string): Set<string> {
+  const raw = (companyName || "").trim();
+  if (!raw) return new Set();
+
+  const tokens = raw
+    .toLowerCase()
+    .replace(/[«»"'“”„]/g, " ")
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+    .split(/[\s-]+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+
+  return new Set(tokens);
+}
+
 // Extract meaningful product keywords from text
-function extractProductKeywords(text: string): string[] {
+function extractProductKeywords(text: string, excludeTokens?: Set<string>): string[] {
   if (!text) return [];
 
   const words: string[] = [];
@@ -90,9 +105,9 @@ function extractProductKeywords(text: string): string[] {
 
     // Extract nouns (words that likely describe products)
     const sentenceWords = sentence
-      .replace(/[^\wа-яё\s-]/gi, " ")
-      .split(/\s+/)
-      .filter(w => w.length > 3 && !STOP_WORDS.has(w));
+      .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+      .split(/[\s-]+/)
+      .filter((w) => w.length > 3 && !STOP_WORDS.has(w) && !excludeTokens?.has(w));
 
     words.push(...sentenceWords);
   }
@@ -103,6 +118,7 @@ function extractProductKeywords(text: string): string[] {
 // Generate keywords from rubrics, categories and description
 function generateKeywords(company: IbizCompany): string[] {
   const keywordsSet = new Set<string>();
+  const companyNameTokens = extractCompanyNameTokens(company.name || "");
 
   // Extract from rubric names
   for (const rubric of company.rubrics || []) {
@@ -125,11 +141,11 @@ function generateKeywords(company: IbizCompany): string[] {
   }
 
   // Extract product keywords from description
-  const descKeywords = extractProductKeywords(company.description || "");
+  const descKeywords = extractProductKeywords(company.description || "", companyNameTokens);
   descKeywords.forEach(w => keywordsSet.add(w));
 
   // Also extract from "about" field
-  const aboutKeywords = extractProductKeywords(company.about || "");
+  const aboutKeywords = extractProductKeywords(company.about || "", companyNameTokens);
   aboutKeywords.forEach(w => keywordsSet.add(w));
 
   return Array.from(keywordsSet);

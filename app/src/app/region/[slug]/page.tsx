@@ -8,6 +8,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
 import { regions } from "@/data/regions";
 import type { IbizCatalogResponse } from "@/lib/ibiz/types";
+import { formatCompanyCount } from "@/lib/utils/plural";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -90,7 +91,7 @@ export default function RegionPage({ params }: PageProps) {
               <div>
                 <h1 className="text-3xl font-bold">{regionData.name}</h1>
                 <p className="text-pink-200 mt-1">
-                  {t("search.found")}: {isLoading ? "…" : (catalog?.stats?.companies_total ?? 0)} {t("catalog.companies").toLowerCase()}
+                  {t("search.found")}: {isLoading ? "…" : formatCompanyCount(catalog?.stats?.companies_total ?? 0)}
                 </p>
               </div>
             </div>

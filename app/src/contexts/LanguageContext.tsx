@@ -173,6 +173,8 @@ const translations: Record<Language, Record<string, string>> = {
     "common.error": "Ошибка",
     "common.back": "Назад",
     "common.home": "Главная",
+    "common.previous": "Назад",
+    "common.next": "Далее",
 
     // Categories
     "cat.automobiles": "Автомобили",
@@ -769,6 +771,8 @@ const translations: Record<Language, Record<string, string>> = {
     "common.error": "Error",
     "common.back": "Back",
     "common.home": "Home",
+    "common.previous": "Previous",
+    "common.next": "Next",
 
     // Categories
     "cat.automobiles": "Automobiles",

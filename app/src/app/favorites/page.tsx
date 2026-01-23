@@ -9,6 +9,7 @@ import { useFavorites } from "@/contexts/FavoritesContext";
 import { useRegion } from "@/contexts/RegionContext";
 import { regions, regionMapping } from "@/data/regions";
 import type { IbizCompanySummary } from "@/lib/ibiz/types";
+import { formatCompanyCount } from "@/lib/utils/plural";
 import Link from "next/link";
 
 export default function FavoritesPage() {
@@ -75,7 +76,7 @@ export default function FavoritesPage() {
               <div>
                 <h1 className="text-3xl font-bold">{t("favorites.title")}</h1>
                 <p className="text-pink-200 mt-1">
-                  {favorites.length} компаний в избранном
+                  {formatCompanyCount(favorites.length)} в избранном
                 </p>
               </div>
             </div>

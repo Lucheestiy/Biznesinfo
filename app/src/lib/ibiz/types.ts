@@ -65,6 +65,7 @@ export interface IbizCompanySummary {
   emails: string[];
   websites: string[];
   description: string;
+  about: string;
   logo_url: string;
   primary_category_slug: string | null;
   primary_category_name: string | null;

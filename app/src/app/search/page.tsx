@@ -11,7 +11,10 @@ import { useRegion } from "@/contexts/RegionContext";
 import { regions } from "@/data/regions";
 import type { IbizCompanySummary, IbizSearchResponse } from "@/lib/ibiz/types";
 import { formatCompanyCount } from "@/lib/utils/plural";
+import Pagination from "@/components/Pagination";
 import Link from "next/link";
+
+const PAGE_SIZE = 10;
 
 function SearchResults() {
   const searchParams = useSearchParams();
@@ -23,8 +26,14 @@ function SearchResults() {
 
   const [data, setData] = useState<IbizSearchResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
+  // Reset page when query or region changes
   useEffect(() => {
+    setCurrentPage(1);
+  }, [query, keywords, selectedRegion]);
+
+  const fetchSearch = (page: number) => {
     const q = query.trim();
     const kw = keywords.trim();
     if (!q && !kw) {
@@ -39,8 +48,8 @@ function SearchResults() {
     if (q) params.set("q", q);
     if (kw) params.set("keywords", kw);
     if (region) params.set("region", region);
-    params.set("offset", "0");
-    params.set("limit", "10");
+    params.set("offset", String((page - 1) * PAGE_SIZE));
+    params.set("limit", String(PAGE_SIZE));
 
     fetch(`/api/ibiz/search?${params.toString()}`)
       .then((r) => (r.ok ? r.json() : null))
@@ -57,7 +66,13 @@ function SearchResults() {
     return () => {
       isMounted = false;
     };
-  }, [query, keywords, selectedRegion]);
+  };
+
+  useEffect(() => {
+    fetchSearch(currentPage);
+  }, [currentPage, query, keywords, selectedRegion]);
+
+  const totalPages = data ? Math.ceil((data.total || 0) / PAGE_SIZE) : 0;
 
   const grouped = useMemo(() => {
     const out: Record<string, { name: string; companies: IbizCompanySummary[] }> = {};
@@ -189,6 +204,9 @@ function SearchResults() {
                   </div>
                 </div>
               ))}
+
+              {/* Pagination */}
+              <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
             </div>
           )}
         </div>

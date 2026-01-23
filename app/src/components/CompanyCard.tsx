@@ -44,6 +44,83 @@ function normalizeWebsiteHref(raw: string): string | null {
   }
 }
 
+/**
+ * Extracts products/services info from company "about" text.
+ * Removes company name references, history, location info.
+ * Returns a short characterization (max 150 chars) or empty string.
+ */
+function extractProductsServices(about: string, companyName: string): string {
+  if (!about || about.trim().length === 0) return "";
+  
+  let text = about;
+  
+  // Remove company name and common legal forms
+  const nameParts = companyName
+    .toLowerCase()
+    .replace(/[«»"'“”„]/g, " ")
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+    .split(/[\s-]+/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 2);
+  for (const part of nameParts) {
+    const escaped = part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    text = text.replace(new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}(?=[^\\p{L}\\p{N}]|$)`, "giu"), "$1");
+  }
+  text = text.replace(
+    new RegExp(`(^|[^\\p{L}\\p{N}])(ООО|ОАО|ЗАО|ИП|УП|КСУП|ЧТУП|ЧПУП|РУП|СООО|СП)(?=[^\\p{L}\\p{N}]|$)`, "giu"),
+    "$1",
+  );
+  text = text.replace(/[«»"'“”„]/g, "");
+  
+  // Remove history/foundation phrases
+  text = text.replace(/образован[оа]?\s*(в\s*)?\d{4}\s*(году?)?\.?/gi, '');
+  text = text.replace(/основан[оа]?\s*(в\s*)?\d{4}\s*(году?)?\.?/gi, '');
+  text = text.replace(/с\s*\d{4}\s*(года?)?/gi, '');
+  text = text.replace(/на\s+протяжении\s+\d+\s+лет/gi, '');
+  text = text.replace(/более\s+\d+\s+лет/gi, '');
+  
+  // Remove location phrases
+  text = text.replace(/расположен[оа]?\s+в\s+[^.]+\./gi, '');
+  text = text.replace(/находи[тм]ся\s+в\s+[^.]+\./gi, '');
+  text = text.replace(/по\s+адресу\s+[^.]+\./gi, '');
+  text = text.replace(/в\s+\d+-?х?\s+километрах?\s+от\s+[^.]+\./gi, '');
+  
+  // Find sentences with products/services keywords
+  const keywords = [
+    'производ', 'выпуска', 'изготов', 'предлага', 'оказыва', 'предоставля',
+    'продукци', 'товар', 'услуг', 'специализ', 'занима', 'реализу',
+    'выращива', 'поставля', 'продаж', 'ассортимент'
+  ];
+  
+  const sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 10);
+  const relevantSentences: string[] = [];
+  
+  for (const sentence of sentences) {
+    const lower = sentence.toLowerCase();
+    if (keywords.some(kw => lower.includes(kw))) {
+      relevantSentences.push(sentence);
+      if (relevantSentences.join('. ').length > 120) break;
+    }
+  }
+  
+  let result = relevantSentences.join('. ').trim();
+  
+  // Clean up multiple spaces
+  result = result.replace(/\s+/g, ' ').trim();
+  
+  // Truncate if too long
+  if (result.length > 150) {
+    result = result.substring(0, 147) + '...';
+  }
+  
+  // Add period if missing
+  if (result && !result.endsWith('.') && !result.endsWith('...')) {
+    result += '.';
+  }
+  
+  return result;
+}
+
 export default function CompanyCard({ company, showCategory = false }: CompanyCardProps) {
   const { t } = useLanguage();
   const { isFavorite, toggleFavorite } = useFavorites();
@@ -71,6 +148,9 @@ export default function CompanyCard({ company, showCategory = false }: CompanyCa
   const logoUrl = (company.logo_url || "").trim();
   const logoSrc = useMemo(() => (logoUrl ? `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}` : ""), [logoUrl]);
   const showLogo = Boolean(logoUrl) && !logoFailed;
+  
+  // Extract products/services info from "about" field
+  const servicesInfo = useMemo(() => extractProductsServices(company.about || "", company.name), [company.about, company.name]);
 
   useEffect(() => {
     setLogoFailed(false);
@@ -147,6 +227,14 @@ export default function CompanyCard({ company, showCategory = false }: CompanyCa
 
         {/* Content */}
         <div className="p-4 flex-1 flex flex-col">
+          {/* Products/Services info line */}
+          {servicesInfo && (
+            <div className="flex items-start gap-2 mb-3 text-sm">
+              <span className="text-[#820251] mt-0.5">🛠️</span>
+              <span className="text-gray-700 leading-tight line-clamp-2">{servicesInfo}</span>
+            </div>
+          )}
+          
           {/* Address */}
           <div className="flex items-start gap-2 mb-3 text-sm">
             <span className="text-[#820251] mt-0.5">📍</span>

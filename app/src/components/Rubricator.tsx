@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { IbizCatalogCategory, IbizCatalogResponse } from "@/lib/ibiz/types";
+import { formatCompanyCount } from "@/lib/utils/plural";
 
 interface RubricatorProps {
   floating?: boolean;
@@ -169,7 +170,7 @@ export default function Rubricator({ floating = true, inline = false }: Rubricat
                         {category.name}
                       </span>
                       <span className="text-xs text-gray-400 mt-1 block">
-                        {category.company_count} компаний
+                        {formatCompanyCount(category.company_count)}
                       </span>
                     </Link>
                   ))}
@@ -317,7 +318,7 @@ function CategoryItem({ category, isExpanded, onToggle, onNavigate, t }: Categor
             <div className="font-medium text-gray-800 text-base whitespace-normal break-words">{category.name}</div>
           </div>
           <span className="text-sm text-gray-400 flex-shrink-0 bg-gray-100 px-2 py-0.5 rounded-full">
-            {category.company_count}
+            {formatCompanyCount(category.company_count)}
           </span>
         </Link>
       </div>
