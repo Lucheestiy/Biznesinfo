@@ -76,9 +76,10 @@ function SearchResults() {
   }, [query, serviceQuery, keywords, selectedRegion]);
 
   const fetchSearch = (page: number) => {
-    const q = searchMode === "company" ? query.trim() : serviceQuery.trim();
+    const q = query.trim();
+    const svc = serviceQuery.trim();
     const kw = keywords.trim();
-    if (!q && !kw) {
+    if (!q && !svc && !kw) {
       setData(null);
       setIsLoading(false);
       return;
@@ -87,7 +88,8 @@ function SearchResults() {
     setIsLoading(true);
     const region = selectedRegion || "";
     const params = new URLSearchParams();
-    if (q) params.set(searchMode === "company" ? "q" : "service", q);
+    if (q) params.set("q", q);
+    if (svc) params.set("service", svc);
     if (kw) params.set("keywords", kw);
     if (region) params.set("region", region);
     params.set("offset", String((page - 1) * PAGE_SIZE));
@@ -112,7 +114,7 @@ function SearchResults() {
 
   useEffect(() => {
     fetchSearch(currentPage);
-  }, [currentPage, query, serviceQuery, keywords, selectedRegion, searchMode]);
+  }, [currentPage, query, serviceQuery, keywords, selectedRegion]);
 
   const totalPages = data ? Math.ceil((data.total || 0) / PAGE_SIZE) : 0;
 
