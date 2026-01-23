@@ -40,6 +40,7 @@ export interface MeiliCompanyDocument {
 
 export interface MeiliSearchParams {
   query: string;
+  service?: string;
   keywords?: string | null;
   region?: string | null;
   categorySlug?: string | null;

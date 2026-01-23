@@ -188,6 +188,7 @@ type Store = {
   companySummaryById: Map<string, IbizCompanySummary>;
   companyRegionById: Map<string, string | null>;
   companySearchById: Map<string, string>;
+  companyKeywordsById: Map<string, string>;  // Rubric names for service search
 
   categoriesBySlug: Map<string, IbizCategoryRef>;
   rubricsBySlug: Map<string, IbizRubricRef>;
@@ -238,6 +239,7 @@ async function loadStoreFrom(sourcePath: string, stat: fs.Stats): Promise<Store>
   const companySummaryById = new Map<string, IbizCompanySummary>();
   const companyRegionById = new Map<string, string | null>();
   const companySearchById = new Map<string, string>();
+  const companyKeywordsById = new Map<string, string>();  // Rubric names for service search
 
   const categoriesBySlug = new Map<string, IbizCategoryRef>();
   const rubricsBySlug = new Map<string, IbizRubricRef>();
@@ -334,6 +336,13 @@ async function loadStoreFrom(sourcePath: string, stat: fs.Stats): Promise<Store>
       if (!companyIdsByRubricSlug.has(rubricSlug)) companyIdsByRubricSlug.set(rubricSlug, []);
       companyIdsByRubricSlug.get(rubricSlug)!.push(id);
     }
+
+    // Build keywords string from rubric names for service search
+    const rubricNames: string[] = [];
+    for (const r of company.rubrics || []) {
+      if (r.name) rubricNames.push(r.name);
+    }
+    companyKeywordsById.set(id, safeLower(rubricNames.join(" ")));
   }
 
   for (const [catSlug, rubricSlugs] of rubricsByCategorySlug.entries()) {
@@ -354,6 +363,7 @@ async function loadStoreFrom(sourcePath: string, stat: fs.Stats): Promise<Store>
     companySummaryById,
     companyRegionById,
     companySearchById,
+    companyKeywordsById,
     categoriesBySlug,
     rubricsBySlug,
     rubricsByCategorySlug,
@@ -588,22 +598,36 @@ export async function ibizSuggest(params: {
 
 export async function ibizSearch(params: {
   query: string;
+  service?: string;
   region: string | null;
   offset: number;
   limit: number;
 }): Promise<IbizSearchResponse> {
   const store = await getStore();
   const q = (params.query || "").trim().toLowerCase();
+  const service = (params.service || "").trim().toLowerCase();
   const offset = Math.max(0, params.offset || 0);
   const limit = Math.max(1, Math.min(200, params.limit || 24));
-  if (!q) return { query: params.query, total: 0, companies: [] };
+  
+  // No query and no service = no results
+  if (!q && !service) return { query: params.query, total: 0, companies: [] };
 
   const matches: string[] = [];
   for (const [id, search] of store.companySearchById.entries()) {
     const companyRegionSlug = store.companyRegionById.get(id) || null;
     if (!applyRegionAlias(params.region, companyRegionSlug)) continue;
-    if (!search.includes(q)) continue;
-    matches.push(id);
+    
+    // Service search: search in keywords (rubrics)
+    if (service) {
+      const keywords = store.companyKeywordsById.get(id) || "";
+      if (keywords.includes(service)) {
+        matches.push(id);
+      }
+    }
+    // Company name search
+    else if (q && search.includes(q)) {
+      matches.push(id);
+    }
   }
 
   const total = matches.length;

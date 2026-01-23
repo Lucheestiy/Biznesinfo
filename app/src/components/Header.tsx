@@ -343,6 +343,7 @@ export default function Header() {
             </Link>
           </div>
 
+          {/* Desktop Region/Language selectors */}
           <div className="flex justify-center gap-4">
             <div className="relative">
               <button
@@ -400,7 +401,7 @@ export default function Header() {
                 className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-all border border-yellow-400 hover:border-white/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
               >
                 <span className="font-medium text-yellow-400">{currentLang.flag}</span>
-                <span className="hidden sm:inline text-sm font-medium">{currentLang.name}</span>
+                <span className="text-sm font-medium">{currentLang.name}</span>
                 <svg className={`w-4 h-4 text-white/70 transition-transform ${langMenuOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
@@ -431,6 +432,7 @@ export default function Header() {
           </div>
         </div>
 
+        {/* Mobile Menu Dropdown */}
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t border-white/30">
             <nav className="flex flex-col gap-2 text-sm">

@@ -4,7 +4,9 @@ import { ibizSearch } from "@/lib/ibiz/store";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  // Support both 'q' (company name) and 'service' (product/service keywords)
   const query = searchParams.get("q") || "";
+  const service = searchParams.get("service") || "";
   const keywords = searchParams.get("keywords") || null;
   const region = searchParams.get("region") || null;
   const offset = parseInt(searchParams.get("offset") || "0", 10);
@@ -18,6 +20,7 @@ export async function GET(request: Request) {
     if (await isMeiliHealthy()) {
       const data = await meiliSearch({
         query,
+        service,  // Pass service for keyword-based search
         keywords,
         region,
         offset: safeOffset,
@@ -32,6 +35,7 @@ export async function GET(request: Request) {
   // Fallback to in-memory search
   const data = await ibizSearch({
     query,
+    service,
     region,
     offset: safeOffset,
     limit: safeLimit,

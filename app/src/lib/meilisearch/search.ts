@@ -46,13 +46,21 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
 
   // Determine search query and attributes to search on
   const query = (params.query || "").trim();
+  const service = (params.service || "").trim();
   const keywords = (params.keywords || "").trim();
+  
   let searchQuery = query;
   let attributesToSearchOn: string[] | undefined;
   let matchingStrategy: "all" | "last" | "frequency" | undefined;
 
-  // If keywords provided, search only in keywords field (generated from rubrics)
-  if (keywords) {
+  // Service search: search by products/services (keywords field)
+  if (service) {
+    searchQuery = service;
+    attributesToSearchOn = ["keywords"];
+    matchingStrategy = "all";
+  }
+  // Keywords search (legacy, combined with query)
+  else if (keywords) {
     if (searchQuery) {
       // Combine both: prioritize company name + additionally match keywords
       searchQuery = `${searchQuery} ${keywords}`;
@@ -64,8 +72,9 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
       attributesToSearchOn = ["keywords"];
       matchingStrategy = "all";
     }
-  } else if (searchQuery) {
-    // Company name search should be strict (do not match by description/other fields)
+  }
+  // Company name search (strict, only name field)
+  else if (searchQuery) {
     attributesToSearchOn = ["name"];
     matchingStrategy = "all";
   }
