@@ -167,6 +167,42 @@ export default function CompanyCard({ company, showCategory = false }: CompanyCa
   const logoSrc = useMemo(() => (logoUrl ? `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}` : ""), [logoUrl]);
   const showLogo = Boolean(logoUrl) && !logoFailed;
   
+  // Generate initials for companies without logo
+  const initials = useMemo(() => {
+    const name = company.name || "";
+    // Remove legal forms and get meaningful words
+    const cleaned = name
+      .replace(/[«»"'""„]/g, "")
+      .replace(/(ООО|ОАО|ЗАО|ИП|УП|КСУП|ЧТУП|ЧПУП|РУП|СООО|СП|МАГАЗИН|ФИЛИАЛ|Ф-Л)/gi, "")
+      .trim();
+    const words = cleaned.split(/[\s-]+/).filter(w => w.length > 1);
+    if (words.length >= 2) {
+      return (words[0][0] + words[1][0]).toUpperCase();
+    } else if (words.length === 1 && words[0].length >= 2) {
+      return words[0].substring(0, 2).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  }, [company.name]);
+  
+  // Generate a consistent color based on company name
+  const initialsColor = useMemo(() => {
+    const colors = [
+      "from-blue-500 to-blue-600",
+      "from-green-500 to-green-600", 
+      "from-purple-500 to-purple-600",
+      "from-orange-500 to-orange-600",
+      "from-pink-500 to-pink-600",
+      "from-teal-500 to-teal-600",
+      "from-indigo-500 to-indigo-600",
+      "from-rose-500 to-rose-600",
+    ];
+    let hash = 0;
+    for (let i = 0; i < company.name.length; i++) {
+      hash = company.name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  }, [company.name]);
+  
   // Extract products/services info from "about" field
   const servicesInfo = useMemo(() => extractProductsServices(company.about || "", company.name), [company.about, company.name]);
 
@@ -202,7 +238,7 @@ export default function CompanyCard({ company, showCategory = false }: CompanyCa
         {/* Header */}
         <div className="bg-gradient-to-r from-[#820251] to-[#6a0143] p-4 pr-12">
           <div className="flex items-start gap-4">
-            <div className="w-20 h-20 rounded-lg bg-white flex items-center justify-center overflow-hidden flex-shrink-0 shadow-md">
+            <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 shadow-md">
               {showLogo ? (
                 <div className="w-full h-full relative flex items-center justify-center bg-white">
                   <span
@@ -221,7 +257,9 @@ export default function CompanyCard({ company, showCategory = false }: CompanyCa
                   />
                 </div>
               ) : (
-                <span className="text-[#820251] text-3xl">{icon}</span>
+                <div className={`w-full h-full bg-gradient-to-br ${initialsColor} flex items-center justify-center`}>
+                  <span className="text-white text-2xl font-bold tracking-wide">{initials}</span>
+                </div>
               )}
             </div>
             <div className="min-w-0 flex-1">
