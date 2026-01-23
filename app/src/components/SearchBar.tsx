@@ -68,24 +68,29 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
 
     const abort = new AbortController();
     const region = selectedRegion || "";
-    fetch(`/api/ibiz/suggest?q=${encodeURIComponent(q)}&region=${encodeURIComponent(region)}`, {
-      signal: abort.signal,
-    })
+    
+    // "Название компании" → /api/ibiz/suggest (companies)
+    // "Продукция и услуги" → /api/ibiz/catalog/suggest (categories/rubrics)
+    const isCompanySearch = activeInput === "company";
+    const apiUrl = isCompanySearch 
+      ? `/api/ibiz/suggest?q=${encodeURIComponent(q)}&region=${encodeURIComponent(region)}`
+      : `/api/ibiz/catalog/suggest?q=${encodeURIComponent(q)}&region=${encodeURIComponent(region)}`;
+    
+    fetch(apiUrl, { signal: abort.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((data: IbizSuggestResponse | null) => {
         if (!data) return;
         
-        // "Название компании" → показываем компании
-        // "Продукция и услуги" → показываем категории/рубрики
-        const showCompanies = activeInput === "company";
+        // API already returns correct type:
+        // - /api/ibiz/suggest → companies
+        // - /api/ibiz/catalog/suggest → categories/rubrics
         
         const mapped: SearchSuggestion[] = (data.suggestions || [])
-          .filter((s) => showCompanies ? s.type === "company" : (s.type === "category" || s.type === "rubric"))
           .map((s) => ({
             type: s.type as "company" | "category" | "rubric",
             text: s.name,
             url: s.url,
-            icon: s.icon || (s.type === "category" ? "📁" : "📌"),
+            icon: s.icon || (s.type === "category" ? "📁" : s.type === "rubric" ? "📌" : "🏢"),
             subtitle: s.type === "company" 
               ? s.subtitle 
               : ('category_name' in s && s.category_name ? `${s.category_name} • ${s.count} компаний` : `${s.count} компаний`),

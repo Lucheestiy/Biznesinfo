@@ -45,19 +45,29 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
   }
 
   // Determine search query and attributes to search on
-  let searchQuery = params.query || "";
+  const query = (params.query || "").trim();
+  const keywords = (params.keywords || "").trim();
+  let searchQuery = query;
   let attributesToSearchOn: string[] | undefined;
+  let matchingStrategy: "all" | "last" | "frequency" | undefined;
 
   // If keywords provided, search only in keywords field (generated from rubrics)
-  if (params.keywords && params.keywords.trim()) {
+  if (keywords) {
     if (searchQuery) {
-      // Combine both: first search by name, then filter by keywords
-      searchQuery = `${searchQuery} ${params.keywords}`;
+      // Combine both: prioritize company name + additionally match keywords
+      searchQuery = `${searchQuery} ${keywords}`;
+      attributesToSearchOn = ["name", "keywords"];
+      matchingStrategy = "all";
     } else {
       // Only keywords search - search only in keywords field
-      searchQuery = params.keywords;
+      searchQuery = keywords;
       attributesToSearchOn = ["keywords"];
+      matchingStrategy = "all";
     }
+  } else if (searchQuery) {
+    // Company name search should be strict (do not match by description/other fields)
+    attributesToSearchOn = ["name"];
+    matchingStrategy = "all";
   }
 
   const result = await index.search(searchQuery, {
@@ -65,6 +75,7 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
     limit: params.limit || 24,
     filter: filter.length > 0 ? filter : undefined,
     attributesToSearchOn,
+    matchingStrategy,
     attributesToRetrieve: [
       "id", "source", "name", "description", "about", "address", "city", "region",
       "phones", "phones_ext", "emails", "websites", "logo_url",
@@ -96,6 +107,8 @@ export async function meiliSuggest(params: {
   const result = await index.search(params.query, {
     limit: params.limit || 8,
     filter: filter.length > 0 ? filter : undefined,
+    attributesToSearchOn: ["name"],
+    matchingStrategy: "all",
     attributesToRetrieve: [
       "id", "name", "address", "city",
       "primary_category_slug", "primary_category_name",

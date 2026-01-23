@@ -108,9 +108,27 @@ function extractProductsServices(about: string, companyName: string): string {
   // Clean up multiple spaces
   result = result.replace(/\s+/g, ' ').trim();
   
-  // Truncate if too long
+  // Truncate if too long - try to end at sentence boundary
   if (result.length > 150) {
-    result = result.substring(0, 147) + '...';
+    // Find last period within limit
+    const truncated = result.substring(0, 150);
+    const lastPeriod = truncated.lastIndexOf('.');
+    const lastExclaim = truncated.lastIndexOf('!');
+    const lastQuestion = truncated.lastIndexOf('?');
+    const lastSentenceEnd = Math.max(lastPeriod, lastExclaim, lastQuestion);
+    
+    if (lastSentenceEnd > 50) {
+      // End at sentence boundary
+      result = result.substring(0, lastSentenceEnd + 1);
+    } else {
+      // No good sentence break, truncate at word boundary
+      const lastSpace = truncated.lastIndexOf(' ');
+      if (lastSpace > 100) {
+        result = result.substring(0, lastSpace) + '...';
+      } else {
+        result = truncated + '...';
+      }
+    }
   }
   
   // Add period if missing

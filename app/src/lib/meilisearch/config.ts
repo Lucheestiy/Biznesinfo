@@ -56,6 +56,8 @@ export async function configureCompaniesIndex(): Promise<void> {
   // Configure typo tolerance
   await index.updateTypoTolerance({
     enabled: true,
+    // Make company name search stricter (typos in name can lead to irrelevant matches)
+    disableOnAttributes: ["name"],
     minWordSizeForTypos: {
       oneTypo: 4,
       twoTypos: 8,
