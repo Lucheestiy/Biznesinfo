@@ -6,6 +6,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
 import type { IbizSuggestResponse } from "@/lib/ibiz/types";
 import Rubricator from "./Rubricator";
+import { formatCompanyCount } from "@/lib/utils/plural";
 
 interface SearchBarProps {
   variant?: "hero" | "compact" | "compactKeywords";
@@ -73,15 +74,20 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
       .then((r) => (r.ok ? r.json() : null))
       .then((data: IbizSuggestResponse | null) => {
         if (!data) return;
-        // Only show company suggestions, not categories/subcategories (rubrics)
+        
+        // "Название компании" → показываем компании
+        // "Продукция и услуги" → показываем категории/рубрики
+        const showCompanies = activeInput === "company";
+        
         const mapped: SearchSuggestion[] = (data.suggestions || [])
-          .filter((s) => s.type === "company")
+          .filter((s) => showCompanies ? s.type === "company" : (s.type === "category" || s.type === "rubric"))
           .map((s) => ({
-            type: "company" as const,
+            type: s.type as "company" | "category" | "rubric",
             text: s.name,
             url: s.url,
-            icon: s.icon || "🏢",
-            subtitle: s.subtitle,
+            icon: s.icon || (s.type === "category" ? "📁" : "📌"),
+            subtitle: s.type === "company" ? s.subtitle : s.category_name ? `${s.category_name} • ${s.count} компаний` : `${s.count} компаний`,
+            count: s.count,
           }))
           .slice(0, 8);
 
@@ -93,7 +99,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
       });
 
     return () => abort.abort();
-  }, [query, selectedRegion]);
+  }, [query, selectedRegion, activeInput]);
 
   // Handle click outside to close suggestions
   useEffect(() => {
