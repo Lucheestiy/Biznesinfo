@@ -201,19 +201,19 @@ export default function CompanyCard({ company, showCategory = false }: CompanyCa
 
         {/* Header */}
         <div className="bg-gradient-to-r from-[#820251] to-[#6a0143] p-4 pr-12">
-          <div className="flex items-start gap-3">
-            <div className="w-12 h-12 rounded bg-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+          <div className="flex items-start gap-4">
+            <div className="w-20 h-20 rounded-lg bg-white flex items-center justify-center overflow-hidden flex-shrink-0 shadow-md">
               {showLogo ? (
-                <div className="w-full h-full relative flex items-center justify-center">
+                <div className="w-full h-full relative flex items-center justify-center bg-white">
                   <span
-                    className={`text-white text-2xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}
+                    className={`text-[#820251] text-3xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}
                   >
                     {icon}
                   </span>
                   <img
                     src={logoSrc}
                     alt={company.name}
-                    className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
+                    className={`absolute inset-0 w-full h-full object-contain p-1 transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
                     decoding="async"
                     loading="lazy"
                     onLoad={() => setLogoLoaded(true)}
@@ -221,10 +221,10 @@ export default function CompanyCard({ company, showCategory = false }: CompanyCa
                   />
                 </div>
               ) : (
-                <span className="text-white text-2xl">{icon}</span>
+                <span className="text-[#820251] text-3xl">{icon}</span>
               )}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h3 className="font-bold text-white text-lg leading-tight">
                 {company.name}
                 {company.source === "belarusinfo" && (
