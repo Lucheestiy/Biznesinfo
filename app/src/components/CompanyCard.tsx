@@ -12,6 +12,7 @@ import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
 interface CompanyCardProps {
   company: IbizCompanySummary;
   showCategory?: boolean;
+  variant?: "default" | "search";
 }
 
 function displayUrl(raw: string): string {
@@ -42,6 +43,53 @@ function normalizeWebsiteHref(raw: string): string | null {
       return null;
     }
   }
+}
+
+function normalizeWhitespace(text: string): string {
+  return (text || "").replace(/\s+/g, " ").trim();
+}
+
+function buildSearchSnippet(raw: string, maxChars: number): string {
+  const text = normalizeWhitespace(raw);
+  if (!text) return "";
+  if (text.length <= maxChars) return text;
+
+  const sentences = text
+    .match(/[^.!?]+[.!?]+|[^.!?]+$/g)
+    ?.map((s) => s.trim())
+    .filter(Boolean) || [];
+
+  const picked: string[] = [];
+  for (const sentence of sentences) {
+    const next = picked.length ? `${picked.join(" ")} ${sentence}` : sentence;
+    if (next.length > maxChars) break;
+    picked.push(sentence);
+  }
+  if (picked.length > 0) return picked.join(" ").trim();
+
+  const truncated = text.slice(0, maxChars);
+  const lastHardStop = Math.max(truncated.lastIndexOf("."), truncated.lastIndexOf("!"), truncated.lastIndexOf("?"));
+  if (lastHardStop >= Math.floor(maxChars * 0.6)) {
+    return truncated.slice(0, lastHardStop + 1).trim();
+  }
+
+  const lastSoftStop = Math.max(truncated.lastIndexOf(";"), truncated.lastIndexOf(":"));
+  if (lastSoftStop >= Math.floor(maxChars * 0.7)) {
+    return truncated.slice(0, lastSoftStop + 1).trim();
+  }
+
+  const lastComma = truncated.lastIndexOf(",");
+  if (lastComma >= Math.floor(maxChars * 0.75)) {
+    return truncated.slice(0, lastComma).trim();
+  }
+
+  const lastSpace = truncated.lastIndexOf(" ");
+  if (lastSpace > 0) return truncated.slice(0, lastSpace).trim();
+  return truncated.trim();
+}
+
+function normalizePhoneHref(raw: string): string {
+  return (raw || "").replace(/[^\d+]/g, "");
 }
 
 /**
@@ -139,7 +187,225 @@ function extractProductsServices(about: string, companyName: string): string {
   return result;
 }
 
-export default function CompanyCard({ company, showCategory = false }: CompanyCardProps) {
+function SearchCompanyCard({ company, showCategory = false }: CompanyCardProps) {
+  const { t } = useLanguage();
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const [logoFailed, setLogoFailed] = useState(false);
+  const [logoLoaded, setLogoLoaded] = useState(false);
+
+  const companyHref = `/company/${encodeURIComponent(company.id)}`;
+  const favorite = isFavorite(company.id);
+  const icon = company.primary_category_slug ? IBIZ_CATEGORY_ICONS[company.primary_category_slug] || "🏢" : "🏢";
+  const logoUrl = (company.logo_url || "").trim();
+  const logoSrc = useMemo(() => (logoUrl ? `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}` : ""), [logoUrl]);
+  const showLogo = Boolean(logoUrl) && !logoFailed;
+
+  const initials = useMemo(() => {
+    const name = company.name || "";
+    const cleaned = name
+      .replace(/[«»"'""„]/g, "")
+      .replace(/(ООО|ОАО|ЗАО|ИП|УП|КСУП|ЧТУП|ЧПУП|РУП|СООО|СП|МАГАЗИН|ФИЛИАЛ|Ф-Л)/gi, "")
+      .trim();
+    const words = cleaned.split(/[\s-]+/).filter((w) => w.length > 1);
+    if (words.length >= 2) {
+      return (words[0][0] + words[1][0]).toUpperCase();
+    }
+    if (words.length === 1 && words[0].length >= 2) {
+      return words[0].substring(0, 2).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  }, [company.name]);
+
+  const initialsColor = useMemo(() => {
+    const colors = [
+      "from-blue-500 to-blue-600",
+      "from-green-500 to-green-600",
+      "from-purple-500 to-purple-600",
+      "from-orange-500 to-orange-600",
+      "from-pink-500 to-pink-600",
+      "from-teal-500 to-teal-600",
+      "from-indigo-500 to-indigo-600",
+      "from-rose-500 to-rose-600",
+    ];
+    let hash = 0;
+    for (let i = 0; i < company.name.length; i++) {
+      hash = company.name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  }, [company.name]);
+
+  const industryText = useMemo(() => {
+    const rubric = (company.primary_rubric_name || "").trim();
+    const category = (company.primary_category_name || "").trim();
+    if (showCategory) return rubric || category;
+    return category || rubric;
+  }, [company.primary_category_name, company.primary_rubric_name, showCategory]);
+
+  const shortDescription = useMemo(() => {
+    const source = (company.description || "").trim() || (company.about || "").trim();
+    return buildSearchSnippet(source, 250);
+  }, [company.about, company.description]);
+
+  const address = (company.address || company.city || "").trim();
+
+  const phones = useMemo(() => {
+    const list = (company.phones_ext && company.phones_ext.length > 0)
+      ? company.phones_ext.map((p) => p.number)
+      : (company.phones || []);
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const raw of list) {
+      const number = (raw || "").trim();
+      if (!number) continue;
+      if (seen.has(number)) continue;
+      seen.add(number);
+      out.push(number);
+      if (out.length >= 2) break;
+    }
+    return out;
+  }, [company.phones, company.phones_ext]);
+
+  const email = (company.emails?.[0] || "").trim();
+
+  useEffect(() => {
+    setLogoFailed(false);
+    setLogoLoaded(false);
+  }, [logoSrc]);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border-2 border-[#820251] hover:shadow-md transition-shadow overflow-hidden flex flex-col h-full">
+      <div className="bg-gradient-to-r from-[#820251] to-[#6a0143] p-3.5">
+        <div className="flex items-start gap-4">
+          {/* Logo (must stay as implemented) */}
+          <Link
+            href={companyHref}
+            aria-label={t("company.details")}
+            className="block w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 shadow-md focus:outline-none focus:ring-2 focus:ring-white/70"
+          >
+            {showLogo ? (
+              <div className="w-full h-full relative flex items-center justify-center bg-white">
+                <span
+                  className={`text-[#820251] text-3xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}
+                >
+                  {icon}
+                </span>
+                <img
+                  src={logoSrc}
+                  alt={company.name}
+                  className={`absolute inset-0 w-full h-full object-contain p-1 transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
+                  decoding="async"
+                  loading="lazy"
+                  onLoad={() => setLogoLoaded(true)}
+                  onError={() => setLogoFailed(true)}
+                />
+              </div>
+            ) : (
+              <div className={`w-full h-full bg-gradient-to-br ${initialsColor} flex items-center justify-center`}>
+                <span className="text-white text-2xl font-bold tracking-wide">{initials}</span>
+              </div>
+            )}
+          </Link>
+
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[18px] font-bold text-white leading-tight">
+              <Link
+                href={companyHref}
+                className="hover:underline focus:outline-none focus:ring-2 focus:ring-white/70 rounded-sm"
+              >
+                {company.name}
+              </Link>
+              {company.source === "belarusinfo" && (
+                <span aria-hidden className="ml-2 inline-block w-2 h-2 rounded-full bg-white/50 align-middle" />
+              )}
+            </h3>
+            {industryText && (
+              <div className="mt-2">
+                <span className="inline-block bg-white/10 text-white text-[13px] leading-tight font-semibold px-2 py-1 rounded-md">
+                  {industryText}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            aria-pressed={favorite}
+            aria-label={favorite ? t("favorites.remove") : t("favorites.add")}
+            onClick={() => toggleFavorite(company.id)}
+            className={`shrink-0 max-w-[165px] inline-flex items-start gap-1 text-left text-white text-[12px] leading-tight font-semibold px-2 py-1 rounded-md transition-colors ${
+              favorite ? "bg-white/25" : "bg-white/10 hover:bg-white/15 active:bg-white/20"
+            }`}
+          >
+            <span>{t("favorites.add")}</span>
+            <svg
+              className={`w-4 h-4 mt-0.5 ${favorite ? "text-red-400 fill-current" : "text-white"}`}
+              fill={favorite ? "currentColor" : "none"}
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div className="p-3.5 bg-gradient-to-br from-white to-[#820251]/5 flex-1 flex flex-col">
+        {shortDescription && (
+          <p className="text-[15px] text-gray-900 leading-tight font-medium">
+            {shortDescription}
+          </p>
+        )}
+
+        {address && (
+          <div className={`${shortDescription ? "mt-2.5" : ""} text-[13px] text-gray-800 leading-tight whitespace-pre-line break-words`}>
+            {address}
+          </div>
+        )}
+
+        <div className="mt-2.5 space-y-1.5">
+          <div className="space-y-1">
+            <a
+              href={phones[0] ? `tel:${normalizePhoneHref(phones[0])}` : undefined}
+              className="block text-[15px] text-[#820251] font-semibold hover:underline"
+            >
+              {phones[0] || "—"}
+            </a>
+            <a
+              href={phones[1] ? `tel:${normalizePhoneHref(phones[1])}` : undefined}
+              className="block text-[15px] text-[#820251] font-semibold hover:underline"
+            >
+              {phones[1] || "—"}
+            </a>
+          </div>
+
+          <a
+            href={email ? `mailto:${email}` : undefined}
+            className="block text-[13px] text-gray-800 hover:text-[#820251] hover:underline break-words"
+          >
+            {email || "—"}
+          </a>
+        </div>
+
+        <div className="mt-auto pt-2.5 flex justify-end">
+          <Link
+            href={`/company/${encodeURIComponent(company.id)}`}
+            className="inline-flex items-center justify-center bg-[#820251] text-white px-4 py-1.5 rounded-lg text-[15px] font-bold shadow-sm hover:bg-[#6a0143] active:bg-[#520031] transition-colors"
+          >
+            {t("company.details")}
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
   const { t } = useLanguage();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [messageModalOpen, setMessageModalOpen] = useState(false);
@@ -413,4 +679,9 @@ export default function CompanyCard({ company, showCategory = false }: CompanyCa
       />
     </>
   );
+}
+
+export default function CompanyCard(props: CompanyCardProps) {
+  if (props.variant === "search") return <SearchCompanyCard {...props} />;
+  return <FullCompanyCard {...props} />;
 }

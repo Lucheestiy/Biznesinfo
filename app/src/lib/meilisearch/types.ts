@@ -43,6 +43,7 @@ export interface MeiliSearchParams {
   service?: string;
   keywords?: string | null;
   region?: string | null;
+  city?: string | null;
   categorySlug?: string | null;
   rubricSlug?: string | null;
   offset?: number;

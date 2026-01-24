@@ -9,6 +9,7 @@ export async function GET(request: Request) {
   const service = searchParams.get("service") || "";
   const keywords = searchParams.get("keywords") || null;
   const region = searchParams.get("region") || null;
+  const city = searchParams.get("city") || null;
   const offset = parseInt(searchParams.get("offset") || "0", 10);
   const limit = parseInt(searchParams.get("limit") || "24", 10);
 
@@ -23,6 +24,7 @@ export async function GET(request: Request) {
         service,  // Pass service for keyword-based search
         keywords,
         region,
+        city,
         offset: safeOffset,
         limit: safeLimit,
       });
@@ -37,6 +39,7 @@ export async function GET(request: Request) {
     query,
     service,
     region,
+    city,
     offset: safeOffset,
     limit: safeLimit,
   });

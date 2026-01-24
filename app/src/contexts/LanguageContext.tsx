@@ -26,14 +26,15 @@ const translations: Record<Language, Record<string, string>> = {
     "nav.mobile.contacts": "Контактная информация",
     "nav.mobile.submitRequest": "Подать заявку на размещение",
 
-    // Common
-    "common.more": "ещё",
-    "common.hide": "Скрыть",
+	    // Common
+	    "common.more": "ещё",
+	    "common.hide": "Скрыть",
+	    "common.example": "например",
 
     // Search
-    "search.placeholder": "Название компании",
-    "search.companyPlaceholder": "Название компании",
-    "search.servicePlaceholder": "Услуги",
+	    "search.placeholder": "Название компании",
+	    "search.companyPlaceholder": "Название компании",
+	    "search.servicePlaceholder": "Товары и услуги",
     "search.region": "Выбрать регион",
     "search.allRegions": "Все регионы",
     "search.selectCategory": "Выбор товаров или услуг",
@@ -360,8 +361,12 @@ const translations: Record<Language, Record<string, string>> = {
     "company.buildRoute": "Построить маршрут",
     "company.found": "Найдено",
 
-    // Filter labels
-    "filter.region": "Регион",
+		    // Filter labels
+		    "filter.locationLabel": "РЕГИОН/ГОРОД/УЛИЦА/ДОМ",
+		    "filter.chooseRegion": "Выбрать регион",
+		    "filter.region": "Регион",
+		    "filter.city": "Город",
+		    "filter.locationHint": "(введите название города)",
 
     // Company data - Company 1 (24pds)
     "company.1.name": "24pds СТО ПроДизельСервис",
@@ -629,14 +634,15 @@ const translations: Record<Language, Record<string, string>> = {
     "nav.mobile.contacts": "Contact Information",
     "nav.mobile.submitRequest": "Submit Placement Request",
 
-    // Common
-    "common.more": "more",
-    "common.hide": "Hide",
+	    // Common
+	    "common.more": "more",
+	    "common.hide": "Hide",
+	    "common.example": "e.g.",
 
     // Search
-    "search.placeholder": "Company name or service",
-    "search.companyPlaceholder": "Company name",
-    "search.servicePlaceholder": "Services",
+	    "search.placeholder": "Company name or service",
+	    "search.companyPlaceholder": "Company name",
+	    "search.servicePlaceholder": "Products and services",
     "search.region": "Select region",
     "search.allRegions": "All regions",
     "search.selectCategory": "Select products or services",
@@ -949,8 +955,12 @@ const translations: Record<Language, Record<string, string>> = {
     "company.buildRoute": "Build Route",
     "company.found": "Found",
 
-    // Filter labels
-    "filter.region": "Region",
+		    // Filter labels
+		    "filter.locationLabel": "REGION/CITY/STREET/HOUSE",
+		    "filter.chooseRegion": "Choose region",
+		    "filter.region": "Region",
+		    "filter.city": "City",
+		    "filter.locationHint": "(enter a city name)",
 
     // Company data - Company 1 (24pds)
     "company.1.name": "24pds ProDieselService",
@@ -1207,21 +1217,26 @@ const translations: Record<Language, Record<string, string>> = {
     "company.77.description": "Commercial real estate",
   },
 
-  be: {
-    // Header
-    "nav.catalog": "Каталог",
-    "nav.news": "Навіны",
-    "nav.promotions": "Акцыі",
+	  be: {
+	    // Header
+	    "nav.catalog": "Каталог",
+	    "nav.news": "Навіны",
+	    "nav.promotions": "Акцыі",
     "nav.about": "Паслугі кампаніі",
     "nav.addCompany": "Дадаць арганізацыю",
     "nav.favorites": "Абранае",
     "nav.mobile.contacts": "Кантактная інфармацыя",
-    "nav.mobile.submitRequest": "Падаць заяўку на размяшчэнне",
+	    "nav.mobile.submitRequest": "Падаць заяўку на размяшчэнне",
 
-    // Common
-    "search.placeholder": "Назва кампаніі або паслуга",
-    "search.companyPlaceholder": "Назва кампаніі",
-    "search.servicePlaceholder": "Паслугі",
+	    // Common
+	    "common.more": "яшчэ",
+	    "common.hide": "Схаваць",
+	    "common.example": "напрыклад",
+
+	    // Search
+	    "search.placeholder": "Назва кампаніі або паслуга",
+	    "search.companyPlaceholder": "Назва кампаніі",
+	    "search.servicePlaceholder": "Тавары і паслугі",
     "search.region": "Выбраць рэгіён",
     "search.allRegions": "Усе рэгіёны",
     "search.selectCategory": "Выбар тавараў або паслуг",
@@ -1532,8 +1547,12 @@ const translations: Record<Language, Record<string, string>> = {
     "company.buildRoute": "Пабудаваць маршрут",
     "company.found": "Знойдзена",
 
-    // Filter labels
-    "filter.region": "Рэгіён",
+		    // Filter labels
+		    "filter.locationLabel": "РЭГІЁН/ГОРАД/ВУЛІЦА/ДОМ",
+		    "filter.chooseRegion": "Выбраць рэгіён",
+		    "filter.region": "Рэгіён",
+		    "filter.city": "Горад",
+		    "filter.locationHint": "(увядзіце назву горада)",
 
     // Company data - Company 1 (24pds)
     "company.1.name": "24pds СТА ПраДызельСэрвіс",
@@ -1790,21 +1809,26 @@ const translations: Record<Language, Record<string, string>> = {
     "company.77.description": "Камерцыйная нерухомасць",
   },
 
-  zh: {
-    // Header
-    "nav.catalog": "目录",
-    "nav.news": "新闻",
-    "nav.promotions": "促销",
+	  zh: {
+	    // Header
+	    "nav.catalog": "目录",
+	    "nav.news": "新闻",
+	    "nav.promotions": "促销",
     "nav.about": "公司服务",
     "nav.addCompany": "添加组织",
     "nav.favorites": "收藏夹",
     "nav.mobile.contacts": "联系信息",
-    "nav.mobile.submitRequest": "提交投放申请",
+	    "nav.mobile.submitRequest": "提交投放申请",
 
-    // Common
-    "search.placeholder": "公司名称或服务",
-    "search.companyPlaceholder": "公司名称",
-    "search.servicePlaceholder": "服务",
+	    // Common
+	    "common.more": "更多",
+	    "common.hide": "隐藏",
+	    "common.example": "例如",
+
+	    // Search
+	    "search.placeholder": "公司名称或服务",
+	    "search.companyPlaceholder": "公司名称",
+	    "search.servicePlaceholder": "产品和服务",
     "search.region": "选择地区",
     "search.allRegions": "所有地区",
     "search.selectCategory": "选择商品或服务",
@@ -2115,8 +2139,12 @@ const translations: Record<Language, Record<string, string>> = {
     "company.buildRoute": "规划路线",
     "company.found": "找到",
 
-    // Filter labels
-    "filter.region": "地区",
+		    // Filter labels
+		    "filter.locationLabel": "地区/城市/街道/门牌号",
+		    "filter.chooseRegion": "选择地区",
+		    "filter.region": "地区",
+		    "filter.city": "城市",
+		    "filter.locationHint": "（输入城市名称）",
 
     // Company data - Company 1 (24pds)
     "company.1.name": "24pds 柴油服务站",

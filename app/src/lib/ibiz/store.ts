@@ -146,6 +146,54 @@ function safeLower(s: string): string {
   return (s || "").toLowerCase();
 }
 
+const LOCATION_STOP_WORDS = new Set([
+  "г",
+  "город",
+  "ул",
+  "улица",
+  "пр",
+  "пр-т",
+  "проспект",
+  "пер",
+  "переулок",
+  "бул",
+  "бульвар",
+  "наб",
+  "набережная",
+  "пл",
+  "площадь",
+  "д",
+  "дом",
+  "к",
+  "корп",
+  "корпус",
+  "оф",
+  "офис",
+  "кв",
+  "квартира",
+  "р-н",
+  "район",
+  "обл",
+  "область",
+]);
+
+function tokenizeLocation(raw: string): string[] {
+  const cleaned = safeLower(raw)
+    .replace(/[«»"'“”„]/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ");
+
+  const tokens = cleaned
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+  return tokens.filter((t) => {
+    if (LOCATION_STOP_WORDS.has(t)) return false;
+    if (/^\d+$/.test(t)) return true;
+    return t.length >= 2;
+  });
+}
+
 function normalizeLogoUrl(raw: string): string {
   const url = (raw || "").trim();
   if (!url) return "";
@@ -154,6 +202,68 @@ function normalizeLogoUrl(raw: string): string {
   if (low.includes("/images/logo/no-logo")) return "";
   if (low.includes("/images/logo/no_logo")) return "";
   return url;
+}
+
+function normalizeWebsites(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const byHost = new Map<string, { url: string; isRoot: boolean; length: number }>();
+  const fallback: string[] = [];
+  const fallbackSeen = new Set<string>();
+
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+
+    const normalized = (() => {
+      try {
+        // Keep as-is if already absolute.
+        // eslint-disable-next-line no-new
+        new URL(trimmed);
+        return trimmed;
+      } catch {
+        // Best-effort: treat as host/path and add https://
+        return `https://${trimmed.replace(/^\/+/, "")}`;
+      }
+    })();
+
+    let url: URL | null = null;
+    try {
+      url = new URL(normalized);
+    } catch {
+      url = null;
+    }
+
+    if (!url) {
+      const key = trimmed.toLowerCase();
+      if (fallbackSeen.has(key)) continue;
+      fallbackSeen.add(key);
+      fallback.push(trimmed);
+      continue;
+    }
+
+    const hostKey = (url.hostname || "").toLowerCase().replace(/^www\./i, "");
+    if (!hostKey) continue;
+
+    const isRoot = (url.pathname || "") === "/" || (url.pathname || "") === "";
+    const candidate = { url: normalized, isRoot, length: normalized.length };
+    const existing = byHost.get(hostKey);
+    if (!existing) {
+      byHost.set(hostKey, candidate);
+      continue;
+    }
+
+    if (candidate.isRoot && !existing.isRoot) {
+      byHost.set(hostKey, candidate);
+      continue;
+    }
+
+    if (candidate.isRoot === existing.isRoot && candidate.length < existing.length) {
+      byHost.set(hostKey, candidate);
+    }
+  }
+
+  return [...Array.from(byHost.values()).map((v) => v.url), ...fallback];
 }
 
 function buildCompanySummary(company: IbizCompany, regionSlug: string | null): IbizCompanySummary {
@@ -271,6 +381,7 @@ async function loadStoreFrom(sourcePath: string, stat: fs.Stats): Promise<Store>
     if (!id) continue;
 
     company.logo_url = normalizeLogoUrl(company.logo_url || "");
+    company.websites = normalizeWebsites(company.websites);
 
     const regionSlug = normalizeRegionSlug(company.city || "", company.region || "", company.address || "");
     companiesById.set(id, company);
@@ -599,6 +710,7 @@ export async function ibizSuggest(params: {
 export async function ibizSearch(params: {
   query: string;
   service?: string;
+  city?: string | null;
   region: string | null;
   offset: number;
   limit: number;
@@ -606,32 +718,68 @@ export async function ibizSearch(params: {
   const store = await getStore();
   const q = (params.query || "").trim().toLowerCase();
   const service = (params.service || "").trim().toLowerCase();
+  const city = (params.city || "").trim().toLowerCase();
+  const cityTokens = tokenizeLocation(city);
   const offset = Math.max(0, params.offset || 0);
   const limit = Math.max(1, Math.min(200, params.limit || 24));
   
-  // No query and no service = no results
-  if (!q && !service) return { query: params.query, total: 0, companies: [] };
+  // No filters = no results
+  if (!q && !service && cityTokens.length === 0) return { query: params.query, total: 0, companies: [] };
 
   const matches: string[] = [];
   for (const [id, search] of store.companySearchById.entries()) {
     const companyRegionSlug = store.companyRegionById.get(id) || null;
     if (!applyRegionAlias(params.region, companyRegionSlug)) continue;
+
+    if (cityTokens.length > 0) {
+      const summary = store.companySummaryById.get(id);
+      const cityHaystack = safeLower(`${summary?.city || ""} ${summary?.address || ""}`);
+      let ok = true;
+      for (const token of cityTokens) {
+        if (!cityHaystack.includes(token)) {
+          ok = false;
+          break;
+        }
+      }
+      if (!ok) continue;
+    }
     
+    const keywords = store.companyKeywordsById.get(id) || "";
+
+    // Combined search: company name (and/or other text) + product/service keywords.
+    if (q && service) {
+      if (search.includes(q) && keywords.includes(service)) matches.push(id);
+      continue;
+    }
+
     // Service search: search in keywords (rubrics)
     if (service) {
-      const keywords = store.companyKeywordsById.get(id) || "";
-      if (keywords.includes(service)) {
-        matches.push(id);
-      }
+      if (keywords.includes(service)) matches.push(id);
+      continue;
     }
-    // Company name search
-    else if (q && search.includes(q)) {
-      matches.push(id);
+
+    // Company name search (fallback uses combined text index)
+    if (q) {
+      if (search.includes(q)) matches.push(id);
+      continue;
     }
+
+    // City-only filter
+    matches.push(id);
   }
 
   const total = matches.length;
-  const pageIds = matches.slice(offset, offset + limit);
+  // Keep ordering consistent with Meilisearch behavior: companies with real logos first.
+  const withLogo: string[] = [];
+  const withoutLogo: string[] = [];
+  for (const id of matches) {
+    const summary = store.companySummaryById.get(id);
+    if ((summary?.logo_url || "").trim()) withLogo.push(id);
+    else withoutLogo.push(id);
+  }
+
+  const ordered = [...withLogo, ...withoutLogo];
+  const pageIds = ordered.slice(offset, offset + limit);
   const companies: IbizCompanySummary[] = [];
   for (const id of pageIds) {
     const summary = store.companySummaryById.get(id);

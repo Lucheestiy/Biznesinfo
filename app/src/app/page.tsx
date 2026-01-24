@@ -44,10 +44,10 @@ export default function Home() {
 
       <main className="flex-grow">
         {/* Hero Section with Search */}
-        <div className="bg-gradient-to-br from-[#820251] to-[#5a0138] text-white py-16">
+        <div className="bg-gradient-to-br from-[#820251] to-[#5a0138] text-white pt-4 pb-12 md:py-16">
           <div className="container mx-auto px-4 text-center">
             {/* Add company link at top */}
-            <div className="mb-6">
+            <div className="mb-4 md:mb-6">
               <Link
                 href="/add-company"
                 className="inline-flex items-center gap-2 text-yellow-400 hover:text-white hover:scale-110 hover:underline underline-offset-4 transition-all duration-200 cursor-pointer text-lg"
@@ -60,7 +60,7 @@ export default function Home() {
             </div>
 
             {/* Interactive title and subtitle with single running border */}
-            <div className="relative mb-8 max-w-2xl mx-auto group cursor-default">
+            <div className="relative mb-5 md:mb-8 max-w-2xl mx-auto group cursor-default">
               {/* Animated border */}
               <div className="absolute inset-0 rounded-xl p-[2px] overflow-hidden">
                 <div
@@ -72,12 +72,12 @@ export default function Home() {
                 <div className="absolute inset-[2px] bg-gradient-to-br from-[#820251] to-[#5a0138] rounded-[10px]" />
               </div>
 
-              <div className="relative px-6 py-4 text-center">
-                <h1 className="text-3xl md:text-4xl font-bold text-white mb-3
+              <div className="relative px-4 py-3 md:px-6 md:py-4 text-center">
+                <h1 className="text-3xl md:text-4xl font-bold text-white mb-2 md:mb-3
                   group-hover:text-yellow-100 transition-colors duration-300">
                   {t("hero.title")}
                 </h1>
-                <p className="text-lg md:text-xl text-pink-100
+                <p className="text-base md:text-xl leading-snug md:leading-normal text-pink-100
                   group-hover:text-white transition-colors duration-300
                   drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]
                   group-hover:drop-shadow-[0_0_15px_rgba(255,255,255,0.4)]">

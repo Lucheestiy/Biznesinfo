@@ -1,11 +1,10 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import CompanyCard from "@/components/CompanyCard";
-import SearchBar from "@/components/SearchBar";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
 import { regions } from "@/data/regions";
@@ -13,34 +12,8 @@ import type { IbizCompanySummary, IbizSearchResponse } from "@/lib/ibiz/types";
 import { formatCompanyCount } from "@/lib/utils/plural";
 import Pagination from "@/components/Pagination";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 const PAGE_SIZE = 10;
-
-// Toggle component for switching between company and service search
-function SearchToggle({ active, onChange }: { active: "company" | "service"; onChange: (v: "company" | "service") => void }) {
-  const { t } = useLanguage();
-  return (
-    <div className="flex bg-white/20 rounded-lg p-1 mb-4 w-fit">
-      <button
-        onClick={() => onChange("company")}
-        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-          active === "company" ? "bg-white text-[#820251]" : "text-white hover:bg-white/10"
-        }`}
-      >
-        {t("search.byCompany")}
-      </button>
-      <button
-        onClick={() => onChange("service")}
-        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-          active === "service" ? "bg-white text-[#820251]" : "text-white hover:bg-white/10"
-        }`}
-      >
-        {t("search.byService")}
-      </button>
-    </div>
-  );
-}
 
 function SearchResults() {
   const searchParams = useSearchParams();
@@ -49,48 +22,106 @@ function SearchResults() {
   const router = useRouter();
 
   const query = searchParams.get("q") || "";
-  const serviceQuery = searchParams.get("service") || "";
-  const keywords = searchParams.get("keywords") || "";
+  const legacyKeywords = searchParams.get("keywords") || "";
+  const serviceQuery = searchParams.get("service") || legacyKeywords;
+  const city = searchParams.get("city") || "";
+  const regionFromUrl = searchParams.get("region") || "";
+
+  const [companyDraft, setCompanyDraft] = useState(query);
+  const [serviceDraft, setServiceDraft] = useState(serviceQuery);
+  const [cityDraft, setCityDraft] = useState(city);
+  const [regionMenuOpen, setRegionMenuOpen] = useState(false);
+  const cityInputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setCompanyDraft(query);
+    setServiceDraft(serviceQuery);
+    setCityDraft(city);
+  }, [query, serviceQuery, city]);
+
+  // If region is present in URL, it becomes the source of truth.
+  useEffect(() => {
+    if (!regionFromUrl || city.trim()) return;
+    const next = regions.some((r) => r.slug === regionFromUrl) ? regionFromUrl : null;
+    if (next !== selectedRegion) setSelectedRegion(next);
+  }, [regionFromUrl, city, selectedRegion, setSelectedRegion]);
+
+  // If user is searching by city/street, region becomes irrelevant (auto-detected by location).
+  useEffect(() => {
+    if (!city.trim()) return;
+    if (selectedRegion) setSelectedRegion(null);
+  }, [city, selectedRegion, setSelectedRegion]);
+
+  const navigateToSearch = (
+    mode: "push" | "replace",
+    overrides?: {
+      q?: string;
+      service?: string;
+      city?: string;
+      region?: string | null;
+    },
+  ) => {
+    const params = new URLSearchParams();
+    const nextQ = (overrides?.q ?? companyDraft).trim();
+    const nextService = (overrides?.service ?? serviceDraft).trim();
+    const nextCity = (overrides?.city ?? cityDraft).trim();
+    const nextRegion = overrides?.region ?? selectedRegion;
+
+    if (nextQ) params.set("q", nextQ);
+    if (nextService) params.set("service", nextService);
+    if (nextCity) params.set("city", nextCity);
+    if (!nextCity && nextRegion) params.set("region", nextRegion);
+
+    const qs = params.toString();
+    const url = qs ? `/search?${qs}` : "/search";
+    if (mode === "replace") router.replace(url);
+    else router.push(url);
+  };
 
   const [data, setData] = useState<IbizSearchResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [searchMode, setSearchMode] = useState<"company" | "service">(() => {
-    // Detect mode from URL params
-    if (searchParams.get("service")) return "service";
-    return "company";
-  });
 
-  // Update search mode when URL params change
+  // Debounced auto-update on field edits (keeps UX fast and compact on mobile).
   useEffect(() => {
-    if (searchParams.get("service")) {
-      setSearchMode("service");
-    } else {
-      setSearchMode("company");
-    }
-  }, [searchParams]);
+    const nextQ = companyDraft.trim();
+    const nextService = serviceDraft.trim();
+    const nextCity = cityDraft.trim();
+
+    if (nextQ === query.trim() && nextService === serviceQuery.trim() && nextCity === city.trim()) return;
+
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    debounceRef.current = window.setTimeout(() => {
+      navigateToSearch("replace", { q: nextQ, service: nextService, city: nextCity });
+    }, 500);
+
+    return () => {
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    };
+  }, [companyDraft, serviceDraft, cityDraft, query, serviceQuery, city]);
 
   // Reset page when query or region changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [query, serviceQuery, keywords, selectedRegion]);
+  }, [query, serviceQuery, city, selectedRegion]);
 
   const fetchSearch = (page: number) => {
     const q = query.trim();
     const svc = serviceQuery.trim();
-    const kw = keywords.trim();
-    if (!q && !svc && !kw) {
+    const cityValue = city.trim();
+    if (!q && !svc && !cityValue) {
       setData(null);
       setIsLoading(false);
       return;
     }
     let isMounted = true;
     setIsLoading(true);
-    const region = selectedRegion || "";
+    const region = cityValue ? "" : selectedRegion || "";
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (svc) params.set("service", svc);
-    if (kw) params.set("keywords", kw);
+    if (cityValue) params.set("city", cityValue);
     if (region) params.set("region", region);
     params.set("offset", String((page - 1) * PAGE_SIZE));
     params.set("limit", String(PAGE_SIZE));
@@ -114,94 +145,235 @@ function SearchResults() {
 
   useEffect(() => {
     fetchSearch(currentPage);
-  }, [currentPage, query, serviceQuery, keywords, selectedRegion]);
+  }, [currentPage, query, serviceQuery, city, selectedRegion]);
 
   const totalPages = data ? Math.ceil((data.total || 0) / PAGE_SIZE) : 0;
 
-  const grouped = useMemo(() => {
-    const out: Record<string, { name: string; companies: IbizCompanySummary[] }> = {};
-    for (const c of data?.companies || []) {
-      const key = c.primary_category_slug || "other";
-      if (!out[key]) out[key] = { name: c.primary_category_name || "Другое", companies: [] };
-      out[key].companies.push(c);
+  const companies = useMemo(() => {
+    const items = data?.companies || [];
+    const withLogo: IbizCompanySummary[] = [];
+    const withoutLogo: IbizCompanySummary[] = [];
+    for (const c of items) {
+      if ((c.logo_url || "").trim()) withLogo.push(c);
+      else withoutLogo.push(c);
     }
-    return out;
+    return [...withLogo, ...withoutLogo];
   }, [data]);
-
-  const categoriesWithResults = Object.keys(grouped);
-
-  const handleSearchModeChange = (mode: "company" | "service") => {
-    setSearchMode(mode);
-    const currentQuery = mode === "company" ? serviceQuery : query;
-    const params = new URLSearchParams();
-    if (currentQuery) params.set(mode === "company" ? "service" : "q", currentQuery);
-    if (selectedRegion) params.set("region", selectedRegion);
-    router.push(`/search?${params.toString()}`);
-  };
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-gray-100">
       <Header />
 
       <main className="flex-grow">
-        {/* Search Header with Toggle */}
-        <div className="bg-gradient-to-r from-[#820251] to-[#5a0138] text-white py-8">
+        {/* Search Header */}
+        <div className="bg-gradient-to-r from-[#820251] to-[#5a0138] text-white py-6">
           <div className="container mx-auto px-4">
-            <h1 className="text-2xl font-bold mb-4">{t("search.results")}</h1>
-            <SearchToggle active={searchMode} onChange={handleSearchModeChange} />
-            <SearchBar variant={query.trim() || serviceQuery.trim() ? "compact" : "compactKeywords"} />
+            <h1 className="text-2xl font-bold">{t("search.results")}</h1>
+
+            <form
+              className="mt-4 space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                navigateToSearch("push");
+              }}
+            >
+              {/* Company name */}
+              <div className="relative">
+                <label className="sr-only" htmlFor="search-company">
+                  {t("search.companyPlaceholder")}
+                </label>
+                  <input
+                    id="search-company"
+                    value={companyDraft}
+                    onChange={(e) => setCompanyDraft(e.target.value)}
+                    inputMode="search"
+                    placeholder={t("search.companyPlaceholder")}
+                    className="w-full rounded-2xl bg-white text-[#820251] font-bold placeholder:text-gray-400 px-4 pr-14 py-3.5 shadow-sm border border-white/20 focus:outline-none focus:ring-2 focus:ring-yellow-300/70 focus:border-white/40"
+                  />
+                <button
+                  type="submit"
+                  aria-label={t("search.find")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl bg-[#820251]/10 text-[#820251] hover:bg-[#820251]/15 active:bg-[#820251]/20 transition-colors flex items-center justify-center"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Products & services */}
+              <div className="relative">
+                <label className="sr-only" htmlFor="search-service">
+                  {t("search.servicePlaceholder")}
+                </label>
+                  <input
+                    id="search-service"
+                    value={serviceDraft}
+                    onChange={(e) => setServiceDraft(e.target.value)}
+                    inputMode="search"
+                    placeholder={t("search.servicePlaceholder")}
+                    className="w-full rounded-2xl bg-white text-[#820251] font-bold placeholder:text-gray-400 px-4 pr-14 py-3.5 shadow-sm border border-white/20 focus:outline-none focus:ring-2 focus:ring-yellow-300/70 focus:border-white/40"
+                  />
+                <button
+                  type="submit"
+                  aria-label={t("search.find")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl bg-[#820251]/10 text-[#820251] hover:bg-[#820251]/15 active:bg-[#820251]/20 transition-colors flex items-center justify-center"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
 
-        {/* Region Filter */}
-        <div className="bg-white border-b border-gray-200 py-4">
-          <div className="container mx-auto px-4">
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-sm text-gray-600 font-medium">{t("filter.region")}:</span>
-              <button
-                onClick={() => setSelectedRegion(null)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  !selectedRegion ? "bg-[#820251] text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                {t("search.allRegions")}
-              </button>
-              {regions.map((r) => (
-                <button
-                  key={r.slug}
-                  onClick={() => setSelectedRegion(r.slug)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                    selectedRegion === r.slug
-                      ? "bg-[#820251] text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
+		        {/* Location Filter */}
+		        <div className="bg-white border-b border-gray-200 py-3">
+		          <div className="container mx-auto px-2 sm:px-4">
+			            <div className="relative">
+			              <div className="w-full flex items-center gap-2 rounded-3xl border-[3px] border-[#820251] bg-white px-2 py-2 shadow-md">
+			                <button
+			                  type="button"
+			                  onClick={() => setRegionMenuOpen((v) => !v)}
+			                  aria-label={t("filter.region")}
+			                  aria-haspopup="listbox"
+			                  aria-expanded={regionMenuOpen}
+			                  className="hidden sm:flex shrink-0 basis-[55%] items-center justify-between gap-2 rounded-2xl px-2 py-2 hover:bg-[#820251]/5 active:bg-[#820251]/10 transition-colors"
+			                >
+			                  <span
+			                    className={`min-w-0 truncate text-sm font-bold ${
+			                      selectedRegion ? "text-[#820251]" : "text-gray-900"
+			                    }`}
+			                  >
+			                    {selectedRegion ? t(`region.${selectedRegion}`) : t("filter.chooseRegion")}
+			                  </span>
+			                  <svg
+			                    className={`w-5 h-5 transition-transform ${regionMenuOpen ? "rotate-180" : ""} ${
+			                      selectedRegion ? "text-[#820251]" : "text-gray-900"
+			                    }`}
+			                    fill="none"
+			                    stroke="currentColor"
+			                    viewBox="0 0 24 24"
+			                    aria-hidden="true"
+			                  >
+			                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+			                  </svg>
+			                </button>
+			                <span className="hidden sm:block h-6 w-px bg-[#820251]/45" aria-hidden="true" />
+
+		                <div className="min-w-0 flex-1">
+		                  <label className="sr-only" htmlFor="filter-location">
+		                    {t("filter.city")}
+		                  </label>
+		                  <input
+	                    id="filter-location"
+	                    ref={cityInputRef}
+                    value={cityDraft}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setCityDraft(next);
+                      if (next.trim() && selectedRegion) setSelectedRegion(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+		                        navigateToSearch("push");
+		                      }
+			                    }}
+			                    inputMode="search"
+		                    placeholder={t("filter.locationLabel")}
+	                    className="w-full bg-transparent text-[#820251] font-bold placeholder:text-gray-500 placeholder:font-medium px-1 py-2 focus:outline-none"
+		                  />
+			                </div>
+
+	                <button
+	                  type="button"
+	                  aria-label={t("search.find")}
+	                  onClick={() => navigateToSearch("push")}
+                  className="shrink-0 w-9 h-9 rounded-xl bg-[#820251]/10 text-[#820251] hover:bg-[#820251]/15 active:bg-[#820251]/20 transition-colors flex items-center justify-center"
                 >
-                  {t(`region.${r.slug}`)}
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
                 </button>
-              ))}
+              </div>
+
+	              {regionMenuOpen && (
+	                <>
+	                  <div className="hidden sm:block fixed inset-0 z-10" onClick={() => setRegionMenuOpen(false)} />
+	                  <div
+	                    role="listbox"
+	                    className="hidden sm:block absolute left-0 right-0 z-20 mt-2 rounded-2xl bg-white shadow-2xl ring-1 ring-black/5 overflow-hidden"
+	                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedRegion(null);
+                        setCityDraft("");
+                        navigateToSearch("push", { region: null, city: "" });
+                        setRegionMenuOpen(false);
+                        cityInputRef.current?.focus();
+                      }}
+                      className={`w-full px-5 py-3 text-left text-sm hover:bg-gray-50 transition-colors border-b border-gray-100 ${
+                        !selectedRegion ? "text-[#820251] font-bold bg-gray-50/50" : "text-gray-700"
+                      }`}
+                    >
+                      {t("search.allRegions")}
+                    </button>
+                    <div className="py-1 max-h-[50vh] overflow-y-auto">
+                      {regions.map((r) => (
+                        <button
+                          key={r.slug}
+                          type="button"
+                          onClick={() => {
+                            setSelectedRegion(r.slug);
+                            setCityDraft("");
+                            navigateToSearch("push", { region: r.slug, city: "" });
+                            setRegionMenuOpen(false);
+                            cityInputRef.current?.focus();
+                          }}
+                          className={`w-full px-5 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors ${
+                            selectedRegion === r.slug ? "text-[#820251] font-bold bg-gray-50/50" : "text-gray-700"
+                          }`}
+                        >
+                          {t(`region.${r.slug}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
 
         {/* Results */}
         <div className="container mx-auto py-10 px-4">
-          {/* Query info with search mode */}
-          {(query || serviceQuery || keywords) && (
+          {/* Query info */}
+          {(query || serviceQuery || city || selectedRegion) && (
             <div className="mb-6">
               <p className="text-gray-600">
-                {searchMode === "company" && query && (
+                {query && (
                   <>
-                    {t("search.byCompany")}: <span className="font-semibold text-gray-800">«{query}»</span>
+                    {t("search.companyPlaceholder")}:{" "}
+                    <span className="font-bold text-[#820251]">«{query}»</span>
                   </>
                 )}
-                {searchMode === "service" && serviceQuery && (
+                {query && serviceQuery && <span className="text-gray-400"> · </span>}
+                {serviceQuery && (
                   <>
-                    {t("search.byService")}: <span className="font-semibold text-[#820251]">«{serviceQuery}»</span>
+                    {t("search.servicePlaceholder")}:{" "}
+                    <span className="font-bold text-[#820251]">«{serviceQuery}»</span>
                   </>
                 )}
-                {query && keywords && " + "}
-                {keywords && <span className="font-semibold text-gray-800">«{keywords}»</span>}
-                {selectedRegion && <span className="text-gray-500"> — {regionName}</span>}
+                {(query || serviceQuery) && city && <span className="text-gray-400"> · </span>}
+                {city && (
+                  <>
+                    {t("filter.city")}: <span className="font-bold text-[#820251]">{city}</span>
+                  </>
+                )}
+                {selectedRegion && !city && <span className="font-bold text-[#820251]"> — {regionName}</span>}
               </p>
               <p className="text-sm text-gray-500 mt-1">
                 {t("search.found")}: {isLoading ? "…" : formatCompanyCount(data?.total ?? 0)}
@@ -211,7 +383,7 @@ function SearchResults() {
 
           {isLoading ? (
             <div className="bg-white rounded-lg p-10 text-center text-gray-500">{t("common.loading")}</div>
-          ) : !query && !serviceQuery && !keywords ? (
+          ) : !query && !serviceQuery && !city ? (
             <div className="bg-white rounded-lg p-10 text-center text-gray-500">
               {t("search.placeholder")}
             </div>
@@ -236,38 +408,12 @@ function SearchResults() {
               </Link>
             </div>
           ) : (
-            <div className="space-y-10">
-              {categoriesWithResults.length > 1 && (
-                <div className="flex flex-wrap gap-2 mb-6">
-                  {categoriesWithResults.map((catSlug) => (
-                    <a
-                      key={catSlug}
-                      href={`#category-${catSlug}`}
-                      className="inline-flex items-center gap-1 px-3 py-1 bg-white rounded-full text-sm text-gray-600 border border-gray-200 hover:border-[#820251] hover:text-[#820251] transition-colors"
-                    >
-                      <span>{grouped[catSlug]?.name || catSlug}</span>
-                      <span className="text-gray-400">({grouped[catSlug]?.companies.length || 0})</span>
-                    </a>
-                  ))}
-                </div>
-              )}
-
-              {categoriesWithResults.map((catSlug) => (
-                <div key={catSlug} id={`category-${catSlug}`}>
-                  <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-3">
-                    <span>{grouped[catSlug]?.name || catSlug}</span>
-                    <span className="text-sm font-normal text-gray-500">
-                      ({grouped[catSlug]?.companies.length || 0})
-                    </span>
-                  </h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {grouped[catSlug].companies.map((company) => (
-                      <CompanyCard key={company.id} company={company} showCategory />
-                    ))}
-                  </div>
-                </div>
-              ))}
-
+            <div className="space-y-6">
+              <div className="flex flex-col gap-4">
+                {companies.map((company) => (
+                  <CompanyCard key={company.id} company={company} showCategory variant="search" />
+                ))}
+              </div>
               {/* Pagination */}
               <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
             </div>

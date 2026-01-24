@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useLanguage, Language } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
@@ -16,6 +17,7 @@ const languages: { code: Language; name: string; flag: string }[] = [
 export default function Header() {
   const { language, setLanguage, t } = useLanguage();
   const { selectedRegion, setSelectedRegion, regionName } = useRegion();
+  const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
@@ -24,15 +26,35 @@ export default function Header() {
 
   const currentLang = languages.find((l) => l.code === language) || languages[0];
 
+  const handleMobileLogoClick = () => {
+    setMobileMenuOpen(false);
+    setLangMenuOpen(false);
+    setRegionMenuOpen(false);
+    setExpandedItem(null);
+
+    if (pathname === "/") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
   return (
     <header className="bg-[#820251] text-white shadow-lg sticky top-0 z-50">
       <div className="container mx-auto px-4">
         {/* Mobile Header - Compact single row */}
         <div className="md:hidden flex items-center justify-between py-2">
           {/* Logo Left */}
-          <Link href="/" className="flex items-center gap-2 group">
-            <div className="relative w-10 h-10 flex-shrink-0">
-              <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+          <Link
+            href="/"
+            onClick={handleMobileLogoClick}
+            className="flex items-center gap-2 group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#820251] active:bg-white/10 rounded-lg transition-colors"
+          >
+            <div className="relative w-10 h-10 flex-shrink-0 animate-[float_4s_ease-in-out_infinite]">
+              <svg
+                viewBox="0 0 80 80"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-full h-full transition-transform duration-300 group-active:scale-110 group-active:rotate-6"
+              >
                 <defs>
                   <radialGradient id="globeRadialMobile" cx="30%" cy="30%" r="70%">
                     <stop offset="0%" stopColor="#FEF3C7" />
@@ -47,8 +69,8 @@ export default function Header() {
               </svg>
             </div>
             <span className="text-lg font-bold">
-              <span className="text-yellow-400">Biznesinfo</span>
-              <span className="text-white">.by</span>
+              <span className="text-yellow-400 transition-colors duration-200 group-active:text-yellow-300">Biznesinfo</span>
+              <span className="text-white transition-colors duration-200 group-active:text-yellow-100">.by</span>
             </span>
           </Link>
 
@@ -57,21 +79,37 @@ export default function Header() {
             {/* Region Button - Compact */}
             <button
               onClick={() => setRegionMenuOpen(!regionMenuOpen)}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/10 text-white text-xs"
+              aria-expanded={regionMenuOpen}
+              aria-haspopup="menu"
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-white/10 border border-white/20 text-white text-xs shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#820251]"
             >
               <svg className="w-3.5 h-3.5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
               <span className="max-w-[60px] truncate">{selectedRegion ? regionName.split(' ')[0] : t("search.allRegions").split(' ')[0]}</span>
+              <svg className="w-3.5 h-3.5 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
 
             {/* Language Button - Compact */}
             <button
               onClick={() => setLangMenuOpen(!langMenuOpen)}
-              className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 text-yellow-400 text-xs font-bold"
+              aria-expanded={langMenuOpen}
+              aria-haspopup="menu"
+              className="flex items-center gap-1 px-2 h-8 rounded-lg bg-white/10 border border-white/20 text-white text-xs font-bold shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#820251]"
             >
-              {currentLang.flag}
+              <svg className="w-4 h-4 text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 21a9 9 0 100-18 9 9 0 000 18z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.6 9h16.8" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.6 15h16.8" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3c2.6 2.4 4.1 5.6 4.1 9s-1.5 6.6-4.1 9c-2.6-2.4-4.1-5.6-4.1-9S9.4 5.4 12 3z" />
+              </svg>
+              <span className="text-yellow-300">{currentLang.flag}</span>
+              <svg className="w-3.5 h-3.5 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
 
             {/* Menu Button */}
