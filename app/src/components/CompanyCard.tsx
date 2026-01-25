@@ -8,7 +8,7 @@ import AIAssistant from "./AIAssistant";
 import MessageModal from "./MessageModal";
 import type { IbizCompanySummary } from "@/lib/ibiz/types";
 import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
-import { highlightText } from "@/lib/utils/highlight";
+import { buildHighlightRegex, highlightText } from "@/lib/utils/highlight";
 
 interface CompanyCardProps {
   company: IbizCompanySummary;
@@ -53,10 +53,74 @@ function normalizeWhitespace(text: string): string {
   return (text || "").replace(/\s+/g, " ").trim();
 }
 
-function buildSearchSnippet(raw: string, maxChars: number): string {
+function firstHighlightMatch(text: string, tokens: string[]): { index: number; length: number } | null {
+  const value = normalizeWhitespace(text);
+  if (!value) return null;
+  if (!tokens || tokens.length === 0) return null;
+  const regex = buildHighlightRegex(tokens);
+  if (!regex) return null;
+  regex.lastIndex = 0;
+  const match = regex.exec(value);
+  if (!match) return null;
+  const index = typeof match.index === "number" ? match.index : -1;
+  if (index < 0) return null;
+  return { index, length: (match[0] || "").length };
+}
+
+function excerptAroundMatch(text: string, matchIndex: number, matchLength: number, maxChars: number): string {
+  const value = normalizeWhitespace(text);
+  if (!value) return "";
+  if (value.length <= maxChars) return value;
+
+  const before = Math.max(40, Math.floor(maxChars * 0.35));
+  let start = Math.max(0, matchIndex - before);
+  let end = Math.min(value.length, start + maxChars);
+  if (end - start < maxChars && end >= value.length) {
+    start = Math.max(0, end - maxChars);
+  }
+
+  if (start > 0) {
+    const windowStart = Math.max(0, matchIndex - 240);
+    const period = value.lastIndexOf(". ", matchIndex);
+    const exclaim = value.lastIndexOf("! ", matchIndex);
+    const question = value.lastIndexOf("? ", matchIndex);
+    const cut = Math.max(period, exclaim, question);
+    if (cut >= Math.max(start, windowStart)) start = cut + 2;
+  }
+
+  if (end < value.length) {
+    const candidates = [value.indexOf(". ", matchIndex + matchLength), value.indexOf("! ", matchIndex + matchLength), value.indexOf("? ", matchIndex + matchLength)]
+      .filter((idx) => idx >= 0)
+      .sort((a, b) => a - b);
+    const nextSentence = candidates.length ? candidates[0] : -1;
+    if (nextSentence >= 0 && nextSentence < end) end = nextSentence + 1;
+  }
+
+  if (start > 0 && !/\s/gu.test(value[start])) {
+    const nextSpace = value.indexOf(" ", start);
+    if (nextSpace > start && nextSpace - start < 20) start = nextSpace + 1;
+  }
+
+  if (end < value.length && !/\s/gu.test(value[end - 1])) {
+    const lastSpace = value.lastIndexOf(" ", end);
+    if (lastSpace > start && end - lastSpace < 20) end = lastSpace;
+  }
+
+  let snippet = value.slice(start, end).trim();
+  if (start > 0) snippet = `…${snippet}`;
+  if (end < value.length) snippet = `${snippet}…`;
+  return snippet;
+}
+
+function buildSearchSnippet(raw: string, maxChars: number, highlightTokens: string[] = []): string {
   const text = normalizeWhitespace(raw);
   if (!text) return "";
   if (text.length <= maxChars) return text;
+
+  const match = firstHighlightMatch(text, highlightTokens);
+  if (match) {
+    return excerptAroundMatch(text, match.index, match.length, maxChars);
+  }
 
   const sentences = text
     .match(/[^.!?]+[.!?]+|[^.!?]+$/g)
@@ -252,9 +316,24 @@ function SearchCompanyCard({
   }, [company.primary_category_name, company.primary_rubric_name, showCategory]);
 
   const shortDescription = useMemo(() => {
-    const source = (company.description || "").trim() || (company.about || "").trim();
-    return buildSearchSnippet(source, 250);
-  }, [company.about, company.description]);
+    const tokens = highlightServiceTokens || [];
+    const maxChars = 250;
+
+    const description = (company.description || "").trim();
+    const about = (company.about || "").trim();
+
+    if (tokens.length > 0) {
+      if (firstHighlightMatch(description, tokens)) {
+        return buildSearchSnippet(description, maxChars, tokens);
+      }
+      if (firstHighlightMatch(about, tokens)) {
+        return buildSearchSnippet(about, maxChars, tokens);
+      }
+    }
+
+    const source = description || about;
+    return buildSearchSnippet(source, maxChars, tokens);
+  }, [company.about, company.description, highlightServiceTokens]);
 
   const address = (company.address || company.city || "").trim();
 

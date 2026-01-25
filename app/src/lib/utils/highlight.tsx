@@ -89,7 +89,7 @@ function rootToPattern(root: string): string | null {
   return `${escaped}[\\p{L}\\p{N}-]*`;
 }
 
-function buildHighlightRegex(tokens: string[]): RegExp | null {
+export function buildHighlightRegex(tokens: string[]): RegExp | null {
   const roots: string[] = [];
   for (const token of tokens || []) {
     roots.push(...expandTokenRoots(token));
