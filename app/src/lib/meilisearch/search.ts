@@ -7,12 +7,79 @@ import { getCompaniesIndex, isMeiliHealthy } from "./client";
 import type { MeiliSearchParams, MeiliCompanyDocument } from "./types";
 import type { IbizCompanySummary, IbizSearchResponse, IbizSuggestResponse } from "../ibiz/types";
 import { IBIZ_CATEGORY_ICONS } from "../ibiz/icons";
+import { isAddressLikeLocationQuery, normalizeCityForFilter } from "../utils/location";
 
 const LOGO_CACHE_DIR = process.env.IBIZ_LOGO_CACHE_DIR?.trim() || path.join(os.tmpdir(), "ibiz-logo-cache");
 const LOGO_SNIFF_BYTES = 4096;
 const LOGO_FETCH_TIMEOUT_MS = 5000;
 
 const logoToneCache = new Map<string, "color" | "bw">();
+
+function tokenizeServiceQuery(raw: string): string[] {
+  const cleaned = (raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/ё/gu, "е")
+    .replace(/[«»"'“”„]/gu, " ")
+    .replace(/[^\p{L}\p{N}-]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+
+  if (!cleaned) return [];
+  return cleaned.split(" ").filter(Boolean);
+}
+
+function shouldApplyCheeseFilter(raw: string): boolean {
+  const tokens = tokenizeServiceQuery(raw);
+  return tokens.includes("сыр") || tokens.includes("сыры") || tokens.includes("сыра");
+}
+
+function hasCheeseKeyword(keywords: string[]): boolean {
+  for (const raw of keywords || []) {
+    const t = (raw || "").trim().toLowerCase().replace(/ё/gu, "е");
+    if (!t) continue;
+    if (t.startsWith("сыр") && !t.startsWith("сырь")) return true;
+  }
+  return false;
+}
+
+const CHEESE_TOTAL_SCAN_LIMIT = 5000;
+const CHEESE_TOTAL_SCAN_BATCH = 200;
+
+async function countCheeseTotal(params: {
+  index: ReturnType<typeof getCompaniesIndex>;
+  searchQuery: string;
+  filter: string[];
+  attributesToSearchOn?: string[];
+  matchingStrategy?: "all" | "last" | "frequency";
+}): Promise<number> {
+  let offset = 0;
+  let counted = 0;
+  const safeFilter = params.filter.length > 0 ? params.filter : undefined;
+
+  while (true) {
+    const result = await params.index.search(params.searchQuery, {
+      offset,
+      limit: CHEESE_TOTAL_SCAN_BATCH,
+      filter: safeFilter,
+      attributesToSearchOn: params.attributesToSearchOn,
+      matchingStrategy: params.matchingStrategy,
+      attributesToRetrieve: ["keywords"],
+    });
+
+    if (!result.hits.length) break;
+
+    for (const hit of result.hits) {
+      if (hasCheeseKeyword((hit as Partial<MeiliCompanyDocument>).keywords || [])) counted++;
+    }
+
+    offset += result.hits.length;
+    const estimatedTotal = result.estimatedTotalHits || 0;
+    if (estimatedTotal && offset >= estimatedTotal) break;
+  }
+
+  return counted;
+}
 
 function normalizeLogoTargetUrl(raw: string): URL | null {
   const s = (raw || "").trim();
@@ -354,13 +421,21 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
   const service = (params.service || "").trim();
   const keywords = (params.keywords || "").trim();
   const city = (params.city || "").trim();
+  const cityNorm = normalizeCityForFilter(city);
+  const useCityExactFilter = Boolean(cityNorm) && !isAddressLikeLocationQuery(city);
+  const applyCheeseFilter = Boolean(service || keywords) && shouldApplyCheeseFilter(`${service} ${keywords}`.trim());
 
   const terms: string[] = [];
   if (company) terms.push(company);
   if (service) terms.push(service);
   if (!service && keywords) terms.push(keywords);
   if (service && keywords) terms.push(keywords);
-  if (city) terms.push(city);
+  if (city && !useCityExactFilter) terms.push(city);
+
+  if (useCityExactFilter) {
+    const safe = cityNorm.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    filter.push(`city_norm = "${safe}"`);
+  }
 
   const searchQuery = terms.join(" ").trim();
   const matchingStrategy: "all" | "last" | "frequency" | undefined = searchQuery ? "all" : undefined;
@@ -368,7 +443,7 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
   const attrs = new Set<string>();
   if (company) attrs.add("name");
   if (service || keywords) attrs.add("keywords");
-  if (city) {
+  if (city && !useCityExactFilter) {
     attrs.add("city");
     attrs.add("address");
   }
@@ -394,6 +469,7 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
     "primary_rubric_name",
     "work_hours_status",
     "work_hours_time",
+    "keywords",
   ];
 
   // Need to guarantee global ordering: companies with a real logo should come before
@@ -406,7 +482,7 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
 
   const batchSize = Math.min(200, Math.max(50, limit * 10));
   let fetched = 0;
-  let total = 0;
+  let estimatedTotal = 0;
 
   while (true) {
     const result = await index.search(searchQuery, {
@@ -418,7 +494,7 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
       attributesToRetrieve,
     });
 
-    if (fetched === 0) total = result.estimatedTotalHits || 0;
+    if (fetched === 0) estimatedTotal = result.estimatedTotalHits || 0;
     if (!result.hits.length) break;
 
     let cursor = 0;
@@ -438,6 +514,7 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
 
       for (let i = 0; i < chunk.length; i++) {
         const hit = chunk[i];
+        if (applyCheeseFilter && !hasCheeseKeyword(hit.keywords || [])) continue;
         const tone = tones[i];
         if (tone === "none") {
           withoutLogo.push(hit);
@@ -457,7 +534,7 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
     if (colorLogo.length >= targetEnd) break;
 
     // Otherwise, keep fetching until we exhaust the result set.
-    if (total && fetched >= total) break;
+    if (estimatedTotal && fetched >= estimatedTotal) break;
   }
 
   const ordered =
@@ -465,6 +542,21 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
       ? colorLogo
       : [...colorLogo, ...blackAndWhiteLogo, ...withoutLogo];
   const page = ordered.slice(offset, targetEnd);
+
+  let total = estimatedTotal;
+  if (applyCheeseFilter) {
+    if (estimatedTotal && fetched >= estimatedTotal) {
+      total = ordered.length;
+    } else if (estimatedTotal && estimatedTotal <= CHEESE_TOTAL_SCAN_LIMIT) {
+      total = await countCheeseTotal({
+        index,
+        searchQuery,
+        filter,
+        attributesToSearchOn,
+        matchingStrategy,
+      });
+    }
+  }
 
   return {
     query: params.query,

@@ -4,6 +4,8 @@ import { getMeiliClient, COMPANIES_INDEX } from "./client";
 import { configureCompaniesIndex } from "./config";
 import type { MeiliCompanyDocument } from "./types";
 import type { IbizCompany } from "../ibiz/types";
+import { generateCompanyKeywords } from "../ibiz/keywords";
+import { normalizeCityForFilter } from "../utils/location";
 
 // Region normalization logic (reused from store.ts)
 function normalizeRegionSlug(city: string, region: string, address: string): string | null {
@@ -52,105 +54,6 @@ function normalizeLogoUrl(raw: string): string {
   return url;
 }
 
-// Stop words to filter out from keywords
-const STOP_WORDS = new Set([
-  "и", "в", "на", "с", "по", "для", "из", "к", "от", "до", "о", "об", "при",
-  "за", "под", "над", "без", "через", "между", "а", "но", "или", "либо",
-  "то", "как", "что", "это", "так", "же", "бы", "ли", "не", "ни", "да", "нет",
-  "все", "вся", "всё", "его", "её", "их", "ее", "другие", "другое", "прочие", "прочее",
-  "оао", "ооо", "зао", "чуп", "уп", "ип", "тел", "факс", "email", "www", "http",
-  "беларусь", "республика", "область", "район", "город", "минск", "брест", "гомель",
-  "витебск", "гродно", "могилев", "могилёв", "улица", "проспект", "переулок",
-  "компания", "предприятие", "организация", "фирма", "завод", "филиал",
-  "продукция", "производство", "изготовление", "выпуск", "услуги", "работы", "деятельность",
-  "продажа", "оптовая", "розничная", "торговля", "поставка", "реализация",
-  "сырье", "сырьё", "вторичное", "материалы", "комплектующие",
-]);
-
-// Words that indicate product/service keywords in description
-const PRODUCT_INDICATORS = [
-  "производство", "выпуск", "изготовление", "продажа", "оптовая", "розничная",
-  "поставка", "реализация", "торговля", "ассортимент", "продукция",
-];
-
-function extractCompanyNameTokens(companyName: string): Set<string> {
-  const raw = (companyName || "").trim();
-  if (!raw) return new Set();
-
-  const tokens = raw
-    .toLowerCase()
-    .replace(/[«»"'“”„]/g, " ")
-    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
-    .split(/[\s-]+/)
-    .map((w) => w.trim())
-    .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
-
-  return new Set(tokens);
-}
-
-// Extract meaningful product keywords from text
-function extractProductKeywords(text: string, excludeTokens?: Set<string>): string[] {
-  if (!text) return [];
-
-  const words: string[] = [];
-  const lower = text.toLowerCase();
-
-  // Split into sentences and look for product-related phrases
-  const sentences = lower.split(/[.;:!?]/);
-
-  for (const sentence of sentences) {
-    // Check if sentence contains product indicators
-    const hasIndicator = PRODUCT_INDICATORS.some(ind => sentence.includes(ind));
-    if (!hasIndicator) continue;
-
-    // Extract nouns (words that likely describe products)
-    const sentenceWords = sentence
-      .replace(/[^\p{L}\p{N}\s-]/gu, " ")
-      .split(/[\s-]+/)
-      .filter((w) => w.length > 3 && !STOP_WORDS.has(w) && !excludeTokens?.has(w));
-
-    words.push(...sentenceWords);
-  }
-
-  return words;
-}
-
-// Generate keywords from rubrics, categories and description
-function generateKeywords(company: IbizCompany): string[] {
-  const keywordsSet = new Set<string>();
-  const companyNameTokens = extractCompanyNameTokens(company.name || "");
-
-  // Extract from rubric names
-  for (const rubric of company.rubrics || []) {
-    const words = rubric.name
-      .toLowerCase()
-      .replace(/[^\wа-яё\s-]/gi, " ")
-      .split(/\s+/)
-      .filter(w => w.length > 2 && !STOP_WORDS.has(w));
-    words.forEach(w => keywordsSet.add(w));
-  }
-
-  // Extract from category names
-  for (const cat of company.categories || []) {
-    const words = cat.name
-      .toLowerCase()
-      .replace(/[^\wа-яё\s-]/gi, " ")
-      .split(/\s+/)
-      .filter(w => w.length > 2 && !STOP_WORDS.has(w));
-    words.forEach(w => keywordsSet.add(w));
-  }
-
-  // Extract product keywords from description
-  const descKeywords = extractProductKeywords(company.description || "", companyNameTokens);
-  descKeywords.forEach(w => keywordsSet.add(w));
-
-  // Also extract from "about" field
-  const aboutKeywords = extractProductKeywords(company.about || "", companyNameTokens);
-  aboutKeywords.forEach(w => keywordsSet.add(w));
-
-  return Array.from(keywordsSet);
-}
-
 function companyToDocument(company: IbizCompany): MeiliCompanyDocument {
   const regionSlug = normalizeRegionSlug(company.city, company.region, company.address);
   const primaryCategory = company.categories?.[0] ?? null;
@@ -164,6 +67,7 @@ function companyToDocument(company: IbizCompany): MeiliCompanyDocument {
     about: company.about || "",
     address: company.address || "",
     city: company.city || "",
+    city_norm: normalizeCityForFilter(company.city || ""),
     region: regionSlug || "",
     phones: company.phones || [],
     emails: company.emails || [],
@@ -189,7 +93,7 @@ function companyToDocument(company: IbizCompany): MeiliCompanyDocument {
 
     phones_ext: company.phones_ext || [],
 
-    keywords: generateKeywords(company),
+    keywords: generateCompanyKeywords(company),
   };
 }
 

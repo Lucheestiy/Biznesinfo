@@ -7,6 +7,7 @@ export interface MeiliCompanyDocument {
   about: string;
   address: string;
   city: string;
+  city_norm: string;
   region: string;               // normalized slug (minsk, brest, etc.)
   phones: string[];
   emails: string[];

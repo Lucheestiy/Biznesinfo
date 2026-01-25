@@ -10,6 +10,7 @@ import { useRegion } from "@/contexts/RegionContext";
 import { regions } from "@/data/regions";
 import type { IbizCompanySummary, IbizSearchResponse } from "@/lib/ibiz/types";
 import { formatCompanyCount } from "@/lib/utils/plural";
+import { tokenizeHighlightQuery } from "@/lib/utils/highlight";
 import Pagination from "@/components/Pagination";
 import Link from "next/link";
 
@@ -160,6 +161,13 @@ function SearchResults() {
     return [...withLogo, ...withoutLogo];
   }, [data]);
 
+  const highlightCompanyTokens = useMemo(() => tokenizeHighlightQuery(query), [query]);
+  const highlightServiceTokens = useMemo(() => tokenizeHighlightQuery(serviceQuery), [serviceQuery]);
+  const highlightLocationTokens = useMemo(() => tokenizeHighlightQuery(city), [city]);
+  const highlightNameTokens = useMemo(() => {
+    return highlightCompanyTokens.length > 0 ? highlightCompanyTokens : highlightServiceTokens;
+  }, [highlightCompanyTokens, highlightServiceTokens]);
+
   return (
     <div className="min-h-screen flex flex-col font-sans bg-gray-100">
       <Header />
@@ -188,7 +196,7 @@ function SearchResults() {
                     onChange={(e) => setCompanyDraft(e.target.value)}
                     inputMode="search"
                     placeholder={t("search.companyPlaceholder")}
-                    className="w-full rounded-2xl bg-white text-[#820251] font-bold placeholder:text-gray-400 px-4 pr-14 py-3.5 shadow-sm border border-white/20 focus:outline-none focus:ring-2 focus:ring-yellow-300/70 focus:border-white/40"
+                    className="w-full rounded-2xl bg-white text-[#820251] font-medium placeholder:text-gray-500/60 placeholder:font-normal px-4 pr-14 py-3.5 shadow-sm border border-white/20 focus:outline-none focus:ring-2 focus:ring-yellow-300/70 focus:border-white/40 focus:placeholder:text-gray-500/40"
                   />
                 <button
                   type="submit"
@@ -212,7 +220,7 @@ function SearchResults() {
                     onChange={(e) => setServiceDraft(e.target.value)}
                     inputMode="search"
                     placeholder={t("search.servicePlaceholder")}
-                    className="w-full rounded-2xl bg-white text-[#820251] font-bold placeholder:text-gray-400 px-4 pr-14 py-3.5 shadow-sm border border-white/20 focus:outline-none focus:ring-2 focus:ring-yellow-300/70 focus:border-white/40"
+                    className="w-full rounded-2xl bg-white text-[#820251] font-medium placeholder:text-gray-500/60 placeholder:font-normal px-4 pr-14 py-3.5 shadow-sm border border-white/20 focus:outline-none focus:ring-2 focus:ring-yellow-300/70 focus:border-white/40 focus:placeholder:text-gray-500/40"
                   />
                 <button
                   type="submit"
@@ -232,7 +240,7 @@ function SearchResults() {
 		        <div className="bg-white border-b border-gray-200 py-3">
 		          <div className="container mx-auto px-2 sm:px-4">
 			            <div className="relative">
-			              <div className="w-full flex items-center gap-2 rounded-3xl border-[3px] border-[#820251] bg-white px-2 py-2 shadow-md">
+			              <div className="w-full flex items-center gap-2 rounded-3xl border border-gray-200 bg-white px-3 py-2 shadow-sm transition-colors focus-within:border-[#820251] focus-within:ring-2 focus-within:ring-yellow-300/60">
 			                <button
 			                  type="button"
 			                  onClick={() => setRegionMenuOpen((v) => !v)}
@@ -283,7 +291,7 @@ function SearchResults() {
 			                    }}
 			                    inputMode="search"
 		                    placeholder={t("filter.locationLabel")}
-	                    className="w-full bg-transparent text-[#820251] font-bold placeholder:text-gray-500 placeholder:font-medium px-1 py-2 focus:outline-none"
+	                    className="w-full bg-transparent text-[#820251] font-medium placeholder:text-gray-500/60 placeholder:font-normal px-1 py-2 focus:outline-none focus:placeholder:text-gray-500/40"
 		                  />
 			                </div>
 
@@ -411,7 +419,15 @@ function SearchResults() {
             <div className="space-y-6">
               <div className="flex flex-col gap-4">
                 {companies.map((company) => (
-                  <CompanyCard key={company.id} company={company} showCategory variant="search" />
+                  <CompanyCard
+                    key={company.id}
+                    company={company}
+                    showCategory
+                    variant="search"
+                    highlightNameTokens={highlightNameTokens}
+                    highlightServiceTokens={highlightServiceTokens}
+                    highlightLocationTokens={highlightLocationTokens}
+                  />
                 ))}
               </div>
               {/* Pagination */}

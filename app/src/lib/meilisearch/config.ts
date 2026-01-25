@@ -32,6 +32,7 @@ export async function configureCompaniesIndex(): Promise<void> {
   // Configure filterable attributes
   await index.updateFilterableAttributes([
     "region",
+    "city_norm",
     "category_slugs",
     "rubric_slugs",
     "primary_category_slug",

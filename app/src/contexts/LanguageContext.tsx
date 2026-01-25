@@ -362,7 +362,7 @@ const translations: Record<Language, Record<string, string>> = {
     "company.found": "Найдено",
 
 		    // Filter labels
-		    "filter.locationLabel": "РЕГИОН/ГОРОД/УЛИЦА/ДОМ",
+		    "filter.locationLabel": "Регион, город, улица, дом",
 		    "filter.chooseRegion": "Выбрать регион",
 		    "filter.region": "Регион",
 		    "filter.city": "Город",
@@ -956,7 +956,7 @@ const translations: Record<Language, Record<string, string>> = {
     "company.found": "Found",
 
 		    // Filter labels
-		    "filter.locationLabel": "REGION/CITY/STREET/HOUSE",
+		    "filter.locationLabel": "Region, city, street, house",
 		    "filter.chooseRegion": "Choose region",
 		    "filter.region": "Region",
 		    "filter.city": "City",
@@ -1548,7 +1548,7 @@ const translations: Record<Language, Record<string, string>> = {
     "company.found": "Знойдзена",
 
 		    // Filter labels
-		    "filter.locationLabel": "РЭГІЁН/ГОРАД/ВУЛІЦА/ДОМ",
+		    "filter.locationLabel": "Рэгіён, горад, вуліца, дом",
 		    "filter.chooseRegion": "Выбраць рэгіён",
 		    "filter.region": "Рэгіён",
 		    "filter.city": "Горад",
@@ -2140,7 +2140,7 @@ const translations: Record<Language, Record<string, string>> = {
     "company.found": "找到",
 
 		    // Filter labels
-		    "filter.locationLabel": "地区/城市/街道/门牌号",
+		    "filter.locationLabel": "地区、城市、街道、门牌号",
 		    "filter.chooseRegion": "选择地区",
 		    "filter.region": "地区",
 		    "filter.city": "城市",

@@ -8,11 +8,15 @@ import AIAssistant from "./AIAssistant";
 import MessageModal from "./MessageModal";
 import type { IbizCompanySummary } from "@/lib/ibiz/types";
 import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
+import { highlightText } from "@/lib/utils/highlight";
 
 interface CompanyCardProps {
   company: IbizCompanySummary;
   showCategory?: boolean;
   variant?: "default" | "search";
+  highlightNameTokens?: string[];
+  highlightServiceTokens?: string[];
+  highlightLocationTokens?: string[];
 }
 
 function displayUrl(raw: string): string {
@@ -187,7 +191,13 @@ function extractProductsServices(about: string, companyName: string): string {
   return result;
 }
 
-function SearchCompanyCard({ company, showCategory = false }: CompanyCardProps) {
+function SearchCompanyCard({
+  company,
+  showCategory = false,
+  highlightNameTokens = [],
+  highlightServiceTokens = [],
+  highlightLocationTokens = [],
+}: CompanyCardProps) {
   const { t } = useLanguage();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [logoFailed, setLogoFailed] = useState(false);
@@ -312,7 +322,7 @@ function SearchCompanyCard({ company, showCategory = false }: CompanyCardProps) 
                 href={companyHref}
                 className="hover:underline focus:outline-none focus:ring-2 focus:ring-white/70 rounded-sm"
               >
-                {company.name}
+                {highlightText(company.name, highlightNameTokens)}
               </Link>
               {company.source === "belarusinfo" && (
                 <span aria-hidden className="ml-2 inline-block w-2 h-2 rounded-full bg-white/50 align-middle" />
@@ -321,7 +331,7 @@ function SearchCompanyCard({ company, showCategory = false }: CompanyCardProps) 
             {industryText && (
               <div className="mt-2">
                 <span className="inline-block bg-white/10 text-white text-[13px] leading-tight font-semibold px-2 py-1 rounded-md">
-                  {industryText}
+                  {highlightText(industryText, highlightServiceTokens)}
                 </span>
               </div>
             )}
@@ -332,13 +342,13 @@ function SearchCompanyCard({ company, showCategory = false }: CompanyCardProps) 
             aria-pressed={favorite}
             aria-label={favorite ? t("favorites.remove") : t("favorites.add")}
             onClick={() => toggleFavorite(company.id)}
-            className={`shrink-0 max-w-[165px] inline-flex items-start gap-1 text-left text-white text-[12px] leading-tight font-semibold px-2 py-1 rounded-md transition-colors ${
-              favorite ? "bg-white/25" : "bg-white/10 hover:bg-white/15 active:bg-white/20"
+            title={favorite ? t("favorites.remove") : t("favorites.add")}
+            className={`shrink-0 w-10 h-10 rounded-xl transition-colors flex items-center justify-center ${
+              favorite ? "bg-white/20" : "bg-white/10 hover:bg-white/15 active:bg-white/20"
             }`}
           >
-            <span>{t("favorites.add")}</span>
             <svg
-              className={`w-4 h-4 mt-0.5 ${favorite ? "text-red-400 fill-current" : "text-white"}`}
+              className={`w-6 h-6 ${favorite ? "text-red-400 fill-current" : "text-white"}`}
               fill={favorite ? "currentColor" : "none"}
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -358,13 +368,13 @@ function SearchCompanyCard({ company, showCategory = false }: CompanyCardProps) 
       <div className="p-3.5 bg-gradient-to-br from-white to-[#820251]/5 flex-1 flex flex-col">
         {shortDescription && (
           <p className="text-[15px] text-gray-900 leading-tight font-medium">
-            {shortDescription}
+            {highlightText(shortDescription, highlightServiceTokens)}
           </p>
         )}
 
         {address && (
           <div className={`${shortDescription ? "mt-2.5" : ""} text-[13px] text-gray-800 leading-tight whitespace-pre-line break-words`}>
-            {address}
+            {highlightText(address, highlightLocationTokens)}
           </div>
         )}
 

@@ -2,6 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline";
 
+import { isAddressLikeLocationQuery, normalizeCityForFilter } from "@/lib/utils/location";
+import { generateCompanyKeywords } from "./keywords";
+
 import type {
   IbizCatalogResponse,
   IbizCategoryRef,
@@ -194,6 +197,34 @@ function tokenizeLocation(raw: string): string[] {
   });
 }
 
+function tokenizeServiceText(raw: string): string[] {
+  const cleaned = safeLower(raw)
+    .replace(/ё/gu, "е")
+    .replace(/[«»"'“”„]/gu, " ")
+    .replace(/[^\p{L}\p{N}-]+/gu, " ");
+
+  return cleaned
+    .split(/\s+/u)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
+}
+
+function matchesServiceToken(companyTokens: string[], token: string): boolean {
+  if (!token) return true;
+
+  if (token === "сыр" || token === "сыры" || token === "сыра") {
+    return companyTokens.some((t) => t.startsWith("сыр") && !t.startsWith("сырь"));
+  }
+
+  if (token.length <= 2) return companyTokens.includes(token);
+  return companyTokens.some((t) => t === token || t.startsWith(token));
+}
+
+function matchesServiceTokens(companyTokens: string[], queryTokens: string[]): boolean {
+  if (queryTokens.length === 0) return false;
+  return queryTokens.every((t) => matchesServiceToken(companyTokens, t));
+}
+
 function normalizeLogoUrl(raw: string): string {
   const url = (raw || "").trim();
   if (!url) return "";
@@ -298,7 +329,7 @@ type Store = {
   companySummaryById: Map<string, IbizCompanySummary>;
   companyRegionById: Map<string, string | null>;
   companySearchById: Map<string, string>;
-  companyKeywordsById: Map<string, string>;  // Rubric names for service search
+  companyKeywordsById: Map<string, string[]>;  // Tokens from categories/rubrics for service search
 
   categoriesBySlug: Map<string, IbizCategoryRef>;
   rubricsBySlug: Map<string, IbizRubricRef>;
@@ -349,7 +380,7 @@ async function loadStoreFrom(sourcePath: string, stat: fs.Stats): Promise<Store>
   const companySummaryById = new Map<string, IbizCompanySummary>();
   const companyRegionById = new Map<string, string | null>();
   const companySearchById = new Map<string, string>();
-  const companyKeywordsById = new Map<string, string>();  // Rubric names for service search
+  const companyKeywordsById = new Map<string, string[]>();  // Tokens from categories/rubrics for service search
 
   const categoriesBySlug = new Map<string, IbizCategoryRef>();
   const rubricsBySlug = new Map<string, IbizRubricRef>();
@@ -448,12 +479,7 @@ async function loadStoreFrom(sourcePath: string, stat: fs.Stats): Promise<Store>
       companyIdsByRubricSlug.get(rubricSlug)!.push(id);
     }
 
-    // Build keywords string from rubric names for service search
-    const rubricNames: string[] = [];
-    for (const r of company.rubrics || []) {
-      if (r.name) rubricNames.push(r.name);
-    }
-    companyKeywordsById.set(id, safeLower(rubricNames.join(" ")));
+    companyKeywordsById.set(id, generateCompanyKeywords(company));
   }
 
   for (const [catSlug, rubricSlugs] of rubricsByCategorySlug.entries()) {
@@ -717,21 +743,27 @@ export async function ibizSearch(params: {
 }): Promise<IbizSearchResponse> {
   const store = await getStore();
   const q = (params.query || "").trim().toLowerCase();
-  const service = (params.service || "").trim().toLowerCase();
-  const city = (params.city || "").trim().toLowerCase();
-  const cityTokens = tokenizeLocation(city);
+  const serviceTokens = tokenizeServiceText(params.service || "");
+  const rawCity = (params.city || "").trim();
+  const cityLower = rawCity.toLowerCase();
+  const cityTokens = tokenizeLocation(cityLower);
+  const cityNorm = normalizeCityForFilter(rawCity);
+  const useCityExactFilter = Boolean(cityNorm) && !isAddressLikeLocationQuery(rawCity);
   const offset = Math.max(0, params.offset || 0);
   const limit = Math.max(1, Math.min(200, params.limit || 24));
   
   // No filters = no results
-  if (!q && !service && cityTokens.length === 0) return { query: params.query, total: 0, companies: [] };
+  if (!q && serviceTokens.length === 0 && cityTokens.length === 0 && !cityNorm) return { query: params.query, total: 0, companies: [] };
 
   const matches: string[] = [];
   for (const [id, search] of store.companySearchById.entries()) {
     const companyRegionSlug = store.companyRegionById.get(id) || null;
     if (!applyRegionAlias(params.region, companyRegionSlug)) continue;
 
-    if (cityTokens.length > 0) {
+    if (useCityExactFilter) {
+      const summary = store.companySummaryById.get(id);
+      if (normalizeCityForFilter(summary?.city || "") !== cityNorm) continue;
+    } else if (cityTokens.length > 0) {
       const summary = store.companySummaryById.get(id);
       const cityHaystack = safeLower(`${summary?.city || ""} ${summary?.address || ""}`);
       let ok = true;
@@ -744,17 +776,17 @@ export async function ibizSearch(params: {
       if (!ok) continue;
     }
     
-    const keywords = store.companyKeywordsById.get(id) || "";
+    const companyTokens = store.companyKeywordsById.get(id) || [];
 
     // Combined search: company name (and/or other text) + product/service keywords.
-    if (q && service) {
-      if (search.includes(q) && keywords.includes(service)) matches.push(id);
+    if (q && serviceTokens.length > 0) {
+      if (search.includes(q) && matchesServiceTokens(companyTokens, serviceTokens)) matches.push(id);
       continue;
     }
 
-    // Service search: search in keywords (rubrics)
-    if (service) {
-      if (keywords.includes(service)) matches.push(id);
+    // Service search: match category/rubric tokens (word/prefix match, not substring).
+    if (serviceTokens.length > 0) {
+      if (matchesServiceTokens(companyTokens, serviceTokens)) matches.push(id);
       continue;
     }
 

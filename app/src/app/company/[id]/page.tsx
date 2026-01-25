@@ -10,6 +10,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useFavorites } from "@/contexts/FavoritesContext";
 import type { IbizCompanyResponse, IbizPhoneExt } from "@/lib/ibiz/types";
 import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
+import { IBIZ_ABOUT_OVERRIDES } from "@/lib/ibiz/aboutOverrides";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -269,7 +270,7 @@ export default function CompanyPage({ params }: PageProps) {
   const primaryPhone = phones?.[0]?.number || "";
   const primaryEmail = company.emails?.[0] || "";
 
-  const aboutText = generateUniqueDescription(company);
+  const aboutText = (IBIZ_ABOUT_OVERRIDES[company.source_id] || "").trim() || generateUniqueDescription(company);
 
   const categoryLink = primaryCategory ? `/catalog/${primaryCategory.slug}` : "/#catalog";
   const rubricSubSlug = primaryRubric ? primaryRubric.slug.split("/").slice(1).join("/") : "";
