@@ -472,12 +472,9 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
     "keywords",
   ];
 
-  // Need to guarantee global ordering: companies with a real logo should come before
-  // companies that only render initials, AND also put color logos ahead of black & white.
-  // Meilisearch ranking can't enforce this, so we over-fetch from offset=0 and build a
-  // custom ordering before applying pagination.
-  const colorLogo: MeiliCompanyDocument[] = [];
-  const blackAndWhiteLogo: MeiliCompanyDocument[] = [];
+  // Ensure companies with an actual logo appear before companies that would render initials.
+  // (Avoids extra network calls by not trying to classify logo tone.)
+  const withLogo: MeiliCompanyDocument[] = [];
   const withoutLogo: MeiliCompanyDocument[] = [];
 
   const batchSize = Math.min(200, Math.max(50, limit * 10));
@@ -497,50 +494,24 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
     if (fetched === 0) estimatedTotal = result.estimatedTotalHits || 0;
     if (!result.hits.length) break;
 
-    let cursor = 0;
-    while (cursor < result.hits.length) {
-      const remainingHits = result.hits.length - cursor;
-      const remainingNeeded = Math.max(0, targetEnd - colorLogo.length);
-      const chunkSize = Math.min(
-        remainingHits,
-        Math.max(12, Math.min(28, remainingNeeded > 0 ? remainingNeeded * 3 : 12)),
-      );
-      const chunk = result.hits.slice(cursor, cursor + chunkSize);
-      const tones = await mapLimit(chunk, 6, async (hit) => {
-        const logo = (hit.logo_url || "").trim();
-        if (!logo) return "none" as const;
-        return (await isBlackAndWhiteLogo(logo)) ? ("bw" as const) : ("color" as const);
-      });
-
-      for (let i = 0; i < chunk.length; i++) {
-        const hit = chunk[i];
-        if (applyCheeseFilter && !hasCheeseKeyword(hit.keywords || [])) continue;
-        const tone = tones[i];
-        if (tone === "none") {
-          withoutLogo.push(hit);
-          continue;
-        }
-        if (tone === "bw") blackAndWhiteLogo.push(hit);
-        else colorLogo.push(hit);
-        if (colorLogo.length >= targetEnd) break;
-      }
-
-      cursor += chunkSize;
-      if (colorLogo.length >= targetEnd) break;
+    for (const hit of result.hits) {
+      if (applyCheeseFilter && !hasCheeseKeyword(hit.keywords || [])) continue;
+      const logo = (hit.logo_url || "").trim();
+      if (logo) withLogo.push(hit);
+      else withoutLogo.push(hit);
+      if (withLogo.length >= targetEnd) break;
     }
 
     fetched += result.hits.length;
 
-    if (colorLogo.length >= targetEnd) break;
+    if (withLogo.length >= targetEnd) break;
 
     // Otherwise, keep fetching until we exhaust the result set.
     if (estimatedTotal && fetched >= estimatedTotal) break;
   }
 
   const ordered =
-    colorLogo.length >= targetEnd
-      ? colorLogo
-      : [...colorLogo, ...blackAndWhiteLogo, ...withoutLogo];
+    withLogo.length >= targetEnd ? withLogo : [...withLogo, ...withoutLogo];
   const page = ordered.slice(offset, targetEnd);
 
   let total = estimatedTotal;
