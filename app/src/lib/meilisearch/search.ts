@@ -29,11 +29,6 @@ function tokenizeServiceQuery(raw: string): string[] {
   return cleaned.split(" ").filter(Boolean);
 }
 
-function shouldApplyCheeseFilter(raw: string): boolean {
-  const tokens = tokenizeServiceQuery(raw);
-  return tokens.includes("сыр") || tokens.includes("сыры") || tokens.includes("сыра");
-}
-
 function shouldApplyMilkFilter(raw: string): boolean {
   const tokens = tokenizeServiceQuery(raw);
   return tokens.some((t) => t.startsWith("молок") || t.startsWith("молоч"));
@@ -51,6 +46,27 @@ function isCheeseIntentToken(raw: string): boolean {
   return true;
 }
 
+function shouldApplyCheeseFilter(raw: string): boolean {
+  const tokens = tokenizeServiceQuery(raw);
+  return tokens.some((t) => isCheeseIntentToken(t));
+}
+
+function isGasIntentToken(raw: string): boolean {
+  const t = (raw || "").trim().toLowerCase().replace(/ё/gu, "е");
+  if (!t) return false;
+  if (!t.startsWith("газ")) return false;
+  if (t.startsWith("газет")) return false; // газета
+  if (t.startsWith("газон")) return false; // газон
+  if (t.startsWith("газел")) return false; // газель (авто)
+  if (t.startsWith("газир")) return false; // газировка
+  return true;
+}
+
+function shouldApplyGasFilter(raw: string): boolean {
+  const tokens = tokenizeServiceQuery(raw);
+  return tokens.some((t) => isGasIntentToken(t));
+}
+
 function hasCheeseKeyword(keywords: string[]): boolean {
   for (const raw of keywords || []) {
     if (isCheeseIntentToken(raw)) return true;
@@ -63,6 +79,33 @@ function hasMilkKeyword(keywords: string[]): boolean {
     const t = (raw || "").trim().toLowerCase().replace(/ё/gu, "е");
     if (!t) continue;
     if (t.startsWith("молок") || t.startsWith("молоч")) return true;
+  }
+  return false;
+}
+
+function hasGasKeyword(keywords: string[]): boolean {
+  for (const raw of keywords || []) {
+    if (isGasIntentToken(raw)) return true;
+  }
+  return false;
+}
+
+function isForestIntentToken(raw: string): boolean {
+  const t = (raw || "").trim().toLowerCase().replace(/ё/gu, "е");
+  if (!t) return false;
+  if (!t.startsWith("лес")) return false;
+  if (t.startsWith("лест")) return false; // лестница / лестничные ...
+  return true;
+}
+
+function shouldApplyForestFilter(raw: string): boolean {
+  const tokens = tokenizeServiceQuery(raw);
+  return tokens.some((t) => isForestIntentToken(t));
+}
+
+function hasForestKeyword(keywords: string[]): boolean {
+  for (const raw of keywords || []) {
+    if (isForestIntentToken(raw)) return true;
   }
   return false;
 }
@@ -452,10 +495,14 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
   const keywordQuery = `${service} ${keywords}`.trim();
   const applyCheeseFilter = Boolean(service || keywords) && shouldApplyCheeseFilter(keywordQuery);
   const applyMilkFilter = Boolean(service || keywords) && shouldApplyMilkFilter(keywordQuery);
-  const applyKeywordFilter = applyCheeseFilter || applyMilkFilter;
+  const applyGasFilter = Boolean(service || keywords) && shouldApplyGasFilter(keywordQuery);
+  const applyForestFilter = Boolean(service || keywords) && shouldApplyForestFilter(keywordQuery);
+  const applyKeywordFilter = applyCheeseFilter || applyMilkFilter || applyGasFilter || applyForestFilter;
   const matchesKeywordFilter = (hitKeywords: string[]) => {
     if (applyCheeseFilter && !hasCheeseKeyword(hitKeywords)) return false;
     if (applyMilkFilter && !hasMilkKeyword(hitKeywords)) return false;
+    if (applyGasFilter && !hasGasKeyword(hitKeywords)) return false;
+    if (applyForestFilter && !hasForestKeyword(hitKeywords)) return false;
     return true;
   };
 

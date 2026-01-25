@@ -225,6 +225,27 @@ function matchesServiceToken(companyTokens: string[], token: string): boolean {
     });
   }
 
+  if (token === "газ") {
+    return companyTokens.some((raw) => {
+      const t = (raw || "").trim().toLowerCase().replace(/ё/gu, "е");
+      if (!t.startsWith("газ")) return false;
+      if (t.startsWith("газет")) return false;
+      if (t.startsWith("газон")) return false;
+      if (t.startsWith("газел")) return false;
+      if (t.startsWith("газир")) return false;
+      return true;
+    });
+  }
+
+  if (token === "лес") {
+    return companyTokens.some((raw) => {
+      const t = (raw || "").trim().toLowerCase().replace(/ё/gu, "е");
+      if (!t.startsWith("лес")) return false;
+      if (t.startsWith("лест")) return false;
+      return true;
+    });
+  }
+
   if (token.length <= 2) return companyTokens.includes(token);
   return companyTokens.some((t) => t === token || t.startsWith(token));
 }

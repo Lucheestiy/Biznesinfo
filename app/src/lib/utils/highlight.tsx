@@ -85,6 +85,14 @@ function rootToPattern(root: string): string | null {
     return `сыр(?!ь)(?!окопч)(?!овялен)(?!овял)[\\p{L}\\p{N}-]*`;
   }
 
+  if (r === "лес") {
+    return `лес(?!т)[\\p{L}\\p{N}-]*`;
+  }
+
+  if (r === "газ") {
+    return `газ(?!ет)(?!он)(?!ел)(?!ир)[\\p{L}\\p{N}-]*`;
+  }
+
   const escaped = escapeRegExp(r).replace(/е/gu, "[её]");
   return `${escaped}[\\p{L}\\p{N}-]*`;
 }
