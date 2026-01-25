@@ -34,6 +34,11 @@ function shouldApplyCheeseFilter(raw: string): boolean {
   return tokens.includes("сыр") || tokens.includes("сыры") || tokens.includes("сыра");
 }
 
+function shouldApplyMilkFilter(raw: string): boolean {
+  const tokens = tokenizeServiceQuery(raw);
+  return tokens.some((t) => t.startsWith("молок") || t.startsWith("молоч"));
+}
+
 function hasCheeseKeyword(keywords: string[]): boolean {
   for (const raw of keywords || []) {
     const t = (raw || "").trim().toLowerCase().replace(/ё/gu, "е");
@@ -43,15 +48,25 @@ function hasCheeseKeyword(keywords: string[]): boolean {
   return false;
 }
 
-const CHEESE_TOTAL_SCAN_LIMIT = 5000;
-const CHEESE_TOTAL_SCAN_BATCH = 200;
+function hasMilkKeyword(keywords: string[]): boolean {
+  for (const raw of keywords || []) {
+    const t = (raw || "").trim().toLowerCase().replace(/ё/gu, "е");
+    if (!t) continue;
+    if (t.startsWith("молок") || t.startsWith("молоч")) return true;
+  }
+  return false;
+}
 
-async function countCheeseTotal(params: {
+const KEYWORD_FILTER_TOTAL_SCAN_LIMIT = 5000;
+const KEYWORD_FILTER_TOTAL_SCAN_BATCH = 200;
+
+async function countKeywordFilteredTotal(params: {
   index: ReturnType<typeof getCompaniesIndex>;
   searchQuery: string;
   filter: string[];
   attributesToSearchOn?: string[];
   matchingStrategy?: "all" | "last" | "frequency";
+  predicate: (keywords: string[]) => boolean;
 }): Promise<number> {
   let offset = 0;
   let counted = 0;
@@ -60,7 +75,7 @@ async function countCheeseTotal(params: {
   while (true) {
     const result = await params.index.search(params.searchQuery, {
       offset,
-      limit: CHEESE_TOTAL_SCAN_BATCH,
+      limit: KEYWORD_FILTER_TOTAL_SCAN_BATCH,
       filter: safeFilter,
       attributesToSearchOn: params.attributesToSearchOn,
       matchingStrategy: params.matchingStrategy,
@@ -70,7 +85,8 @@ async function countCheeseTotal(params: {
     if (!result.hits.length) break;
 
     for (const hit of result.hits) {
-      if (hasCheeseKeyword((hit as Partial<MeiliCompanyDocument>).keywords || [])) counted++;
+      const keywords = (hit as Partial<MeiliCompanyDocument>).keywords || [];
+      if (params.predicate(keywords)) counted++;
     }
 
     offset += result.hits.length;
@@ -423,7 +439,15 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
   const city = (params.city || "").trim();
   const cityNorm = normalizeCityForFilter(city);
   const useCityExactFilter = Boolean(cityNorm) && !isAddressLikeLocationQuery(city);
-  const applyCheeseFilter = Boolean(service || keywords) && shouldApplyCheeseFilter(`${service} ${keywords}`.trim());
+  const keywordQuery = `${service} ${keywords}`.trim();
+  const applyCheeseFilter = Boolean(service || keywords) && shouldApplyCheeseFilter(keywordQuery);
+  const applyMilkFilter = Boolean(service || keywords) && shouldApplyMilkFilter(keywordQuery);
+  const applyKeywordFilter = applyCheeseFilter || applyMilkFilter;
+  const matchesKeywordFilter = (hitKeywords: string[]) => {
+    if (applyCheeseFilter && !hasCheeseKeyword(hitKeywords)) return false;
+    if (applyMilkFilter && !hasMilkKeyword(hitKeywords)) return false;
+    return true;
+  };
 
   const terms: string[] = [];
   if (company) terms.push(company);
@@ -495,7 +519,7 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
     if (!result.hits.length) break;
 
     for (const hit of result.hits) {
-      if (applyCheeseFilter && !hasCheeseKeyword(hit.keywords || [])) continue;
+      if (applyKeywordFilter && !matchesKeywordFilter(hit.keywords || [])) continue;
       const logo = (hit.logo_url || "").trim();
       if (logo) withLogo.push(hit);
       else withoutLogo.push(hit);
@@ -515,16 +539,17 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
   const page = ordered.slice(offset, targetEnd);
 
   let total = estimatedTotal;
-  if (applyCheeseFilter) {
+  if (applyKeywordFilter) {
     if (estimatedTotal && fetched >= estimatedTotal) {
       total = ordered.length;
-    } else if (estimatedTotal && estimatedTotal <= CHEESE_TOTAL_SCAN_LIMIT) {
-      total = await countCheeseTotal({
+    } else if (estimatedTotal && estimatedTotal <= KEYWORD_FILTER_TOTAL_SCAN_LIMIT) {
+      total = await countKeywordFilteredTotal({
         index,
         searchQuery,
         filter,
         attributesToSearchOn,
         matchingStrategy,
+        predicate: matchesKeywordFilter,
       });
     }
   }
