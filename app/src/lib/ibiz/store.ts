@@ -213,7 +213,16 @@ function matchesServiceToken(companyTokens: string[], token: string): boolean {
   if (!token) return true;
 
   if (token === "сыр" || token === "сыры" || token === "сыра") {
-    return companyTokens.some((t) => t.startsWith("сыр") && !t.startsWith("сырь"));
+    return companyTokens.some((raw) => {
+      const t = (raw || "").trim().toLowerCase().replace(/ё/gu, "е");
+      if (!t.startsWith("сыр")) return false;
+      if (t.startsWith("сырь")) return false; // сырьё / сырьевой
+      if (/^сыр(о|ой|ая|ое|ые|ого|ому|ым|ых|ую)$/u.test(t)) return false; // сырой / сырые / сырых ...
+      if (t.startsWith("сырост")) return false; // сырость
+      if (t.startsWith("сырокопч")) return false; // сырокопчёный
+      if (t.startsWith("сыровялен") || t.startsWith("сыровял")) return false; // сыровяленый
+      return true;
+    });
   }
 
   if (token.length <= 2) return companyTokens.includes(token);

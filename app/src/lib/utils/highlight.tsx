@@ -82,7 +82,7 @@ function rootToPattern(root: string): string | null {
   if (r.length < 3 && !/\d/gu.test(r)) return null;
 
   if (r === "сыр") {
-    return `сыр(?!ь)[\\p{L}\\p{N}-]*`;
+    return `сыр(?!ь)(?!окопч)(?!овялен)(?!овял)[\\p{L}\\p{N}-]*`;
   }
 
   const escaped = escapeRegExp(r).replace(/е/gu, "[её]");

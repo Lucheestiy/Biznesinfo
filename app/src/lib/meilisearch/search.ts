@@ -39,11 +39,21 @@ function shouldApplyMilkFilter(raw: string): boolean {
   return tokens.some((t) => t.startsWith("молок") || t.startsWith("молоч"));
 }
 
+function isCheeseIntentToken(raw: string): boolean {
+  const t = (raw || "").trim().toLowerCase().replace(/ё/gu, "е");
+  if (!t) return false;
+  if (!t.startsWith("сыр")) return false;
+  if (t.startsWith("сырь")) return false; // сырьё / сырьевой
+  if (/^сыр(о|ой|ая|ое|ые|ого|ому|ым|ых|ую)$/u.test(t)) return false; // сырой / сырые / сырых ...
+  if (t.startsWith("сырост")) return false; // сырость
+  if (t.startsWith("сырокопч")) return false; // сырокопчёный
+  if (t.startsWith("сыровялен") || t.startsWith("сыровял")) return false; // сыровяленый
+  return true;
+}
+
 function hasCheeseKeyword(keywords: string[]): boolean {
   for (const raw of keywords || []) {
-    const t = (raw || "").trim().toLowerCase().replace(/ё/gu, "е");
-    if (!t) continue;
-    if (t.startsWith("сыр") && !t.startsWith("сырь")) return true;
+    if (isCheeseIntentToken(raw)) return true;
   }
   return false;
 }
