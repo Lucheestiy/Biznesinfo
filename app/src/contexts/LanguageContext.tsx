@@ -34,7 +34,7 @@ const translations: Record<Language, Record<string, string>> = {
     // Search
 	    "search.placeholder": "Название компании",
 	    "search.companyPlaceholder": "Название компании",
-	    "search.servicePlaceholder": "Товары и услуги",
+	    "search.servicePlaceholder": "Товары или услуги",
     "search.region": "Выбрать регион",
     "search.allRegions": "Все регионы",
     "search.selectCategory": "Выбор товаров или услуг",
@@ -642,7 +642,7 @@ const translations: Record<Language, Record<string, string>> = {
     // Search
 	    "search.placeholder": "Company name or service",
 	    "search.companyPlaceholder": "Company name",
-	    "search.servicePlaceholder": "Products and services",
+	    "search.servicePlaceholder": "Products or services",
     "search.region": "Select region",
     "search.allRegions": "All regions",
     "search.selectCategory": "Select products or services",
@@ -1236,7 +1236,7 @@ const translations: Record<Language, Record<string, string>> = {
 	    // Search
 	    "search.placeholder": "Назва кампаніі або паслуга",
 	    "search.companyPlaceholder": "Назва кампаніі",
-	    "search.servicePlaceholder": "Тавары і паслугі",
+	    "search.servicePlaceholder": "Тавары або паслугі",
     "search.region": "Выбраць рэгіён",
     "search.allRegions": "Усе рэгіёны",
     "search.selectCategory": "Выбар тавараў або паслуг",
@@ -1828,7 +1828,7 @@ const translations: Record<Language, Record<string, string>> = {
 	    // Search
 	    "search.placeholder": "公司名称或服务",
 	    "search.companyPlaceholder": "公司名称",
-	    "search.servicePlaceholder": "产品和服务",
+	    "search.servicePlaceholder": "产品或服务",
     "search.region": "选择地区",
     "search.allRegions": "所有地区",
     "search.selectCategory": "选择商品或服务",

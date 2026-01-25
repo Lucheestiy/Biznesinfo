@@ -35,6 +35,11 @@ function SearchResults() {
   const cityInputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<number | null>(null);
 
+  const inputClassName =
+    "w-full rounded-2xl bg-white text-[#820251] font-medium text-[15px] placeholder:text-gray-500/60 placeholder:font-normal px-4 pr-14 py-3.5 shadow-sm border border-gray-200 focus:outline-none focus:ring-2 focus:ring-yellow-300/70 focus:border-[#820251]/30 focus:placeholder:text-gray-500/40";
+  const inputButtonClassName =
+    "absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl bg-[#820251]/10 text-[#820251] hover:bg-[#820251]/15 active:bg-[#820251]/20 transition-colors flex items-center justify-center";
+
   useEffect(() => {
     setCompanyDraft(query);
     setServiceDraft(serviceQuery);
@@ -196,12 +201,12 @@ function SearchResults() {
                     onChange={(e) => setCompanyDraft(e.target.value)}
                     inputMode="search"
                     placeholder={t("search.companyPlaceholder")}
-                    className="w-full rounded-2xl bg-white text-[#820251] font-medium placeholder:text-gray-500/60 placeholder:font-normal px-4 pr-14 py-3.5 shadow-sm border border-white/20 focus:outline-none focus:ring-2 focus:ring-yellow-300/70 focus:border-white/40 focus:placeholder:text-gray-500/40"
+                    className={inputClassName}
                   />
                 <button
                   type="submit"
                   aria-label={t("search.find")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl bg-[#820251]/10 text-[#820251] hover:bg-[#820251]/15 active:bg-[#820251]/20 transition-colors flex items-center justify-center"
+                  className={inputButtonClassName}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -220,12 +225,12 @@ function SearchResults() {
                     onChange={(e) => setServiceDraft(e.target.value)}
                     inputMode="search"
                     placeholder={t("search.servicePlaceholder")}
-                    className="w-full rounded-2xl bg-white text-[#820251] font-medium placeholder:text-gray-500/60 placeholder:font-normal px-4 pr-14 py-3.5 shadow-sm border border-white/20 focus:outline-none focus:ring-2 focus:ring-yellow-300/70 focus:border-white/40 focus:placeholder:text-gray-500/40"
+                    className={inputClassName}
                   />
                 <button
                   type="submit"
                   aria-label={t("search.find")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl bg-[#820251]/10 text-[#820251] hover:bg-[#820251]/15 active:bg-[#820251]/20 transition-colors flex items-center justify-center"
+                  className={inputButtonClassName}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -236,84 +241,41 @@ function SearchResults() {
           </div>
         </div>
 
-		        {/* Location Filter */}
-		        <div className="bg-white border-b border-gray-200 py-3">
-		          <div className="container mx-auto px-2 sm:px-4">
-			            <div className="relative">
-			              <div className="w-full flex items-center gap-2 rounded-3xl border border-gray-200 bg-white px-3 py-2 shadow-sm transition-colors focus-within:border-[#820251] focus-within:ring-2 focus-within:ring-yellow-300/60">
-			                <button
-			                  type="button"
-			                  onClick={() => setRegionMenuOpen((v) => !v)}
-			                  aria-label={t("filter.region")}
-			                  aria-haspopup="listbox"
-			                  aria-expanded={regionMenuOpen}
-			                  className="hidden sm:flex shrink-0 basis-[55%] items-center justify-between gap-2 rounded-2xl px-2 py-2 hover:bg-[#820251]/5 active:bg-[#820251]/10 transition-colors"
-			                >
-			                  <span
-			                    className={`min-w-0 truncate text-sm font-bold ${
-			                      selectedRegion ? "text-[#820251]" : "text-gray-900"
-			                    }`}
-			                  >
-			                    {selectedRegion ? t(`region.${selectedRegion}`) : t("filter.chooseRegion")}
-			                  </span>
-			                  <svg
-			                    className={`w-5 h-5 transition-transform ${regionMenuOpen ? "rotate-180" : ""} ${
-			                      selectedRegion ? "text-[#820251]" : "text-gray-900"
-			                    }`}
-			                    fill="none"
-			                    stroke="currentColor"
-			                    viewBox="0 0 24 24"
-			                    aria-hidden="true"
-			                  >
-			                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-			                  </svg>
-			                </button>
-			                <span className="hidden sm:block h-6 w-px bg-[#820251]/45" aria-hidden="true" />
-
-		                <div className="min-w-0 flex-1">
-		                  <label className="sr-only" htmlFor="filter-location">
-		                    {t("filter.city")}
-		                  </label>
-		                  <input
-	                    id="filter-location"
-	                    ref={cityInputRef}
-                    value={cityDraft}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setCityDraft(next);
-                      if (next.trim() && selectedRegion) setSelectedRegion(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-		                        navigateToSearch("push");
-		                      }
-			                    }}
-			                    inputMode="search"
-		                    placeholder={t("filter.locationLabel")}
-	                    className="w-full bg-transparent text-[#820251] font-medium placeholder:text-gray-500/60 placeholder:font-normal px-1 py-2 focus:outline-none focus:placeholder:text-gray-500/40"
-		                  />
-			                </div>
-
-	                <button
-	                  type="button"
-	                  aria-label={t("search.find")}
-	                  onClick={() => navigateToSearch("push")}
-                  className="shrink-0 w-9 h-9 rounded-xl bg-[#820251]/10 text-[#820251] hover:bg-[#820251]/15 active:bg-[#820251]/20 transition-colors flex items-center justify-center"
+        {/* Location Filter */}
+        <div className="bg-white border-b border-gray-200 py-3">
+          <div className="container mx-auto px-4">
+            <div className="hidden sm:block relative mb-3">
+              <button
+                type="button"
+                onClick={() => setRegionMenuOpen((v) => !v)}
+                aria-label={t("filter.region")}
+                aria-haspopup="listbox"
+                aria-expanded={regionMenuOpen}
+                className={`w-full flex items-center justify-between gap-2 rounded-2xl bg-white shadow-sm border border-gray-200 px-4 py-3.5 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-yellow-300/70 focus:border-[#820251]/30 ${
+                  selectedRegion ? "text-[#820251]" : "text-gray-500/60"
+                }`}
+              >
+                <span className="min-w-0 truncate">
+                  {selectedRegion ? t(`region.${selectedRegion}`) : t("filter.chooseRegion")}
+                </span>
+                <svg
+                  className={`w-5 h-5 transition-transform ${regionMenuOpen ? "rotate-180" : ""}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </button>
-              </div>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
 
-	              {regionMenuOpen && (
-	                <>
-	                  <div className="hidden sm:block fixed inset-0 z-10" onClick={() => setRegionMenuOpen(false)} />
-	                  <div
-	                    role="listbox"
-	                    className="hidden sm:block absolute left-0 right-0 z-20 mt-2 rounded-2xl bg-white shadow-2xl ring-1 ring-black/5 overflow-hidden"
-	                  >
+              {regionMenuOpen && (
+                <>
+                  <div className="hidden sm:block fixed inset-0 z-10" onClick={() => setRegionMenuOpen(false)} />
+                  <div
+                    role="listbox"
+                    className="hidden sm:block absolute left-0 right-0 z-20 mt-2 rounded-2xl bg-white shadow-2xl ring-1 ring-black/5 overflow-hidden"
+                  >
                     <button
                       type="button"
                       onClick={() => {
@@ -352,6 +314,41 @@ function SearchResults() {
                   </div>
                 </>
               )}
+            </div>
+
+            <div className="relative">
+              <label className="sr-only" htmlFor="filter-location">
+                {t("filter.city")}
+              </label>
+              <input
+                id="filter-location"
+                ref={cityInputRef}
+                value={cityDraft}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setCityDraft(next);
+                  if (next.trim() && selectedRegion) setSelectedRegion(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    navigateToSearch("push");
+                  }
+                }}
+                inputMode="search"
+                placeholder={t("filter.locationLabel")}
+                className={inputClassName}
+              />
+              <button
+                type="button"
+                aria-label={t("search.find")}
+                onClick={() => navigateToSearch("push")}
+                className={inputButtonClassName}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </button>
             </div>
           </div>
         </div>
