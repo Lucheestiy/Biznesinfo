@@ -65,7 +65,7 @@ export default function FavoritesPage() {
 
       <main className="flex-grow">
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#820251] to-[#5a0138] text-white py-10">
+        <div className="bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white py-10">
           <div className="container mx-auto px-4">
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center">
@@ -130,7 +130,7 @@ export default function FavoritesPage() {
               </p>
               <Link
                 href="/#catalog"
-                className="inline-block bg-[#820251] text-white px-6 py-3 rounded-lg font-semibold hover:bg-[#6a0143] transition-colors"
+                className="inline-block bg-[#820251] text-white px-6 py-3 rounded-lg font-semibold hover:bg-[#7a0150] transition-colors"
               >
                 {t("nav.catalog")}
               </Link>
@@ -195,4 +195,3 @@ export default function FavoritesPage() {
     </div>
   );
 }
-

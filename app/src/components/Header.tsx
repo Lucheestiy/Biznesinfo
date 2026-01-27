@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLanguage, Language } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
 import { regions } from "@/data/regions";
@@ -18,6 +18,7 @@ export default function Header() {
   const { language, setLanguage, t } = useLanguage();
   const { selectedRegion, setSelectedRegion, regionName } = useRegion();
   const pathname = usePathname();
+  const headerRef = useRef<HTMLElement | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
@@ -37,8 +38,32 @@ export default function Header() {
     }
   };
 
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el || typeof window === "undefined") return;
+
+    const update = () => {
+      const h = Math.ceil(el.getBoundingClientRect().height);
+      document.documentElement.style.setProperty("--site-header-height", `${h}px`);
+    };
+
+    update();
+    window.addEventListener("resize", update);
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(update);
+      ro.observe(el);
+    }
+
+    return () => {
+      window.removeEventListener("resize", update);
+      ro?.disconnect();
+    };
+  }, []);
+
   return (
-    <header className="bg-[#820251] text-white shadow-lg sticky top-0 z-50">
+    <header ref={headerRef} className="bg-[#a0006d] text-white shadow-lg sticky top-0 z-50">
       <div className="container mx-auto px-4">
         {/* Mobile Header - Compact single row */}
         <div className="md:hidden flex items-center justify-between py-2">
@@ -46,7 +71,7 @@ export default function Header() {
           <Link
             href="/"
             onClick={handleMobileLogoClick}
-            className="flex items-center gap-2 group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#820251] active:bg-white/10 rounded-lg transition-colors"
+            className="flex items-center gap-2 group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d] active:bg-white/10 rounded-lg transition-colors"
           >
             <div className="relative w-10 h-10 flex-shrink-0 animate-[float_4s_ease-in-out_infinite]">
               <svg
@@ -81,7 +106,7 @@ export default function Header() {
               onClick={() => setRegionMenuOpen(!regionMenuOpen)}
               aria-expanded={regionMenuOpen}
               aria-haspopup="menu"
-              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-white/10 border border-white/20 text-white text-xs shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#820251]"
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-white/10 border border-white/20 text-white text-xs shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d]"
             >
               <svg className="w-3.5 h-3.5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -98,7 +123,7 @@ export default function Header() {
               onClick={() => setLangMenuOpen(!langMenuOpen)}
               aria-expanded={langMenuOpen}
               aria-haspopup="menu"
-              className="flex items-center gap-1 px-2 h-8 rounded-lg bg-white/10 border border-white/20 text-white text-xs font-bold shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#820251]"
+              className="flex items-center gap-1 px-2 h-8 rounded-lg bg-white/10 border border-white/20 text-white text-xs font-bold shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d]"
             >
               <svg className="w-4 h-4 text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 21a9 9 0 100-18 9 9 0 000 18z" />
@@ -141,7 +166,7 @@ export default function Header() {
                   setRegionMenuOpen(false);
                 }}
                 className={`w-full px-4 py-2.5 text-left text-sm ${
-                  !selectedRegion ? "text-[#820251] font-bold bg-gray-50" : "text-gray-700"
+                  !selectedRegion ? "text-[#a0006d] font-bold bg-gray-50" : "text-gray-700"
                 }`}
               >
                 {t("search.allRegions")}
@@ -154,7 +179,7 @@ export default function Header() {
                     setRegionMenuOpen(false);
                   }}
                   className={`w-full px-4 py-2 text-left text-sm ${
-                    selectedRegion === region.slug ? "text-[#820251] font-bold bg-gray-50" : "text-gray-700"
+                    selectedRegion === region.slug ? "text-[#a0006d] font-bold bg-gray-50" : "text-gray-700"
                   } ${region.isCity ? "font-medium" : "pl-6 text-gray-500 text-xs"}`}
                 >
                   {t(`region.${region.slug}`)}
@@ -177,7 +202,7 @@ export default function Header() {
                     setLangMenuOpen(false);
                   }}
                   className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-2 ${
-                    language === lang.code ? "text-[#820251] font-bold bg-gray-50" : "text-gray-700"
+                    language === lang.code ? "text-[#a0006d] font-bold bg-gray-50" : "text-gray-700"
                   }`}
                 >
                   <span>{lang.flag}</span>
@@ -300,7 +325,7 @@ export default function Header() {
             <div className="flex items-center gap-3 -mr-4 lg:-mr-12 xl:-mr-20">
               <Link
                 href="/cabinet"
-                className="flex items-center gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#820251] px-6 py-2.5 rounded-full font-bold hover:from-white hover:to-white hover:text-[#820251] transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-110 cursor-pointer"
+                className="flex items-center gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#a0006d] px-6 py-2.5 rounded-full font-bold hover:from-white hover:to-white hover:text-[#a0006d] transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-110 cursor-pointer"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -312,7 +337,7 @@ export default function Header() {
               <div className="relative -mr-8 lg:-mr-16 xl:-mr-24">
                 <button
                   onClick={() => setContactMenuOpen(!contactMenuOpen)}
-                  className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-[#820251] hover:bg-yellow-400 hover:scale-110 transition-all duration-200 shadow-lg hover:shadow-xl cursor-pointer"
+                  className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-[#a0006d] hover:bg-yellow-400 hover:scale-110 transition-all duration-200 shadow-lg hover:shadow-xl cursor-pointer"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -323,14 +348,14 @@ export default function Header() {
                     <div className="fixed inset-0 z-10" onClick={() => setContactMenuOpen(false)} />
                     <div className="absolute right-0 top-full z-20 mt-3 w-72 bg-white rounded-2xl shadow-2xl py-4 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100">
                       <div className="px-5 pb-3 border-b border-gray-100">
-                        <h3 className="font-bold text-[#820251] text-lg">{t("nav.mobile.contacts")}</h3>
+                        <h3 className="font-bold text-[#a0006d] text-lg">{t("nav.mobile.contacts")}</h3>
                       </div>
                       <div className="px-5 py-4 space-y-3">
                         <a
                           href="mailto:surdoe@yandex.ru"
-                          className="flex items-center gap-3 text-gray-700 hover:text-[#820251] transition-colors"
+                          className="flex items-center gap-3 text-gray-700 hover:text-[#a0006d] transition-colors"
                         >
-                          <svg className="w-5 h-5 text-[#820251]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-5 h-5 text-[#a0006d]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                           </svg>
                           <span>surdoe@yandex.ru</span>
@@ -340,14 +365,14 @@ export default function Header() {
                         <Link
                           href="/agreement"
                           onClick={() => setContactMenuOpen(false)}
-                          className="block text-sm text-gray-600 hover:text-[#820251] transition-colors"
+                          className="block text-sm text-gray-600 hover:text-[#a0006d] transition-colors"
                         >
                           {t("footer.agreement")}
                         </Link>
                         <Link
                           href="/offer"
                           onClick={() => setContactMenuOpen(false)}
-                          className="block text-sm text-gray-600 hover:text-[#820251] transition-colors"
+                          className="block text-sm text-gray-600 hover:text-[#a0006d] transition-colors"
                         >
                           {t("footer.offer")}
                         </Link>
@@ -407,7 +432,7 @@ export default function Header() {
                         setRegionMenuOpen(false);
                       }}
                       className={`w-full px-5 py-3 text-left text-sm hover:bg-gray-50 transition-colors border-b border-gray-100 ${
-                        !selectedRegion ? "text-[#820251] font-bold bg-gray-50/50" : "text-gray-700"
+                        !selectedRegion ? "text-[#a0006d] font-bold bg-gray-50/50" : "text-gray-700"
                       }`}
                     >
                       {t("search.allRegions")}
@@ -421,7 +446,7 @@ export default function Header() {
                             setRegionMenuOpen(false);
                           }}
                           className={`w-full px-5 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors ${
-                            selectedRegion === region.slug ? "text-[#820251] font-bold bg-gray-50/50" : "text-gray-700"
+                            selectedRegion === region.slug ? "text-[#a0006d] font-bold bg-gray-50/50" : "text-gray-700"
                           } ${region.isCity ? "pl-5 font-medium" : "pl-8 text-gray-500 text-xs uppercase tracking-wider mt-1"}`}
                         >
                           {t(`region.${region.slug}`)}
@@ -456,7 +481,7 @@ export default function Header() {
                           setLangMenuOpen(false);
                         }}
                         className={`w-full px-5 py-3 text-left text-sm hover:bg-gray-50 transition-colors flex items-center gap-3 ${
-                          language === lang.code ? "text-[#820251] font-bold bg-gray-50/50" : "text-gray-700"
+                          language === lang.code ? "text-[#a0006d] font-bold bg-gray-50/50" : "text-gray-700"
                         }`}
                       >
                         <span className="text-lg">{lang.flag}</span>
@@ -544,7 +569,7 @@ export default function Header() {
                   <div className="pl-4 py-2">
                     <Link
                       href="/add-company"
-                      className="inline-flex items-center gap-2 bg-yellow-500 text-[#820251] px-4 py-2 rounded-lg font-bold hover:bg-yellow-400 transition-colors text-sm shadow-md"
+                      className="inline-flex items-center gap-2 bg-yellow-500 text-[#a0006d] px-4 py-2 rounded-lg font-bold hover:bg-yellow-400 transition-colors text-sm shadow-md"
                       onClick={() => setMobileMenuOpen(false)}
                     >
                       <span>{t("nav.addCompany")}</span>

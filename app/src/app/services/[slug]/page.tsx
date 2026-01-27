@@ -222,7 +222,7 @@ export default function ServicePage({ params }: { params: Promise<{ slug: string
 
       <main className="flex-grow">
         {/* Hero Section */}
-        <div className="bg-gradient-to-br from-[#820251] to-[#5a0138] text-white py-12 md:py-16">
+        <div className="bg-gradient-to-br from-[#b10a78] to-[#7a0150] text-white py-12 md:py-16">
           <div className="container mx-auto px-4">
             <Link
               href="/#services"
@@ -257,7 +257,7 @@ export default function ServicePage({ params }: { params: Promise<{ slug: string
             {/* Benefits Section */}
             <section className="mb-12">
               <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-3">
-                <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#820251] to-[#a80368] flex items-center justify-center text-white">
+                <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#820251] to-[#b10a78] flex items-center justify-center text-white">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
@@ -283,7 +283,7 @@ export default function ServicePage({ params }: { params: Promise<{ slug: string
             {/* Details Section */}
             <section className="mb-12">
               <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-3">
-                <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#820251] to-[#a80368] flex items-center justify-center text-white">
+                <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#820251] to-[#b10a78] flex items-center justify-center text-white">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -302,7 +302,7 @@ export default function ServicePage({ params }: { params: Promise<{ slug: string
             {/* Features Section */}
             <section className="mb-12">
               <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-3">
-                <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#820251] to-[#a80368] flex items-center justify-center text-white">
+                <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#820251] to-[#b10a78] flex items-center justify-center text-white">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                   </svg>
@@ -324,7 +324,7 @@ export default function ServicePage({ params }: { params: Promise<{ slug: string
             </section>
 
             {/* CTA Section */}
-            <section className="bg-gradient-to-r from-[#820251] to-[#5a0138] rounded-2xl p-8 md:p-10 text-center">
+            <section className="bg-gradient-to-r from-[#b10a78] to-[#7a0150] rounded-2xl p-8 md:p-10 text-center">
               <h3 className="text-2xl font-bold text-white mb-4">
                 {t("services.article.cta.title")}
               </h3>

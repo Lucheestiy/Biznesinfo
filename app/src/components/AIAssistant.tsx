@@ -256,7 +256,7 @@ export default function AIAssistant({
             setErrors({});
             setIsOpen(true);
           }}
-          className="fixed bottom-6 right-6 bg-gradient-to-r from-[#820251] to-[#5a0138] text-white px-6 py-4 rounded-full shadow-2xl hover:shadow-3xl transition-all hover:scale-105 flex items-center gap-3 z-40"
+          className="fixed bottom-6 right-6 bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white px-6 py-4 rounded-full shadow-2xl hover:shadow-3xl transition-all hover:scale-105 flex items-center gap-3 z-40"
         >
           <div className="w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center">
             <svg className="w-6 h-6 text-[#820251]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -271,7 +271,7 @@ export default function AIAssistant({
       {isOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
-            <div className="bg-gradient-to-r from-[#820251] to-[#5a0138] text-white p-6 rounded-t-2xl">
+            <div className="bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white p-6 rounded-t-2xl">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-yellow-400 rounded-full flex items-center justify-center">
@@ -514,7 +514,7 @@ export default function AIAssistant({
 
                     <button
                       type="submit"
-                      className="w-full mt-4 bg-[#820251] text-white py-3 rounded-lg font-semibold hover:bg-[#6a0143] transition-colors"
+                      className="w-full mt-4 bg-[#820251] text-white py-3 rounded-lg font-semibold hover:bg-[#7a0150] transition-colors"
                     >
                       {t("ai.sendRequest")}
                     </button>
@@ -552,7 +552,7 @@ export default function AIAssistant({
           setErrors({});
           setIsOpen(true);
         }}
-        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#820251] to-[#5a0138] text-white rounded-lg hover:opacity-90 transition-opacity"
+        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white rounded-lg hover:opacity-90 transition-opacity"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
@@ -564,7 +564,7 @@ export default function AIAssistant({
       {isOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
-            <div className="bg-gradient-to-r from-[#820251] to-[#5a0138] text-white p-6 rounded-t-2xl">
+            <div className="bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white p-6 rounded-t-2xl">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-bold">{t("ai.title")}</h2>
@@ -800,7 +800,7 @@ export default function AIAssistant({
 
                   <button
                     type="submit"
-                    className="w-full mt-4 bg-[#820251] text-white py-3 rounded-lg font-semibold hover:bg-[#6a0143] transition-colors"
+                    className="w-full mt-4 bg-[#820251] text-white py-3 rounded-lg font-semibold hover:bg-[#7a0150] transition-colors"
                   >
                     {t("ai.sendRequest")}
                   </button>

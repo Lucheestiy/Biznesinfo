@@ -44,7 +44,7 @@ export default function Home() {
 
       <main className="flex-grow">
         {/* Hero Section with Search */}
-        <div className="bg-gradient-to-br from-[#820251] to-[#5a0138] text-white pt-4 pb-12 md:py-16">
+        <div className="bg-gradient-to-br from-[#a0006d] to-[#a0006d] text-white pt-4 pb-12 md:py-16">
           <div className="container mx-auto px-4 text-center">
             {/* Add company link at top */}
             <div className="mb-4 md:mb-6">
@@ -69,7 +69,7 @@ export default function Home() {
                     background: 'conic-gradient(from 0deg, transparent 0%, #facc15 15%, #fef08a 25%, transparent 35%, transparent 65%, #facc15 75%, #fef08a 85%, transparent 100%)',
                   }}
                 />
-                <div className="absolute inset-[2px] bg-gradient-to-br from-[#820251] to-[#5a0138] rounded-[10px]" />
+                <div className="absolute inset-[2px] bg-gradient-to-br from-[#a0006d] to-[#a0006d] rounded-[10px]" />
               </div>
 
               <div className="relative px-4 py-3 md:px-6 md:py-4 text-center">
@@ -102,7 +102,7 @@ export default function Home() {
                       background: 'conic-gradient(from 0deg, transparent 0%, #facc15 15%, #fef08a 25%, transparent 35%, transparent 65%, #facc15 75%, #fef08a 85%, transparent 100%)',
                     }}
                   />
-                  <div className="absolute inset-[3px] bg-gradient-to-br from-[#820251] to-[#5a0138] rounded-[13px]" />
+                  <div className="absolute inset-[3px] bg-gradient-to-br from-[#a0006d] to-[#a0006d] rounded-[13px]" />
                 </div>
 
                 {/* Content */}
@@ -162,12 +162,12 @@ export default function Home() {
                     background: 'conic-gradient(from 0deg, transparent 0%, #facc15 10%, #fef08a 20%, #fff 25%, transparent 30%, transparent 70%, #facc15 75%, #fef08a 85%, #fff 90%, transparent 95%)',
                   }}
                 />
-                <div className="absolute inset-[3px] bg-gradient-to-br from-[#820251] via-[#6a0143] to-[#5a0138] rounded-[21px]" />
+                <div className="absolute inset-[3px] bg-gradient-to-br from-[#a0006d] via-[#a0006d] to-[#6a0143] rounded-[21px]" />
               </div>
 
-              <div className="relative bg-gradient-to-br from-[#820251] via-[#6a0143] to-[#5a0138] rounded-3xl p-8 md:p-10 text-white
+              <div className="relative bg-gradient-to-br from-[#a0006d] via-[#a0006d] to-[#6a0143] rounded-3xl p-8 md:p-10 text-white
                 group-hover/ai:scale-[1.02] transition-all duration-500 overflow-hidden
-                shadow-[0_20px_60px_rgba(130,2,81,0.4)] group-hover/ai:shadow-[0_30px_80px_rgba(130,2,81,0.5)]">
+                shadow-[0_20px_60px_rgba(160,0,109,0.4)] group-hover/ai:shadow-[0_30px_80px_rgba(160,0,109,0.5)]">
 
                 {/* Animated background particles */}
                 <div className="absolute inset-0 overflow-hidden">
@@ -190,7 +190,7 @@ export default function Home() {
                       animate-[pulse_2s_ease-in-out_infinite]
                       group-hover/ai:shadow-[0_0_40px_rgba(250,204,21,0.8),0_0_80px_rgba(250,204,21,0.4),0_0_120px_rgba(250,204,21,0.2)]
                       transition-shadow duration-500">
-                      <svg className="w-10 h-10 md:w-12 md:h-12 text-[#820251]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-10 h-10 md:w-12 md:h-12 text-[#a0006d]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                       </svg>
                     </div>
@@ -208,7 +208,7 @@ export default function Home() {
                     <h3 className="text-3xl md:text-4xl font-bold mb-4 group-hover/ai:text-yellow-300 transition-colors duration-300
                       drop-shadow-[0_0_15px_rgba(255,255,255,0.4)]">
                       {t("ai.title")}
-                      <span className="ml-3 text-xs bg-gradient-to-r from-yellow-300 to-yellow-500 text-[#820251] px-3 py-1.5 rounded-full font-bold uppercase align-middle
+                      <span className="ml-3 text-xs bg-gradient-to-r from-yellow-300 to-yellow-500 text-[#a0006d] px-3 py-1.5 rounded-full font-bold uppercase align-middle
                         shadow-[0_0_15px_rgba(250,204,21,0.5)] animate-pulse">New</span>
                     </h3>
                     <p className="text-pink-100 text-lg md:text-xl mb-4 group-hover/ai:text-white transition-colors duration-300 leading-relaxed">

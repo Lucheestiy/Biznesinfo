@@ -33,7 +33,7 @@ export default function MessageModal({
   if (!isOpen) return null;
 
   const channels: { id: Channel; name: string; icon: string; available: boolean; color: string }[] = [
-    { id: "ai", name: t("ai.title"), icon: "AI", available: hasAI, color: "bg-gradient-to-r from-[#820251] to-[#5a0138]" },
+    { id: "ai", name: t("ai.title"), icon: "AI", available: hasAI, color: "bg-gradient-to-r from-[#b10a78] to-[#7a0150]" },
     { id: "email", name: "Email", icon: "✉️", available: !!email, color: "bg-blue-500" },
     { id: "viber", name: "Viber", icon: "📱", available: !!phone, color: "bg-purple-500" },
     { id: "telegram", name: "Telegram", icon: "✈️", available: !!phone, color: "bg-sky-500" },
@@ -77,7 +77,7 @@ export default function MessageModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#820251] to-[#5a0138] text-white p-6 rounded-t-2xl sticky top-0">
+        <div className="bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white p-6 rounded-t-2xl sticky top-0">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl font-bold">{t("message.title")}</h2>
@@ -154,7 +154,7 @@ export default function MessageModal({
                   <button
                     onClick={handleSend}
                     disabled={!message.trim()}
-                    className="w-full bg-[#820251] text-white py-3 rounded-lg font-semibold hover:bg-[#6a0143] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-[#820251] text-white py-3 rounded-lg font-semibold hover:bg-[#7a0150] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {t("message.send")}
                   </button>

@@ -84,7 +84,7 @@ export default function RegionPage({ params }: PageProps) {
         </div>
 
         {/* Region Header */}
-        <div className="bg-gradient-to-r from-[#820251] to-[#5a0138] text-white py-10">
+        <div className="bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white py-10">
           <div className="container mx-auto px-4">
             <div className="flex items-center gap-4">
               <span className="text-5xl">📍</span>

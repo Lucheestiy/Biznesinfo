@@ -76,7 +76,7 @@ export default function ServicesBlock() {
         {/* Header - Bright and Eye-catching */}
         <div className="mb-8 text-center">
           <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold mb-4">
-            <span className="bg-gradient-to-r from-[#820251] via-[#a80368] to-[#d4145a] bg-clip-text text-transparent drop-shadow-sm">
+            <span className="bg-gradient-to-r from-[#820251] via-[#b10a78] to-[#d4145a] bg-clip-text text-transparent drop-shadow-sm">
               {t("services.title")}
             </span>
           </h2>
@@ -110,7 +110,7 @@ export default function ServicesBlock() {
                 transition-all duration-500 rounded-2xl" />
 
               <div className="relative flex items-start gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#820251] to-[#a80368] flex items-center justify-center flex-shrink-0 shadow-md
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#820251] to-[#b10a78] flex items-center justify-center flex-shrink-0 shadow-md
                   group-hover:shadow-xl group-hover:shadow-[#820251]/30 group-hover:scale-110
                   group-hover:rotate-3 transition-all duration-300">
                   <span className="text-2xl">{service.icon}</span>
@@ -156,10 +156,10 @@ export default function ServicesBlock() {
                 background: 'conic-gradient(from 0deg, transparent 0%, #facc15 15%, #fef08a 25%, transparent 35%, transparent 65%, #facc15 75%, #fef08a 85%, transparent 100%)',
               }}
             />
-            <div className="absolute inset-[3px] bg-gradient-to-r from-[#820251] to-[#5a0138] rounded-[13px]" />
+            <div className="absolute inset-[3px] bg-gradient-to-r from-[#b10a78] to-[#7a0150] rounded-[13px]" />
           </div>
 
-          <div className="relative bg-gradient-to-r from-[#820251] to-[#5a0138] rounded-2xl p-6 md:p-8
+          <div className="relative bg-gradient-to-r from-[#b10a78] to-[#7a0150] rounded-2xl p-6 md:p-8
             group-hover/cta:scale-[1.02] transition-all duration-300">
             <div className="flex flex-col md:flex-row items-center justify-between gap-6">
               <div className="text-center md:text-left">

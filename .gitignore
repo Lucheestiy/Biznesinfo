@@ -14,3 +14,18 @@ app/node_modules/
 app/.next/
 app/.cache/
 app/out/
+
+# local agent / workspace
+.claude/
+memory/
+
+# root deps/build
+node_modules/
+*.tsbuildinfo
+
+# ibiz scraped data exports (generated, root-level)
+public/data/ibiz/
+public/data/ibiz/companies.jsonl
+public/data/ibiz/*.csv
+public/data/ibiz/*.tmp
+public/data/ibiz/*.backup-*.jsonl

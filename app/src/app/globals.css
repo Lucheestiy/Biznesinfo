@@ -14,6 +14,15 @@ body {
   --portal-dialog-font-size: 1rem;
   --portal-dialog-line-height: 1.5rem;
   --portal-dialog-font-weight: 500;
+
+  --site-header-height: 0px;
+  --company-nav-height: 0px;
+
+  /* Яркие фиолетовые цвета сайта */
+  --color-primary: #a0006d;
+  --color-primary-dark: #820251;
+  --color-primary-light: #c0008a;
+  --gradient-primary: linear-gradient(135deg, #a0006d, #820251);
 }
 
 @media (min-width: 768px) {
@@ -128,6 +137,57 @@ select.search-elegant option {
 .search-input-mobile:focus::placeholder {
   color: #6b7280;
   transition: color 0.2s ease;
+}
+
+/* Horizontal scroll helpers */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Custom Tailwind-like utilities for bright purple colors */
+.text-primary {
+  color: var(--color-primary);
+}
+
+.bg-primary {
+  background-color: var(--color-primary);
+}
+
+.bg-primary-dark {
+  background-color: var(--color-primary-dark);
+}
+
+.border-primary {
+  border-color: var(--color-primary);
+}
+
+.hover\:bg-primary:hover {
+  background-color: var(--color-primary);
+}
+
+.from-primary {
+  --tw-gradient-from: var(--color-primary);
+  --tw-gradient-to: rgb(160 0 109 / 0);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.to-primary-dark {
+  --tw-gradient-to: var(--color-primary-dark);
+}
+
+.via-primary-light {
+  --tw-gradient-to: rgb(192 0 138 / 0);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--color-primary-light), var(--tw-gradient-to);
+}
+
+/* Company profile anchors should clear sticky headers */
+.company-section {
+  scroll-margin-top: calc(var(--site-header-height) + var(--company-nav-height) + 16px);
 }
 
 /* Mobile: magnifier for both inputs submits the form (CSS-only, reuses the existing submit button) */

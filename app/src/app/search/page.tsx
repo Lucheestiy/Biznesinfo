@@ -179,7 +179,7 @@ function SearchResults() {
 
       <main className="flex-grow">
         {/* Search Header */}
-        <div className="bg-gradient-to-r from-[#820251] to-[#5a0138] text-white py-6">
+        <div className="bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white py-6">
           <div className="container mx-auto px-4">
             <h1 className="text-2xl font-bold">{t("search.results")}</h1>
 
@@ -407,7 +407,7 @@ function SearchResults() {
               )}
               <Link
                 href="/#catalog"
-                className="inline-block bg-[#820251] text-white px-6 py-3 rounded-lg font-semibold hover:bg-[#6a0143] transition-colors"
+                className="inline-block bg-[#820251] text-white px-6 py-3 rounded-lg font-semibold hover:bg-[#7a0150] transition-colors"
               >
                 {t("nav.catalog")}
               </Link>

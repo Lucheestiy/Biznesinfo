@@ -27,6 +27,76 @@ function displayUrl(raw: string): string {
   }
 }
 
+// Social media detection
+interface SocialLink {
+  url: string;
+  type: "instagram" | "telegram" | "vk" | "facebook" | "viber" | "whatsapp" | "youtube" | "tiktok" | "linkedin" | "twitter" | "ok";
+  name: string;
+  icon: string;
+  bgClass: string;
+}
+
+function detectSocialMedia(url: string): SocialLink | null {
+  const lower = url.toLowerCase();
+  
+  if (lower.includes("instagram.com") || lower.includes("instagram.by")) {
+    return { url, type: "instagram", name: "Instagram", icon: "📸", bgClass: "bg-gradient-to-br from-purple-600 to-pink-500" };
+  }
+  if (lower.includes("t.me") || lower.includes("telegram.me") || lower.includes("telegram.org")) {
+    return { url, type: "telegram", name: "Telegram", icon: "✈️", bgClass: "bg-sky-500" };
+  }
+  if (lower.includes("vk.com") || lower.includes("vkontakte.ru")) {
+    return { url, type: "vk", name: "ВКонтакте", icon: "✌️", bgClass: "bg-blue-600" };
+  }
+  if (lower.includes("facebook.com") || lower.includes("fb.com") || lower.includes("fb.me")) {
+    return { url, type: "facebook", name: "Facebook", icon: "👤", bgClass: "bg-blue-700" };
+  }
+  if (lower.includes("viber") || lower.includes("viber.com")) {
+    return { url, type: "viber", name: "Viber", icon: "📞", bgClass: "bg-purple-600" };
+  }
+  if (lower.includes("wa.me") || lower.includes("whatsapp.com") || lower.includes("api.whatsapp")) {
+    return { url, type: "whatsapp", name: "WhatsApp", icon: "💬", bgClass: "bg-green-600" };
+  }
+  if (lower.includes("youtube.com") || lower.includes("youtu.be")) {
+    return { url, type: "youtube", name: "YouTube", icon: "▶️", bgClass: "bg-red-600" };
+  }
+  if (lower.includes("tiktok.com")) {
+    return { url, type: "tiktok", name: "TikTok", icon: "🎵", bgClass: "bg-gray-900" };
+  }
+  if (lower.includes("linkedin.com")) {
+    return { url, type: "linkedin", name: "LinkedIn", icon: "💼", bgClass: "bg-blue-800" };
+  }
+  if (lower.includes("twitter.com") || lower.includes("x.com")) {
+    return { url, type: "twitter", name: "X", icon: "🐦", bgClass: "bg-gray-900" };
+  }
+  if (lower.includes("ok.ru") || lower.includes("odnoklassniki.ru")) {
+    return { url, type: "ok", name: "Одноклассники", icon: "🟠", bgClass: "bg-orange-500" };
+  }
+  
+  return null;
+}
+
+function separateWebsitesAndSocials(websites: string[] | null | undefined): { websites: string[]; socials: SocialLink[] } {
+  const regularWebsites: string[] = [];
+  const socials: SocialLink[] = [];
+  
+  if (!websites || !Array.isArray(websites)) {
+    return { websites: regularWebsites, socials };
+  }
+  
+  for (const url of websites) {
+    if (!url || typeof url !== 'string') continue;
+    const social = detectSocialMedia(url);
+    if (social) {
+      socials.push(social);
+    } else {
+      regularWebsites.push(url);
+    }
+  }
+  
+  return { websites: regularWebsites, socials };
+}
+
 // Generate 5 mid-frequency keywords based on company rubrics and category
 function generateKeywords(company: {
   rubrics?: { name: string; category_name?: string }[];
@@ -219,6 +289,12 @@ export default function CompanyPage({ params }: PageProps) {
     return (companyMaybe.phones || []).map((number) => ({ number, labels: [] as string[] }));
   }, [companyMaybe]);
 
+  // Separate regular websites from social media links (must be above conditional returns to keep hooks order stable)
+  const { websites: regularWebsites, socials } = useMemo(
+    () => separateWebsitesAndSocials(companyMaybe?.websites),
+    [companyMaybe?.websites]
+  );
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col font-sans bg-gray-100">
@@ -246,7 +322,7 @@ export default function CompanyPage({ params }: PageProps) {
               <p className="text-gray-500 mb-6">Компания не найдена: {id}</p>
               <Link
                 href="/#catalog"
-                className="inline-block bg-[#820251] text-white px-6 py-3 rounded-lg font-semibold hover:bg-[#6a0143] transition-colors"
+                className="inline-block bg-[#820251] text-white px-6 py-3 rounded-lg font-semibold hover:bg-[#7a0150] transition-colors"
               >
                 {t("nav.catalog")}
               </Link>
@@ -311,69 +387,43 @@ export default function CompanyPage({ params }: PageProps) {
         </div>
 
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#820251] to-[#5a0138] text-white py-10">
-          <div className="container mx-auto px-4">
-            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-              <div className="flex-1">
-                <div className="flex items-start gap-4">
-                  <div className="w-20 h-20 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
-                    {showLogo ? (
-                      <div className="w-full h-full relative flex items-center justify-center">
-                        <span
-                          className={`text-4xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}
-                        >
-                          {icon}
-                        </span>
-                        <img
-                          src={logoSrc}
-                          alt={company.name}
-                          className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
-                          decoding="async"
-                          loading="eager"
-                          onLoad={() => setLogoLoaded(true)}
-                          onError={() => setLogoFailed(true)}
-                        />
-                      </div>
-                    ) : (
-                      <span className="text-4xl">{icon}</span>
-                    )}
-                  </div>
-                  <div>
-                    <h1 className="text-3xl font-bold">
-                      {company.name}
-                    </h1>
-                    <p className="text-pink-200 mt-2">
-                      {primaryCategory ? primaryCategory.name : ""}
-                      {primaryRubric ? ` → ${primaryRubric.name}` : ""}
-                      {company.city ? ` • ${company.city}` : ""}
-                    </p>
-                  </div>
-                </div>
-              </div>
+        <div className="bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white py-10">
+          <div className="w-full px-4">
+            {/* Company name - justified across full width */}
+            <div className="mb-4">
+              <h1 className="text-2xl md:text-3xl font-bold text-center tracking-wide" style={{ wordSpacing: '0.3em' }}>
+                {company.name}
+              </h1>
+              <p className="text-pink-200 mt-2 text-sm text-center">
+                {primaryCategory ? primaryCategory.name : ""}
+                {primaryRubric ? ` → ${primaryRubric.name}` : ""}
+                {company.city ? ` • ${company.city}` : ""}
+              </p>
+            </div>
 
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => toggleFavorite(company.source_id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                    favorite ? "bg-red-500 text-white" : "bg-white/10 text-white hover:bg-white/20"
-                  }`}
+            {/* Favorite button - right aligned, smaller */}
+            <div className="flex justify-end">
+              <button
+                onClick={() => toggleFavorite(company.source_id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                  favorite ? "bg-red-500 text-white" : "bg-white/10 text-white hover:bg-white/20"
+                }`}
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill={favorite ? "currentColor" : "none"}
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
                 >
-                  <svg
-                    className="w-5 h-5"
-                    fill={favorite ? "currentColor" : "none"}
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                    />
-                  </svg>
-                  <span>{favorite ? t("favorites.remove") : t("favorites.add")}</span>
-                </button>
-              </div>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                  />
+                </svg>
+                <span>{favorite ? t("favorites.remove") : t("favorites.add")}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -382,19 +432,48 @@ export default function CompanyPage({ params }: PageProps) {
         <div className="container mx-auto py-10 px-4">
           <div className="max-w-4xl mx-auto">
             <div className="space-y-6">
-              {/* Contacts */}
+              {/* Contacts with Logo */}
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                   <span className="w-1 h-6 bg-[#820251] rounded"></span>
                   {t("company.contacts")}
                 </h2>
 
-                <div className="space-y-4">
-                  {company.websites && company.websites.length > 0 && (
+                <div className="flex flex-col md:flex-row gap-6">
+                  {/* Logo - left side */}
+                  <div className="flex-shrink-0">
+                    <div className="w-32 h-32 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden border border-gray-200">
+                      {showLogo ? (
+                        <div className="w-full h-full relative flex items-center justify-center">
+                          <span
+                            className={`text-5xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}
+                          >
+                            {icon}
+                          </span>
+                          <img
+                            src={logoSrc}
+                            alt={company.name}
+                            className={`absolute inset-0 w-full h-full object-contain p-2 transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
+                            decoding="async"
+                            loading="eager"
+                            onLoad={() => setLogoLoaded(true)}
+                            onError={() => setLogoFailed(true)}
+                          />
+                        </div>
+                      ) : (
+                        <span className="text-5xl">{icon}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Contacts - right side */}
+                  <div className="flex-1 space-y-4">
+                  {/* Regular websites (not social media) */}
+                  {regularWebsites.length > 0 && (
                     <div>
                       <div className="text-gray-500 text-sm mb-1">{t("company.website")}</div>
                       <div className="space-y-1">
-                        {company.websites.map((w) => (
+                        {regularWebsites.map((w) => (
                           <div key={w} className="flex items-center gap-2">
                             <span className="text-[#820251]">🌐</span>
                             <a
@@ -406,6 +485,39 @@ export default function CompanyPage({ params }: PageProps) {
                               {displayUrl(w)}
                             </a>
                           </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Social media links - separate section */}
+                  {socials.length > 0 && (
+                    <div>
+                      <div className="text-gray-500 text-sm mb-2">Социальные сети</div>
+                      <div className="space-y-2">
+                        {socials.map((social, idx) => (
+                          <a
+                            key={`${social.type}-${idx}`}
+                            href={social.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-[#820251] hover:bg-gray-50 transition-all group"
+                          >
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white text-lg ${social.bgClass}`}>
+                              {social.icon}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-gray-800 group-hover:text-[#820251] transition-colors">
+                                {social.name}
+                              </div>
+                              <div className="text-sm text-gray-400 truncate">
+                                {social.url.replace(/^https?:\/\//, '').split('/').slice(0, 2).join('/')}
+                              </div>
+                            </div>
+                            <svg className="w-5 h-5 text-[#820251] group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </a>
                         ))}
                       </div>
                     </div>
@@ -491,6 +603,7 @@ export default function CompanyPage({ params }: PageProps) {
                         </div>
                       </div>
                     )}
+                  </div>
                 </div>
 
                 {/* Actions */}
@@ -602,7 +715,7 @@ export default function CompanyPage({ params }: PageProps) {
                   href={`https://yandex.ru/maps/?rtext=~${lat},${lng}&rtt=auto`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 bg-[#820251] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#6a0143] transition-colors text-sm"
+                  className="inline-flex items-center gap-2 bg-[#820251] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#7a0150] transition-colors text-sm"
                 >
                   {t("company.buildRoute")}
                 </a>
