@@ -28,31 +28,6 @@ export interface IbizCompanyExtra {
   lng: number | null;
 }
 
-export interface IbizPhoto {
-  url: string;
-  alt?: string;
-}
-
-export interface IbizProduct {
-  name: string;
-  description?: string;
-  image_url?: string;
-  price?: string;
-}
-
-export interface IbizService {
-  name: string;
-  description?: string;
-  image_url?: string;
-}
-
-export interface IbizReview {
-  author: string;
-  date?: string;
-  rating?: number;
-  text: string;
-}
-
 export interface IbizCompany {
   source: "ibiz" | "belarusinfo";
   source_id: string; // company subdomain
@@ -75,12 +50,6 @@ export interface IbizCompany {
   categories: IbizCategoryRef[];
   rubrics: IbizRubricRef[];
   extra: IbizCompanyExtra;
-  // Optional extended fields
-  hero_image?: string;
-  photos?: IbizPhoto[];
-  products?: IbizProduct[];
-  services_list?: IbizService[];
-  reviews?: IbizReview[];
 }
 
 export interface IbizCompanySummary {

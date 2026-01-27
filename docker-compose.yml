@@ -15,6 +15,7 @@ services:
       - news-network
     volumes:
       - ./app/public/data/ibiz:/app/public/data/ibiz:ro
+      - ./app/public/companies:/app/public/companies:ro
       - ./app/.cache/ibiz-logo-cache:/tmp/ibiz-logo-cache
     expose:
       - "3000"

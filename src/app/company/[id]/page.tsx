@@ -8,7 +8,7 @@ import AIAssistant from "@/components/AIAssistant";
 import MessageModal from "@/components/MessageModal";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useFavorites } from "@/contexts/FavoritesContext";
-import type { IbizCompanyResponse, IbizPhoneExt, IbizPhoto, IbizService, IbizProduct, IbizReview } from "@/lib/ibiz/types";
+import type { IbizCompanyResponse, IbizPhoneExt } from "@/lib/ibiz/types";
 import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
 import { IBIZ_ABOUT_OVERRIDES } from "@/lib/ibiz/aboutOverrides";
 
@@ -281,12 +281,7 @@ export default function CompanyPage({ params }: PageProps) {
 
   const companyMaybe = data?.company ?? null;
   const logoUrl = (companyMaybe?.logo_url || "").trim();
-  // Use local path directly if it starts with /, otherwise use proxy for external URLs
-  const logoSrc = useMemo(() => {
-    if (!logoUrl) return "";
-    if (logoUrl.startsWith("/")) return logoUrl;
-    return `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}`;
-  }, [logoUrl]);
+  const logoSrc = useMemo(() => (logoUrl ? `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}` : ""), [logoUrl]);
 
   const phones: IbizPhoneExt[] = useMemo(() => {
     if (!companyMaybe) return [];
@@ -351,8 +346,7 @@ export default function CompanyPage({ params }: PageProps) {
   const primaryPhone = phones?.[0]?.number || "";
   const primaryEmail = company.emails?.[0] || "";
 
-  // Priority: 1) company.about from API, 2) manual overrides, 3) auto-generated
-  const aboutText = (company.about || "").trim() || (IBIZ_ABOUT_OVERRIDES[company.source_id] || "").trim() || generateUniqueDescription(company);
+  const aboutText = (IBIZ_ABOUT_OVERRIDES[company.source_id] || "").trim() || generateUniqueDescription(company);
 
   const categoryLink = primaryCategory ? `/catalog/${primaryCategory.slug}` : "/#catalog";
   const rubricSubSlug = primaryRubric ? primaryRubric.slug.split("/").slice(1).join("/") : "";
@@ -392,69 +386,47 @@ export default function CompanyPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Hero Banner - like belarusinfo.by */}
-        {company.hero_image ? (
-          <div className="relative h-[300px] md:h-[400px] overflow-hidden">
-            <div 
-              className="absolute inset-0 bg-cover bg-center"
-              style={{ backgroundImage: `url(${company.hero_image})` }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-[#820251]/90 to-[#820251]/70" />
-            <div className="relative z-10 h-full flex flex-col justify-center px-6 md:px-12">
-              <h1 className="text-3xl md:text-4xl font-bold text-white mb-4 max-w-3xl">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white py-10">
+          <div className="w-full px-4">
+            {/* Company name - justified across full width */}
+            <div className="mb-4">
+              <h1 className="text-2xl md:text-3xl font-bold text-center tracking-wide" style={{ wordSpacing: '0.3em' }}>
                 {company.name}
               </h1>
-              <p className="text-white/90 text-lg max-w-2xl leading-relaxed">
-                {company.description}
+              <p className="text-pink-200 mt-3 text-lg">
+                {primaryCategory ? primaryCategory.name : ""}
+                {primaryRubric ? ` → ${primaryRubric.name}` : ""}
+                {company.city ? ` • ${company.city}` : ""}
               </p>
-              <div className="flex items-center gap-4 mt-6">
-                <button
-                  onClick={() => toggleFavorite(company.source_id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                    favorite ? "bg-red-500 text-white" : "bg-white/20 text-white hover:bg-white/30"
-                  }`}
+            </div>
+
+            {/* Favorite button - right aligned */}
+            <div className="w-full flex justify-end">
+              <button
+                onClick={() => toggleFavorite(company.source_id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                  favorite ? "bg-red-500 text-white" : "bg-white/10 text-white hover:bg-white/20"
+                }`}
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill={favorite ? "currentColor" : "none"}
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
                 >
-                  <svg className="w-5 h-5" fill={favorite ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                  </svg>
-                  <span>{favorite ? t("favorites.remove") : t("favorites.add")}</span>
-                </button>
-                <a href={primaryPhone ? `tel:${primaryPhone}` : undefined} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                  <span>📞</span>
-                  <span>{t("company.call")}</span>
-                </a>
-              </div>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                  />
+                </svg>
+                <span>{favorite ? t("favorites.remove") : t("favorites.add")}</span>
+              </button>
             </div>
           </div>
-        ) : (
-          <div className="bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white py-10">
-            <div className="w-full px-4">
-              <div className="mb-4">
-                <h1 className="text-2xl md:text-3xl font-bold text-center tracking-wide" style={{ wordSpacing: '0.3em' }}>
-                  {company.name}
-                </h1>
-                <p className="text-pink-200 mt-2 text-sm text-center">
-                  {primaryCategory ? primaryCategory.name : ""}
-                  {primaryRubric ? ` → ${primaryRubric.name}` : ""}
-                  {company.city ? ` • ${company.city}` : ""}
-                </p>
-              </div>
-              <div className="flex justify-end">
-                <button
-                  onClick={() => toggleFavorite(company.source_id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${
-                    favorite ? "bg-red-500 text-white" : "bg-white/10 text-white hover:bg-white/20"
-                  }`}
-                >
-                  <svg className="w-4 h-4" fill={favorite ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                  </svg>
-                  <span>{favorite ? t("favorites.remove") : t("favorites.add")}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        </div>
 
         {/* Content */}
         <div className="container mx-auto py-10 px-4">
@@ -654,111 +626,16 @@ export default function CompanyPage({ params }: PageProps) {
                 </div>
               </div>
 
-              {/* About - Beautifully formatted (NO images, like belarusinfo.by) */}
+              {/* About */}
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                   <span className="w-1 h-6 bg-[#820251] rounded"></span>
                   {t("company.about")}
                 </h2>
-                
-                {/* Render about text with formatting */}
-                <div className="text-gray-700 leading-relaxed space-y-4">
-                  {aboutText.split('\n\n').map((block, blockIdx) => {
-                    // Check if it's a header (starts with **)
-                    if (block.startsWith('**') && block.includes(':**')) {
-                      const headerText = block.replace(/\*\*/g, '').replace(':', '');
-                      return (
-                        <div key={blockIdx} className="mt-6 first:mt-0">
-                          <h3 className="text-lg font-bold text-[#820251] mb-3 flex items-center gap-2">
-                            <span className="w-8 h-8 bg-[#820251]/10 rounded-lg flex items-center justify-center">
-                              {headerText.includes('преимущества') || headerText.includes('выбирают') ? '⭐' : headerText.includes('Направления') || headerText.includes('деятельности') ? '🎯' : '📋'}
-                            </span>
-                            {headerText}
-                          </h3>
-                        </div>
-                      );
-                    }
-                    
-                    // Check if it's a list (starts with •)
-                    if (block.includes('•')) {
-                      const items = block.split('\n').filter(line => line.trim().startsWith('•'));
-                      return (
-                        <div key={blockIdx} className="space-y-2">
-                          {items.map((item, itemIdx) => {
-                            const text = item.replace('•', '').trim();
-                            const [title, description] = text.includes(' — ') ? text.split(' — ') : [text, ''];
-                            return (
-                              <div key={itemIdx} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                                <span className="w-6 h-6 bg-[#820251] text-white rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5">✓</span>
-                                <div>
-                                  <span className="font-medium text-gray-800">{title}</span>
-                                  {description && <span className="text-gray-600"> — {description}</span>}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    }
-                    
-                    // Regular paragraph
-                    if (block.trim()) {
-                      return (
-                        <p key={blockIdx} className="text-gray-700">
-                          {block.split('**').map((part, i) => 
-                            i % 2 === 1 ? <strong key={i} className="text-gray-900">{part}</strong> : part
-                          )}
-                        </p>
-                      );
-                    }
-                    return null;
-                  })}
-                </div>
-                
-{/* Final CTA - only for msu-23 */}
-                {id === "msu-23" && (
-                  <div className="mt-6 p-4 bg-gradient-to-r from-[#820251]/10 to-[#820251]/5 rounded-xl border border-[#820251]/20">
-                    <p className="text-[#820251] font-semibold text-center">
-                      🏗️ Доверьте строительство профессионалам!
-                    </p>
-                  </div>
-                )}
+                <p className="text-gray-700 leading-relaxed whitespace-pre-line">
+                  {aboutText || "—"}
+                </p>
               </div>
-
-              {/* Services with Images - like belarusinfo.by "Услуги" section */}
-              {company.services_list && company.services_list.length > 0 && (
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-2 flex items-center gap-2">
-                    <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                    Услуги
-                  </h2>
-                  <p className="text-gray-500 text-sm mb-4">Оказание услуг организациям и физическим лицам</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                    {company.services_list.map((service, idx) => (
-                      <div key={idx} className="group rounded-xl overflow-hidden border border-gray-200 hover:border-[#820251]/50 hover:shadow-lg transition-all bg-white">
-                        {service.image_url && (
-                          <a href={service.image_url} target="_blank" rel="noopener noreferrer" className="block aspect-[4/3] overflow-hidden bg-gray-100">
-                            <img
-                              src={service.image_url}
-                              alt={service.name}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              loading="lazy"
-                            />
-                          </a>
-                        )}
-                        <div className="p-4">
-                          <h4 className="font-semibold text-gray-800 group-hover:text-[#820251] transition-colors">
-                            {service.name}
-                          </h4>
-                          {service.description && (
-                            <p className="text-sm text-gray-500 mt-1 line-clamp-2">{service.description}</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Additional Services / Rubrics */}
               {company.rubrics && company.rubrics.length > 0 && (
@@ -822,136 +699,6 @@ export default function CompanyPage({ params }: PageProps) {
                   ))}
                 </div>
               </div>
-
-              {/* Photo Gallery */}
-              {company.photos && company.photos.length > 0 ? (
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                    Фотогалерея
-                  </h2>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {company.photos.map((photo, idx) => (
-                      <a
-                        key={idx}
-                        href={photo.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="group aspect-square rounded-lg overflow-hidden bg-gray-100 hover:shadow-lg transition-all"
-                      >
-                        <img
-                          src={photo.url}
-                          alt={photo.alt || `Фото ${idx + 1}`}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          loading="lazy"
-                        />
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                    Фотогалерея
-                  </h2>
-                  <div className="text-center py-8 text-gray-400">
-                    <div className="text-4xl mb-2">📷</div>
-                    <p>Фотографий пока нет</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Products */}
-              {company.products && company.products.length > 0 ? (
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                    Товары
-                  </h2>
-                  <p className="text-gray-500 text-sm mb-4">Каталог основной продукции</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {company.products.map((product, idx) => (
-                      <div key={idx} className="group rounded-xl overflow-hidden border border-gray-100 hover:border-[#820251]/30 hover:shadow-lg transition-all">
-                        {product.image_url && (
-                          <div className="aspect-square overflow-hidden bg-gray-100">
-                            <img
-                              src={product.image_url}
-                              alt={product.name}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              loading="lazy"
-                            />
-                          </div>
-                        )}
-                        <div className="p-3">
-                          <h3 className="font-medium text-gray-800 text-sm group-hover:text-[#820251] transition-colors line-clamp-2">
-                            {product.name}
-                          </h3>
-                          {product.price && (
-                            <p className="text-[#820251] font-bold mt-1">{product.price}</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                    Товары
-                  </h2>
-                  <p className="text-gray-500 text-sm mb-4">Каталог основной продукции</p>
-                  <div className="text-center py-8 text-gray-400">
-                    <div className="text-4xl mb-2">📦</div>
-                    <p>Товаров не найдено</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Reviews */}
-              {company.reviews && company.reviews.length > 0 ? (
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                    Отзывы
-                  </h2>
-                  <div className="space-y-4">
-                    {company.reviews.map((review, idx) => (
-                      <div key={idx} className="p-4 rounded-lg bg-gray-50 border border-gray-100">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="w-10 h-10 rounded-full bg-[#820251]/10 flex items-center justify-center text-[#820251] font-bold">
-                            {review.author.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <div className="font-semibold text-gray-800">{review.author}</div>
-                            {review.date && <div className="text-xs text-gray-400">{review.date}</div>}
-                          </div>
-                          {review.rating && (
-                            <div className="ml-auto flex items-center gap-1">
-                              {[...Array(5)].map((_, i) => (
-                                <span key={i} className={i < review.rating! ? "text-yellow-400" : "text-gray-300"}>★</span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <p className="text-gray-600">{review.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                    Отзывы
-                  </h2>
-                  <div className="text-center py-8 text-gray-400">
-                    <div className="text-4xl mb-2">💬</div>
-                    <p>Отзывов не найдено</p>
-                  </div>
-                </div>
-              )}
             </div>
 
           </div>
