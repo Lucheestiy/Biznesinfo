@@ -410,7 +410,7 @@ export default function CompanyPage({ params }: PageProps) {
             <div className="absolute bottom-0 left-1/4 w-40 h-40 bg-white/5 rounded-full translate-y-20" />
             
             {/* Content */}
-            <div className="relative z-10 px-4 md:px-8 py-8 md:py-10 pb-24">
+            <div className="relative z-10 px-4 md:px-8 py-5 md:py-6">
               <div className="max-w-5xl mx-auto text-center">
                 {/* Large company name */}
                 <h1 className="text-2xl md:text-4xl font-bold text-white mb-2 tracking-wide drop-shadow-lg">
@@ -437,7 +437,7 @@ export default function CompanyPage({ params }: PageProps) {
             
                       </div>
         ) : (
-          <div className="relative bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white pt-8 pb-20 md:pt-10 md:pb-24">
+          <div className="relative bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white py-5 md:py-6">
             {/* Decorative circles */}
             <div className="absolute top-0 left-0 w-32 h-32 bg-white/5 rounded-full -translate-x-16 -translate-y-16" />
             <div className="absolute top-1/2 right-0 w-24 h-24 bg-white/5 rounded-full translate-x-12" />
