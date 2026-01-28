@@ -482,15 +482,17 @@ export default function CompanyPage({ params }: PageProps) {
         <div className="bg-gradient-to-r from-[#820251] to-[#b10a78] shadow-lg">
           <div className="container mx-auto px-4">
             <nav className="flex items-center justify-center gap-1 md:gap-2 py-3 overflow-x-auto">
-              <a href="#about" className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white/90 hover:text-white hover:bg-white/20 transition-all whitespace-nowrap">
+              <a href="#about" className="flex items-center gap-1.5 px-4 py-2.5 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
                 <span>📋</span>
                 <span>О компании</span>
               </a>
-              <a href="#services" className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white/90 hover:text-white hover:bg-white/20 transition-all whitespace-nowrap">
+              <span className="text-white/40 text-xl">|</span>
+              <a href="#services" className="flex items-center gap-1.5 px-4 py-2.5 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
                 <span>⚡</span>
                 <span>Услуги</span>
               </a>
-              <a href="#photos" className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white/90 hover:text-white hover:bg-white/20 transition-all whitespace-nowrap">
+              <span className="text-white/40 text-xl">|</span>
+              <a href="#photos" className="flex items-center gap-1.5 px-4 py-2.5 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
                 <span>📷</span>
                 <span>Фото</span>
               </a>
