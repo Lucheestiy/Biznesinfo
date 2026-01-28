@@ -435,33 +435,7 @@ export default function CompanyPage({ params }: PageProps) {
               </div>
             </div>
             
-            {/* Logo positioned on the border */}
-            <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-1/2 z-20">
-              <div className="w-36 h-40 md:w-40 md:h-44 bg-white rounded-lg flex items-center justify-center overflow-hidden
-                border-4 border-white shadow-[0_15px_50px_rgba(0,0,0,0.35),0_0_60px_rgba(177,10,120,0.25)]
-                hover:shadow-[0_20px_70px_rgba(0,0,0,0.45),0_0_100px_rgba(177,10,120,0.35)]
-                transition-all duration-500 transform hover:-translate-y-3 hover:scale-[1.02]">
-                {showLogo ? (
-                  <div className="w-full h-full relative flex items-center justify-center p-2">
-                    <span className={`text-5xl md:text-6xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}>
-                      {icon}
-                    </span>
-                    <img
-                      src={logoSrc}
-                      alt={company.name}
-                      className={`absolute inset-2 w-[calc(100%-1rem)] h-[calc(100%-1rem)] object-contain transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
-                      decoding="async"
-                      loading="eager"
-                      onLoad={() => setLogoLoaded(true)}
-                      onError={() => setLogoFailed(true)}
-                    />
-                  </div>
-                ) : (
-                  <span className="text-5xl md:text-6xl">{icon}</span>
-                )}
-              </div>
-            </div>
-          </div>
+                      </div>
         ) : (
           <div className="relative bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white pt-8 pb-20 md:pt-10 md:pb-24">
             {/* Decorative circles */}
@@ -501,41 +475,39 @@ export default function CompanyPage({ params }: PageProps) {
               </div>
             </div>
 
-            {/* Logo positioned on the border - overlapping effect */}
-            <div className="absolute left-1/2 transform -translate-x-1/2 translate-y-1/2 z-20">
-              <div className="w-36 h-40 md:w-40 md:h-44 bg-white rounded-lg flex items-center justify-center overflow-hidden
-                border-4 border-white shadow-[0_15px_50px_rgba(0,0,0,0.35),0_0_60px_rgba(177,10,120,0.25),0_0_100px_rgba(177,10,120,0.15)]
-                hover:shadow-[0_20px_70px_rgba(0,0,0,0.45),0_0_100px_rgba(177,10,120,0.35),0_0_150px_rgba(177,10,120,0.2)]
-                transition-all duration-500 transform hover:-translate-y-3 hover:scale-[1.02]">
-                {showLogo ? (
-                  <div className="w-full h-full relative flex items-center justify-center p-2">
-                    <span className={`text-5xl md:text-6xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}>
-                      {icon}
-                    </span>
-                    <img
-                      src={logoSrc}
-                      alt={company.name}
-                      className={`absolute inset-2 w-[calc(100%-1rem)] h-[calc(100%-1rem)] object-contain transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
-                      decoding="async"
-                      loading="eager"
-                      onLoad={() => setLogoLoaded(true)}
-                      onError={() => setLogoFailed(true)}
-                    />
-                  </div>
-                ) : (
-                  <span className="text-5xl md:text-6xl">{icon}</span>
-                )}
-              </div>
-            </div>
-          </div>
+                      </div>
         )}
 
         {/* Content */}
-        <div className="container mx-auto pt-20 md:pt-24 px-4">
+        <div className="container mx-auto pt-6 md:pt-8 px-4">
           <div className="max-w-4xl mx-auto">
             <div className="space-y-6">
               {/* Contacts Card */}
-              <div className="bg-white rounded-lg shadow-sm p-6 pt-8">
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                {/* Logo */}
+                <div className="flex justify-center mb-6">
+                  <div className="w-32 h-36 md:w-36 md:h-40 bg-gray-50 rounded-lg flex items-center justify-center overflow-hidden border border-gray-200">
+                    {showLogo ? (
+                      <div className="w-full h-full relative flex items-center justify-center p-2">
+                        <span className={`text-4xl md:text-5xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}>
+                          {icon}
+                        </span>
+                        <img
+                          src={logoSrc}
+                          alt={company.name}
+                          className={`absolute inset-2 w-[calc(100%-1rem)] h-[calc(100%-1rem)] object-contain transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
+                          decoding="async"
+                          loading="eager"
+                          onLoad={() => setLogoLoaded(true)}
+                          onError={() => setLogoFailed(true)}
+                        />
+                      </div>
+                    ) : (
+                      <span className="text-4xl md:text-5xl">{icon}</span>
+                    )}
+                  </div>
+                </div>
+
                 <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                   <span className="w-1 h-6 bg-[#820251] rounded"></span>
                   {t("company.contacts")}
