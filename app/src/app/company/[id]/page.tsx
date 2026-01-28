@@ -392,109 +392,70 @@ export default function CompanyPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Hero Banner - like belarusinfo.by */}
-        {company.hero_image ? (
-          <div className="relative overflow-hidden">
-            {/* Hero image with blur */}
-            <div className="absolute inset-0 opacity-15">
-              <div 
-                className="absolute inset-0 bg-cover bg-center blur-sm"
-                style={{ backgroundImage: `url(${company.hero_image})` }}
-              />
-            </div>
-            {/* Beautiful gradient */}
-            <div className="absolute inset-0 bg-gradient-to-br from-[#9a0660] via-[#820251] to-[#5a0138]" />
-            {/* Decorative circles */}
-            <div className="absolute top-0 left-0 w-32 h-32 bg-white/5 rounded-full -translate-x-16 -translate-y-16" />
-            <div className="absolute top-1/2 right-0 w-24 h-24 bg-white/5 rounded-full translate-x-12" />
-            <div className="absolute bottom-0 left-1/4 w-40 h-40 bg-white/5 rounded-full translate-y-20" />
-            
-            {/* Content */}
-            <div className="relative z-10 px-4 md:px-8 py-5 md:py-6">
-              <div className="max-w-5xl mx-auto text-center">
-                {/* Large company name */}
-                <h1 className="text-2xl md:text-4xl font-bold text-white mb-2 tracking-wide drop-shadow-lg">
-                  {company.name}
-                </h1>
-                {/* Main rubric - smaller and less contrast */}
-                {primaryRubric && (
-                  <p className="text-white/60 text-sm md:text-base mb-4 font-medium">
-                    {primaryRubric.name}
-                  </p>
-                )}
-                {/* Divider line */}
-                <div className="flex justify-center mb-5">
-                  <div className="w-24 h-1 bg-white/40 rounded-full" />
-                </div>
-                {/* Description */}
-                {company.description && (
-                  <p className="text-white/90 text-sm md:text-base max-w-4xl mx-auto leading-relaxed">
-                    {company.description}
-                  </p>
-                )}
-              </div>
-            </div>
-            
-                      </div>
-        ) : (
-          <div className="relative bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white py-5 md:py-6">
-            {/* Decorative circles */}
-            <div className="absolute top-0 left-0 w-32 h-32 bg-white/5 rounded-full -translate-x-16 -translate-y-16" />
-            <div className="absolute top-1/2 right-0 w-24 h-24 bg-white/5 rounded-full translate-x-12" />
-            <div className="absolute bottom-0 left-1/4 w-40 h-40 bg-white/5 rounded-full translate-y-20" />
-
-            <div className="w-full px-4 relative z-10">
-              <div className="mb-2">
-                <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-center tracking-wide" style={{ wordSpacing: '0.2em' }}>
-                  {company.name}
-                </h1>
-                {/* Rubric below company name - less contrast */}
-                {primaryRubric && (
-                  <p className="text-pink-200/80 mt-2 text-sm md:text-base text-center font-medium">
-                    {primaryRubric.name}
-                  </p>
-                )}
-                {/* Category and city - more subtle */}
-                <p className="text-pink-200/50 mt-1 text-xs text-center">
-                  {primaryCategory ? primaryCategory.name : ""}
-                  {company.city ? ` • ${company.city}` : ""}
+        {/* Hero Banner - Profile Header */}
+        <div className="relative overflow-hidden">
+          {/* Beautiful gradient from light to dark purple */}
+          <div className="absolute inset-0 bg-gradient-to-br from-[#9a0660] via-[#820251] to-[#5a0138]" />
+          {/* Decorative circles */}
+          <div className="absolute top-0 left-0 w-32 h-32 bg-white/5 rounded-full -translate-x-16 -translate-y-16" />
+          <div className="absolute top-1/2 right-0 w-24 h-24 bg-white/5 rounded-full translate-x-12" />
+          <div className="absolute bottom-0 left-1/4 w-40 h-40 bg-white/5 rounded-full translate-y-20" />
+          <div className="absolute top-1/4 right-1/4 w-20 h-20 bg-white/5 rounded-full" />
+          
+          {/* Content */}
+          <div className="relative z-10 px-4 md:px-8 py-8 md:py-10">
+            <div className="max-w-5xl mx-auto">
+              {/* Large company name - centered */}
+              <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold text-white mb-3 tracking-wide drop-shadow-lg text-center">
+                {company.name}
+              </h1>
+              {/* Subrubric - centered */}
+              {primaryRubric && (
+                <p className="text-white/80 text-base md:text-lg mb-4 font-medium text-center">
+                  {primaryRubric.name}
                 </p>
+              )}
+              {/* Divider line */}
+              <div className="flex justify-center mb-5">
+                <div className="w-32 h-1 bg-white/40 rounded-full" />
               </div>
-              <div className="flex justify-end pt-2">
-                <button
-                  onClick={() => toggleFavorite(company.source_id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${
-                    favorite ? "bg-red-500 text-white" : "bg-white/10 text-white hover:bg-white/20"
-                  }`}
-                >
-                  <svg className="w-4 h-4" fill={favorite ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                  </svg>
-                  <span>{favorite ? t("favorites.remove") : t("favorites.add")}</span>
-                </button>
-              </div>
+              {/* Info line - left aligned */}
+              {company.description && (
+                <p className="text-white/90 text-sm md:text-base max-w-4xl mx-auto leading-relaxed text-left">
+                  {company.description}
+                </p>
+              )}
             </div>
+          </div>
+        </div>
 
-                      </div>
-        )}
-
-        {/* Anchor Menu - Bright and visible */}
-        <div className="bg-gradient-to-r from-[#820251] to-[#b10a78] shadow-lg">
+        {/* Anchor Menu - Sticky */}
+        <div className="bg-gradient-to-r from-[#820251] to-[#9a0660] shadow-lg sticky top-0 z-50">
           <div className="container mx-auto px-4">
             <nav className="flex items-center justify-center gap-1 md:gap-2 py-3 overflow-x-auto">
-              <a href="#about" className="flex items-center gap-1.5 px-4 py-2.5 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
+              <a href="#contacts" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
+                <span>📞</span>
+                <span>Контакты</span>
+              </a>
+              <span className="text-white/40 text-xl">|</span>
+              <a href="#about" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
                 <span>📋</span>
                 <span>О компании</span>
               </a>
               <span className="text-white/40 text-xl">|</span>
-              <a href="#services" className="flex items-center gap-1.5 px-4 py-2.5 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
+              <a href="#services" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
                 <span>⚡</span>
                 <span>Услуги</span>
               </a>
               <span className="text-white/40 text-xl">|</span>
-              <a href="#photos" className="flex items-center gap-1.5 px-4 py-2.5 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
+              <a href="#photos" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
                 <span>📷</span>
                 <span>Фото</span>
+              </a>
+              <span className="text-white/40 text-xl">|</span>
+              <a href="#reviews" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
+                <span>⭐</span>
+                <span>Отзывы</span>
               </a>
             </nav>
           </div>
@@ -504,32 +465,32 @@ export default function CompanyPage({ params }: PageProps) {
         <div className="container mx-auto pt-6 md:pt-8 px-4">
           <div className="max-w-4xl mx-auto">
             <div className="space-y-6">
-              {/* Contacts Card */}
-              <div id="contacts" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-16">
-                {/* Logo */}
-                <div className="flex justify-center mb-6">
-                  <div className="w-32 h-36 md:w-36 md:h-40 bg-gray-50 rounded-lg flex items-center justify-center overflow-hidden border border-gray-200">
-                    {showLogo ? (
-                      <div className="w-full h-full relative flex items-center justify-center p-2">
-                        <span className={`text-4xl md:text-5xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}>
-                          {icon}
-                        </span>
-                        <img
-                          src={logoSrc}
-                          alt={company.name}
-                          className={`absolute inset-2 w-[calc(100%-1rem)] h-[calc(100%-1rem)] object-contain transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
-                          decoding="async"
-                          loading="eager"
-                          onLoad={() => setLogoLoaded(true)}
-                          onError={() => setLogoFailed(true)}
-                        />
-                      </div>
-                    ) : (
-                      <span className="text-4xl md:text-5xl">{icon}</span>
-                    )}
-                  </div>
+              {/* Logo - separate block */}
+              <div className="bg-white rounded-lg shadow-sm p-6 flex justify-center">
+                <div className="w-40 h-44 md:w-48 md:h-52 bg-gray-50 rounded-xl flex items-center justify-center overflow-hidden border-2 border-gray-200 shadow-inner">
+                  {showLogo ? (
+                    <div className="w-full h-full relative flex items-center justify-center p-3">
+                      <span className={`text-5xl md:text-6xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}>
+                        {icon}
+                      </span>
+                      <img
+                        src={logoSrc}
+                        alt={company.name}
+                        className={`absolute inset-3 w-[calc(100%-1.5rem)] h-[calc(100%-1.5rem)] object-contain transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
+                        decoding="async"
+                        loading="eager"
+                        onLoad={() => setLogoLoaded(true)}
+                        onError={() => setLogoFailed(true)}
+                      />
+                    </div>
+                  ) : (
+                    <span className="text-5xl md:text-6xl">{icon}</span>
+                  )}
                 </div>
+              </div>
 
+              {/* Contacts Card */}
+              <div id="contacts" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-20">
                 <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                   <span className="w-1 h-6 bg-[#820251] rounded"></span>
                   {t("company.contacts")}
@@ -793,69 +754,6 @@ export default function CompanyPage({ params }: PageProps) {
                 </div>
               )}
 
-              {/* Additional Services / Rubrics */}
-              {company.rubrics && company.rubrics.length > 0 && (
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                    Услуги компании
-                  </h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {company.rubrics.map((rubric, idx) => {
-                      const catSlug = rubric.category_slug;
-                      const rubricSubSlug = rubric.slug.split("/").slice(1).join("/");
-                      const rubricHref = catSlug && rubricSubSlug ? `/catalog/${catSlug}/${rubricSubSlug}` : `/catalog/${catSlug}`;
-                      const catIcon = catSlug ? IBIZ_CATEGORY_ICONS[catSlug] || "📋" : "📋";
-
-                      return (
-                        <Link
-                          key={`${rubric.slug}-${idx}`}
-                          href={rubricHref}
-                          className="group flex items-start gap-3 p-3 rounded-xl bg-gradient-to-r from-gray-50 to-white border border-gray-100 hover:border-[#820251]/30 hover:shadow-md transition-all"
-                        >
-                          <div className="w-10 h-10 rounded-lg bg-[#820251]/10 flex items-center justify-center flex-shrink-0 group-hover:bg-[#820251]/20 transition-colors">
-                            <span className="text-lg">{catIcon}</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-gray-800 group-hover:text-[#820251] transition-colors truncate">
-                              {rubric.name}
-                            </div>
-                            <div className="text-xs text-gray-400 truncate">
-                              {rubric.category_name}
-                            </div>
-                          </div>
-                          <svg className="w-4 h-4 text-gray-300 group-hover:text-[#820251] transition-colors flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Keywords / SEO Tags */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                  Ключевые слова
-                </h2>
-                <div className="flex flex-wrap gap-2">
-                  {generateKeywords(company).map((keyword, idx) => (
-                    <Link
-                      key={idx}
-                      href={`/?q=${encodeURIComponent(keyword)}`}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-[#820251]/10 to-[#820251]/5 text-[#820251] rounded-full text-sm font-medium hover:from-[#820251]/20 hover:to-[#820251]/10 transition-all hover:shadow-sm"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                      </svg>
-                      {keyword}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-
               {/* Photo Gallery */}
               {company.photos && company.photos.length > 0 ? (
                 <div id="photos" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-16">
@@ -895,56 +793,9 @@ export default function CompanyPage({ params }: PageProps) {
                 </div>
               )}
 
-              {/* Products */}
-              {company.products && company.products.length > 0 ? (
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                    Товары
-                  </h2>
-                  <p className="text-gray-500 text-sm mb-4">Каталог основной продукции</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {company.products.map((product, idx) => (
-                      <div key={idx} className="group rounded-xl overflow-hidden border border-gray-100 hover:border-[#820251]/30 hover:shadow-lg transition-all">
-                        {product.image_url && (
-                          <div className="aspect-square overflow-hidden bg-gray-100">
-                            <img
-                              src={product.image_url}
-                              alt={product.name}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              loading="lazy"
-                            />
-                          </div>
-                        )}
-                        <div className="p-3">
-                          <h3 className="font-medium text-gray-800 text-sm group-hover:text-[#820251] transition-colors line-clamp-2">
-                            {product.name}
-                          </h3>
-                          {product.price && (
-                            <p className="text-[#820251] font-bold mt-1">{product.price}</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                    Товары
-                  </h2>
-                  <p className="text-gray-500 text-sm mb-4">Каталог основной продукции</p>
-                  <div className="text-center py-8 text-gray-400">
-                    <div className="text-4xl mb-2">📦</div>
-                    <p>Товаров не найдено</p>
-                  </div>
-                </div>
-              )}
-
               {/* Reviews */}
               {company.reviews && company.reviews.length > 0 ? (
-                <div className="bg-white rounded-lg shadow-sm p-6">
+                <div id="reviews" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-20">
                   <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                     <span className="w-1 h-6 bg-[#820251] rounded"></span>
                     Отзывы
@@ -974,17 +825,42 @@ export default function CompanyPage({ params }: PageProps) {
                   </div>
                 </div>
               ) : (
-                <div className="bg-white rounded-lg shadow-sm p-6">
+                <div id="reviews" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-20">
                   <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                     <span className="w-1 h-6 bg-[#820251] rounded"></span>
                     Отзывы
                   </h2>
                   <div className="text-center py-8 text-gray-400">
                     <div className="text-4xl mb-2">💬</div>
-                    <p>Отзывов не найдено</p>
+                    <p>Отзывов пока нет</p>
                   </div>
+                  <button className="w-full mt-4 py-3 border-2 border-[#820251] text-[#820251] rounded-lg font-semibold hover:bg-[#820251] hover:text-white transition-colors">
+                    Оставить отзыв
+                  </button>
                 </div>
               )}
+
+              {/* Keywords / SEO Tags */}
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <span className="w-1 h-6 bg-[#820251] rounded"></span>
+                  Ключевые слова
+                </h2>
+                <div className="flex flex-wrap gap-2">
+                  {generateKeywords(company).map((keyword, idx) => (
+                    <Link
+                      key={idx}
+                      href={`/?q=${encodeURIComponent(keyword)}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-[#820251]/10 to-[#820251]/5 text-[#820251] rounded-full text-sm font-medium hover:from-[#820251]/20 hover:to-[#820251]/10 transition-all hover:shadow-sm"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                      </svg>
+                      {keyword}
+                    </Link>
+                  ))}
+                </div>
+              </div>
             </div>
 
           </div>
