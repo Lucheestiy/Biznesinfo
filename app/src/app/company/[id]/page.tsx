@@ -478,23 +478,23 @@ export default function CompanyPage({ params }: PageProps) {
                       </div>
         )}
 
-        {/* Anchor Menu */}
-        <div className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm">
+        {/* Anchor Menu - Bright and visible */}
+        <div className="bg-gradient-to-r from-[#820251] to-[#b10a78] shadow-lg">
           <div className="container mx-auto px-4">
-            <nav className="flex items-center justify-center gap-1 md:gap-2 py-2 overflow-x-auto">
-              <a href="#contacts" className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-white hover:bg-[#820251] transition-all whitespace-nowrap">
+            <nav className="flex items-center justify-center gap-1 md:gap-2 py-3 overflow-x-auto">
+              <a href="#contacts" className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white/90 hover:text-white hover:bg-white/20 transition-all whitespace-nowrap">
                 <span>📞</span>
                 <span>Контакты</span>
               </a>
-              <a href="#about" className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-white hover:bg-[#820251] transition-all whitespace-nowrap">
+              <a href="#about" className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white/90 hover:text-white hover:bg-white/20 transition-all whitespace-nowrap">
                 <span>📋</span>
                 <span>О компании</span>
               </a>
-              <a href="#services" className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-white hover:bg-[#820251] transition-all whitespace-nowrap">
+              <a href="#services" className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white/90 hover:text-white hover:bg-white/20 transition-all whitespace-nowrap">
                 <span>⚡</span>
                 <span>Услуги</span>
               </a>
-              <a href="#photos" className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-white hover:bg-[#820251] transition-all whitespace-nowrap">
+              <a href="#photos" className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white/90 hover:text-white hover:bg-white/20 transition-all whitespace-nowrap">
                 <span>📷</span>
                 <span>Фото</span>
               </a>
