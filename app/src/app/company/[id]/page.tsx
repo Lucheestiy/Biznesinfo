@@ -494,10 +494,6 @@ export default function CompanyPage({ params }: PageProps) {
                 <span>⚡</span>
                 <span>Услуги</span>
               </a>
-              <a href="#photos" className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white/90 hover:text-white hover:bg-white/20 transition-all whitespace-nowrap">
-                <span>📷</span>
-                <span>Фото</span>
-              </a>
             </nav>
           </div>
         </div>
