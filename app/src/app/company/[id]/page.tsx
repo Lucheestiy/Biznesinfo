@@ -478,12 +478,36 @@ export default function CompanyPage({ params }: PageProps) {
                       </div>
         )}
 
+        {/* Anchor Menu */}
+        <div className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm">
+          <div className="container mx-auto px-4">
+            <nav className="flex items-center justify-center gap-1 md:gap-2 py-2 overflow-x-auto">
+              <a href="#contacts" className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-white hover:bg-[#820251] transition-all whitespace-nowrap">
+                <span>📞</span>
+                <span>Контакты</span>
+              </a>
+              <a href="#about" className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-white hover:bg-[#820251] transition-all whitespace-nowrap">
+                <span>📋</span>
+                <span>О компании</span>
+              </a>
+              <a href="#services" className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-white hover:bg-[#820251] transition-all whitespace-nowrap">
+                <span>⚡</span>
+                <span>Услуги</span>
+              </a>
+              <a href="#photos" className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-white hover:bg-[#820251] transition-all whitespace-nowrap">
+                <span>📷</span>
+                <span>Фото</span>
+              </a>
+            </nav>
+          </div>
+        </div>
+
         {/* Content */}
         <div className="container mx-auto pt-6 md:pt-8 px-4">
           <div className="max-w-4xl mx-auto">
             <div className="space-y-6">
               {/* Contacts Card */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
+              <div id="contacts" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-16">
                 {/* Logo */}
                 <div className="flex justify-center mb-6">
                   <div className="w-32 h-36 md:w-36 md:h-40 bg-gray-50 rounded-lg flex items-center justify-center overflow-hidden border border-gray-200">
@@ -672,7 +696,7 @@ export default function CompanyPage({ params }: PageProps) {
               </div>
 
               {/* About - Beautifully formatted (NO images, like belarusinfo.by) */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
+              <div id="about" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-16">
                 <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                   <span className="w-1 h-6 bg-[#820251] rounded"></span>
                   {t("company.about")}
@@ -744,7 +768,7 @@ export default function CompanyPage({ params }: PageProps) {
 
               {/* Services with Images - like belarusinfo.by "Услуги" section */}
               {company.services_list && company.services_list.length > 0 && (
-                <div className="bg-white rounded-lg shadow-sm p-6">
+                <div id="services" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-16">
                   <h2 className="text-xl font-bold text-gray-800 mb-2 flex items-center gap-2">
                     <span className="w-1 h-6 bg-[#820251] rounded"></span>
                     Услуги
@@ -842,7 +866,7 @@ export default function CompanyPage({ params }: PageProps) {
 
               {/* Photo Gallery */}
               {company.photos && company.photos.length > 0 ? (
-                <div className="bg-white rounded-lg shadow-sm p-6">
+                <div id="photos" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-16">
                   <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                     <span className="w-1 h-6 bg-[#820251] rounded"></span>
                     Фотогалерея
@@ -867,7 +891,7 @@ export default function CompanyPage({ params }: PageProps) {
                   </div>
                 </div>
               ) : (
-                <div className="bg-white rounded-lg shadow-sm p-6">
+                <div id="photos" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-16">
                   <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                     <span className="w-1 h-6 bg-[#820251] rounded"></span>
                     Фотогалерея
