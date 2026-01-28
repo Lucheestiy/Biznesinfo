@@ -394,52 +394,99 @@ export default function CompanyPage({ params }: PageProps) {
 
         {/* Hero Banner - like belarusinfo.by */}
         {company.hero_image ? (
-          <div className="relative h-[300px] md:h-[400px] overflow-hidden">
-            <div 
-              className="absolute inset-0 bg-cover bg-center"
-              style={{ backgroundImage: `url(${company.hero_image})` }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-[#820251]/90 to-[#820251]/70" />
-            <div className="relative z-10 h-full flex flex-col justify-center px-6 md:px-12">
-              <h1 className="text-3xl md:text-4xl font-bold text-white mb-4 max-w-3xl">
-                {company.name}
-              </h1>
-              <p className="text-white/90 text-lg max-w-2xl leading-relaxed">
-                {company.description}
-              </p>
-              <div className="flex items-center gap-4 mt-6">
-                <button
-                  onClick={() => toggleFavorite(company.source_id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                    favorite ? "bg-red-500 text-white" : "bg-white/20 text-white hover:bg-white/30"
-                  }`}
-                >
-                  <svg className="w-5 h-5" fill={favorite ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                  </svg>
-                  <span>{favorite ? t("favorites.remove") : t("favorites.add")}</span>
-                </button>
-                <a href={primaryPhone ? `tel:${primaryPhone}` : undefined} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                  <span>📞</span>
-                  <span>{t("company.call")}</span>
-                </a>
+          <div className="relative overflow-hidden">
+            {/* Hero image with blur */}
+            <div className="absolute inset-0 opacity-15">
+              <div 
+                className="absolute inset-0 bg-cover bg-center blur-sm"
+                style={{ backgroundImage: `url(${company.hero_image})` }}
+              />
+            </div>
+            {/* Beautiful gradient */}
+            <div className="absolute inset-0 bg-gradient-to-br from-[#9a0660] via-[#820251] to-[#5a0138]" />
+            {/* Decorative circles */}
+            <div className="absolute top-0 left-0 w-32 h-32 bg-white/5 rounded-full -translate-x-16 -translate-y-16" />
+            <div className="absolute top-1/2 right-0 w-24 h-24 bg-white/5 rounded-full translate-x-12" />
+            <div className="absolute bottom-0 left-1/4 w-40 h-40 bg-white/5 rounded-full translate-y-20" />
+            
+            {/* Content */}
+            <div className="relative z-10 px-4 md:px-8 py-8 md:py-10 pb-24">
+              <div className="max-w-5xl mx-auto text-center">
+                {/* Large company name */}
+                <h1 className="text-2xl md:text-4xl font-bold text-white mb-2 tracking-wide drop-shadow-lg">
+                  {company.name}
+                </h1>
+                {/* Main rubric - smaller and less contrast */}
+                {primaryRubric && (
+                  <p className="text-white/60 text-sm md:text-base mb-4 font-medium">
+                    {primaryRubric.name}
+                  </p>
+                )}
+                {/* Divider line */}
+                <div className="flex justify-center mb-5">
+                  <div className="w-24 h-1 bg-white/40 rounded-full" />
+                </div>
+                {/* Description */}
+                {company.description && (
+                  <p className="text-white/90 text-sm md:text-base max-w-4xl mx-auto leading-relaxed">
+                    {company.description}
+                  </p>
+                )}
+              </div>
+            </div>
+            
+            {/* Logo positioned on the border */}
+            <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-1/2 z-20">
+              <div className="w-32 h-32 md:w-36 md:h-36 bg-white rounded-xl flex items-center justify-center overflow-hidden
+                border-4 border-white shadow-[0_15px_50px_rgba(0,0,0,0.35),0_0_60px_rgba(177,10,120,0.25)]
+                hover:shadow-[0_20px_70px_rgba(0,0,0,0.45),0_0_100px_rgba(177,10,120,0.35)]
+                transition-all duration-500 transform hover:-translate-y-3 hover:scale-[1.02]">
+                {showLogo ? (
+                  <div className="w-full h-full relative flex items-center justify-center">
+                    <span className={`text-5xl md:text-6xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}>
+                      {icon}
+                    </span>
+                    <img
+                      src={logoSrc}
+                      alt={company.name}
+                      className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
+                      decoding="async"
+                      loading="eager"
+                      onLoad={() => setLogoLoaded(true)}
+                      onError={() => setLogoFailed(true)}
+                    />
+                  </div>
+                ) : (
+                  <span className="text-5xl md:text-6xl">{icon}</span>
+                )}
               </div>
             </div>
           </div>
         ) : (
-          <div className="bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white py-10">
-            <div className="w-full px-4">
-              <div className="mb-4">
-                <h1 className="text-2xl md:text-3xl font-bold text-center tracking-wide" style={{ wordSpacing: '0.3em' }}>
+          <div className="relative bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white pt-8 pb-20 md:pt-10 md:pb-24">
+            {/* Decorative circles */}
+            <div className="absolute top-0 left-0 w-32 h-32 bg-white/5 rounded-full -translate-x-16 -translate-y-16" />
+            <div className="absolute top-1/2 right-0 w-24 h-24 bg-white/5 rounded-full translate-x-12" />
+            <div className="absolute bottom-0 left-1/4 w-40 h-40 bg-white/5 rounded-full translate-y-20" />
+
+            <div className="w-full px-4 relative z-10">
+              <div className="mb-2">
+                <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-center tracking-wide" style={{ wordSpacing: '0.2em' }}>
                   {company.name}
                 </h1>
-                <p className="text-pink-200 mt-2 text-sm text-center">
+                {/* Rubric below company name - less contrast */}
+                {primaryRubric && (
+                  <p className="text-pink-200/80 mt-2 text-sm md:text-base text-center font-medium">
+                    {primaryRubric.name}
+                  </p>
+                )}
+                {/* Category and city - more subtle */}
+                <p className="text-pink-200/50 mt-1 text-xs text-center">
                   {primaryCategory ? primaryCategory.name : ""}
-                  {primaryRubric ? ` → ${primaryRubric.name}` : ""}
                   {company.city ? ` • ${company.city}` : ""}
                 </p>
               </div>
-              <div className="flex justify-end">
+              <div className="flex justify-end pt-2">
                 <button
                   onClick={() => toggleFavorite(company.source_id)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${
@@ -453,49 +500,48 @@ export default function CompanyPage({ params }: PageProps) {
                 </button>
               </div>
             </div>
+
+            {/* Logo positioned on the border - overlapping effect */}
+            <div className="absolute left-1/2 transform -translate-x-1/2 translate-y-1/2 z-20">
+              <div className="w-32 h-32 md:w-36 md:h-36 bg-white rounded-xl flex items-center justify-center overflow-hidden
+                border-4 border-white shadow-[0_15px_50px_rgba(0,0,0,0.35),0_0_60px_rgba(177,10,120,0.25),0_0_100px_rgba(177,10,120,0.15)]
+                hover:shadow-[0_20px_70px_rgba(0,0,0,0.45),0_0_100px_rgba(177,10,120,0.35),0_0_150px_rgba(177,10,120,0.2)]
+                transition-all duration-500 transform hover:-translate-y-3 hover:scale-[1.02]">
+                {showLogo ? (
+                  <div className="w-full h-full relative flex items-center justify-center">
+                    <span className={`text-5xl md:text-6xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}>
+                      {icon}
+                    </span>
+                    <img
+                      src={logoSrc}
+                      alt={company.name}
+                      className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
+                      decoding="async"
+                      loading="eager"
+                      onLoad={() => setLogoLoaded(true)}
+                      onError={() => setLogoFailed(true)}
+                    />
+                  </div>
+                ) : (
+                  <span className="text-5xl md:text-6xl">{icon}</span>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
         {/* Content */}
-        <div className="container mx-auto py-10 px-4">
+        <div className="container mx-auto pt-20 md:pt-24 px-4">
           <div className="max-w-4xl mx-auto">
             <div className="space-y-6">
-              {/* Contacts with Logo */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
+              {/* Contacts Card */}
+              <div className="bg-white rounded-lg shadow-sm p-6 pt-8">
                 <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                   <span className="w-1 h-6 bg-[#820251] rounded"></span>
                   {t("company.contacts")}
                 </h2>
 
-                <div className="flex flex-col md:flex-row gap-6">
-                  {/* Logo - left side */}
-                  <div className="flex-shrink-0">
-                    <div className="w-32 h-32 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden border border-gray-200">
-                      {showLogo ? (
-                        <div className="w-full h-full relative flex items-center justify-center">
-                          <span
-                            className={`text-5xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}
-                          >
-                            {icon}
-                          </span>
-                          <img
-                            src={logoSrc}
-                            alt={company.name}
-                            className={`absolute inset-0 w-full h-full object-contain p-2 transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
-                            decoding="async"
-                            loading="eager"
-                            onLoad={() => setLogoLoaded(true)}
-                            onError={() => setLogoFailed(true)}
-                          />
-                        </div>
-                      ) : (
-                        <span className="text-5xl">{icon}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Contacts - right side */}
-                  <div className="flex-1 space-y-4">
+                <div className="flex-1 space-y-4">
                   {/* Regular websites (not social media) */}
                   {regularWebsites.length > 0 && (
                     <div>
@@ -632,7 +678,6 @@ export default function CompanyPage({ params }: PageProps) {
                       </div>
                     )}
                   </div>
-                </div>
 
                 {/* Actions */}
                 <div className="flex flex-wrap gap-3 mt-6">

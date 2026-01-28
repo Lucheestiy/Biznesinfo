@@ -387,14 +387,41 @@ export default function CompanyPage({ params }: PageProps) {
         </div>
 
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white py-10">
+        <div className="relative bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white pt-10 pb-8">
           <div className="w-full px-4">
+            {/* Logo - positioned to "sit" on the border between header and content */}
+            <div className="absolute left-1/2 transform -translate-x-1/2 translate-y-1/2 z-10">
+              <div className="w-24 h-24 bg-white rounded-xl shadow-lg border-4 border-white flex items-center justify-center overflow-hidden">
+                {showLogo ? (
+                  <div className="w-full h-full relative flex items-center justify-center">
+                    <span
+                      className={`text-4xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}
+                    >
+                      {icon}
+                    </span>
+                    <img
+                      src={logoSrc}
+                      alt={company.name}
+                      className={`absolute inset-0 w-full h-full object-contain p-2 transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
+                      decoding="async"
+                      loading="eager"
+                      onLoad={() => setLogoLoaded(true)}
+                      onError={() => setLogoFailed(true)}
+                    />
+                  </div>
+                ) : (
+                  <span className="text-4xl">{icon}</span>
+                )}
+              </div>
+            </div>
+
             {/* Company name - justified across full width */}
-            <div className="mb-4">
+            <div className="mb-4 pt-8">
               <h1 className="text-2xl md:text-3xl font-bold text-center tracking-wide" style={{ wordSpacing: '0.3em' }}>
                 {company.name}
               </h1>
-              <p className="text-pink-200 mt-3 text-lg">
+              {/* Rubric under company name - smaller and less contrasting */}
+              <p className="text-pink-200/80 mt-3 text-center text-base md:text-lg font-normal">
                 {primaryCategory ? primaryCategory.name : ""}
                 {primaryRubric ? ` → ${primaryRubric.name}` : ""}
                 {company.city ? ` • ${company.city}` : ""}
@@ -440,33 +467,7 @@ export default function CompanyPage({ params }: PageProps) {
                 </h2>
 
                 <div className="flex flex-col md:flex-row gap-6">
-                  {/* Logo - left side */}
-                  <div className="flex-shrink-0">
-                    <div className="w-32 h-32 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden border border-gray-200">
-                      {showLogo ? (
-                        <div className="w-full h-full relative flex items-center justify-center">
-                          <span
-                            className={`text-5xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}
-                          >
-                            {icon}
-                          </span>
-                          <img
-                            src={logoSrc}
-                            alt={company.name}
-                            className={`absolute inset-0 w-full h-full object-contain p-2 transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
-                            decoding="async"
-                            loading="eager"
-                            onLoad={() => setLogoLoaded(true)}
-                            onError={() => setLogoFailed(true)}
-                          />
-                        </div>
-                      ) : (
-                        <span className="text-5xl">{icon}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Contacts - right side */}
+                  {/* Contacts - full width now that logo is in header */}
                   <div className="flex-1 space-y-4">
                   {/* Regular websites (not social media) */}
                   {regularWebsites.length > 0 && (
