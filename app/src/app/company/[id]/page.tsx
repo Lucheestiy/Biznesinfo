@@ -673,12 +673,6 @@ export default function CompanyPage({ params }: PageProps) {
 
                 {/* Actions */}
                 <div className="flex flex-wrap gap-3 mt-6">
-                  <a
-                    href={primaryPhone ? `tel:${primaryPhone}` : undefined}
-                    className="flex-1 min-w-[140px] bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors text-center"
-                  >
-                    {t("company.call")}
-                  </a>
                   <button
                     onClick={() => setMessageModalOpen(true)}
                     className="flex-1 min-w-[140px] border-2 border-[#820251] text-[#820251] py-3 rounded-lg font-semibold hover:bg-[#820251] hover:text-white transition-colors"
