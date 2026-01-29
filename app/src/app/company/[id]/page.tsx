@@ -630,11 +630,11 @@ export default function CompanyPage({ params }: PageProps) {
                       <div className="space-y-2">
                         {phones.map((p, idx) => (
                           <div key={`${p.number}-${idx}`} className="flex items-start gap-2">
-                            <svg className="w-4 h-4 text-[#16a34a] mt-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <svg className="w-4 h-4 text-[#166534] mt-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                               <path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.86 19.86 0 0 1 3 5.18 2 2 0 0 1 5 3h3a2 2 0 0 1 2 1.72 12.36 12.36 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L9.1 10.9a16 16 0 0 0 4 4l1.26-1.15a2 2 0 0 1 2.11-.45 12.36 12.36 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
                             </svg>
                             <div className="flex items-center gap-3 w-full flex-nowrap">
-                              <a href={`tel:${p.number}`} className="text-[#166534] font-semibold text-base md:text-lg hover:underline whitespace-nowrap">
+                              <a href={`tel:${p.number}`} className="text-[#820251] font-semibold text-base md:text-lg hover:underline whitespace-nowrap">
                                 {p.number}
                               </a>
                               {p.labels && p.labels.length > 0 && (
