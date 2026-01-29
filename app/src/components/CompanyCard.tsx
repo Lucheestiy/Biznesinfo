@@ -8,6 +8,7 @@ import AIAssistant from "./AIAssistant";
 import MessageModal from "./MessageModal";
 import type { IbizCompanySummary } from "@/lib/ibiz/types";
 import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
+import { companySlugForUrl } from "@/lib/ibiz/slug";
 import { buildHighlightRegex, highlightText } from "@/lib/utils/highlight";
 
 interface CompanyCardProps {
@@ -267,11 +268,16 @@ function SearchCompanyCard({
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
 
-  const companyHref = `/company/${encodeURIComponent(company.id)}`;
+  const companySlug = companySlugForUrl(company.id);
+  const companyHref = `/company/${encodeURIComponent(companySlug)}`;
   const favorite = isFavorite(company.id);
   const icon = company.primary_category_slug ? IBIZ_CATEGORY_ICONS[company.primary_category_slug] || "🏢" : "🏢";
   const logoUrl = (company.logo_url || "").trim();
-  const logoSrc = useMemo(() => (logoUrl ? `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}` : ""), [logoUrl]);
+  const logoSrc = useMemo(() => {
+    if (!logoUrl) return "";
+    if (logoUrl.startsWith("/")) return logoUrl;
+    return `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}`;
+  }, [logoUrl]);
   const showLogo = Boolean(logoUrl) && !logoFailed;
 
   const initials = useMemo(() => {
@@ -483,7 +489,7 @@ function SearchCompanyCard({
 
         <div className="mt-auto pt-2.5 flex justify-end">
           <Link
-            href={`/company/${encodeURIComponent(company.id)}`}
+            href={companyHref}
             className="inline-flex items-center justify-center bg-[#820251] text-white px-4 py-1.5 rounded-lg text-[15px] font-bold shadow-sm hover:bg-[#6a0143] active:bg-[#520031] transition-colors"
           >
             {t("company.details")}
@@ -502,6 +508,8 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
 
+  const companySlug = companySlugForUrl(company.id);
+  const companyHref = `/company/${encodeURIComponent(companySlug)}`;
   const favorite = isFavorite(company.id);
   const primaryWebsite = company.websites?.[0] || "";
   const primaryWebsiteHref = useMemo(() => normalizeWebsiteHref(primaryWebsite), [primaryWebsite]);
@@ -519,7 +527,11 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
 
   const icon = company.primary_category_slug ? IBIZ_CATEGORY_ICONS[company.primary_category_slug] || "🏢" : "🏢";
   const logoUrl = (company.logo_url || "").trim();
-  const logoSrc = useMemo(() => (logoUrl ? `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}` : ""), [logoUrl]);
+  const logoSrc = useMemo(() => {
+    if (!logoUrl) return "";
+    if (logoUrl.startsWith("/")) return logoUrl;
+    return `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}`;
+  }, [logoUrl]);
   const showLogo = Boolean(logoUrl) && !logoFailed;
   
   // Generate initials for companies without logo
@@ -771,7 +783,7 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
         <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-2">
           <AIAssistant companyName={company.name} companyId={company.id} isActive={false} />
           <Link
-            href={`/company/${encodeURIComponent(company.id)}`}
+            href={companyHref}
             className="bg-[#820251] text-white px-4 py-2 rounded text-sm font-medium hover:bg-[#6a0143] transition-colors"
           >
             {t("company.details")}

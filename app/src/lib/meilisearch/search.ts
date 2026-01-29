@@ -7,6 +7,8 @@ import { getCompaniesIndex, isMeiliHealthy } from "./client";
 import type { MeiliSearchParams, MeiliCompanyDocument } from "./types";
 import type { IbizCompanySummary, IbizSearchResponse, IbizSuggestResponse } from "../ibiz/types";
 import { IBIZ_CATEGORY_ICONS } from "../ibiz/icons";
+import { IBIZ_LOGO_OVERRIDES } from "../ibiz/logoOverrides";
+import { companySlugForUrl } from "../ibiz/slug";
 import { isAddressLikeLocationQuery, normalizeCityForFilter } from "../utils/location";
 
 const LOGO_CACHE_DIR = process.env.IBIZ_LOGO_CACHE_DIR?.trim() || path.join(os.tmpdir(), "ibiz-logo-cache");
@@ -459,7 +461,7 @@ function documentToSummary(doc: MeiliCompanyDocument): IbizCompanySummary {
     websites: normalizeWebsites(doc.websites),
     description: doc.description,
     about: doc.about || "",
-    logo_url: doc.logo_url,
+    logo_url: IBIZ_LOGO_OVERRIDES[doc.id] || doc.logo_url,
     primary_category_slug: doc.primary_category_slug,
     primary_category_name: doc.primary_category_name,
     primary_rubric_slug: doc.primary_rubric_slug,
@@ -645,7 +647,7 @@ export async function meiliSuggest(params: {
     type: "company" as const,
     id: hit.id,
     name: hit.name,
-    url: `/company/${hit.id}`,
+    url: `/company/${companySlugForUrl(hit.id)}`,
     icon: hit.primary_category_slug ? IBIZ_CATEGORY_ICONS[hit.primary_category_slug] || null : null,
     subtitle: hit.address || hit.city || "",
   }));

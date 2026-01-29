@@ -4,6 +4,8 @@ import { createInterface } from "node:readline";
 
 import { isAddressLikeLocationQuery, normalizeCityForFilter } from "@/lib/utils/location";
 import { generateCompanyKeywords } from "./keywords";
+import { IBIZ_LOGO_OVERRIDES } from "./logoOverrides";
+import { companySlugForUrl } from "./slug";
 
 import type {
   IbizCatalogResponse,
@@ -442,6 +444,10 @@ async function loadStoreFrom(sourcePath: string, stat: fs.Stats): Promise<Store>
     if (!id) continue;
 
     company.logo_url = normalizeLogoUrl(company.logo_url || "");
+    const logoOverride = IBIZ_LOGO_OVERRIDES[company.source_id];
+    if (logoOverride) {
+      company.logo_url = logoOverride;
+    }
     company.websites = normalizeWebsites(company.websites);
 
     const regionSlug = normalizeRegionSlug(company.city || "", company.region || "", company.address || "");
@@ -754,7 +760,7 @@ export async function ibizSuggest(params: {
         type: "company",
         id,
         name: summary.name,
-        url: `/company/${id}`,
+        url: `/company/${companySlugForUrl(id)}`,
         icon: summary.primary_category_slug ? IBIZ_CATEGORY_ICONS[summary.primary_category_slug] || null : null,
         subtitle: summary.address || summary.city || "",
       });

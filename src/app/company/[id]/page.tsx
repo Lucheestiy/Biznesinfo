@@ -387,15 +387,15 @@ export default function CompanyPage({ params }: PageProps) {
         </div>
 
         {/* Header */}
-        <div className="relative bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white pt-10 pb-8">
+        <div className="bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white pt-6 pb-8">
           <div className="w-full px-4">
-            {/* Logo - positioned to "sit" on the border between header and content */}
-            <div className="absolute left-1/2 transform -translate-x-1/2 translate-y-1/2 z-10">
-              <div className="w-24 h-24 bg-white rounded-xl shadow-lg border-4 border-white flex items-center justify-center overflow-hidden">
+            {/* Logo - centered at top */}
+            <div className="flex justify-center mb-4">
+              <div className="w-20 h-20 bg-white rounded-xl shadow-lg flex items-center justify-center overflow-hidden">
                 {showLogo ? (
                   <div className="w-full h-full relative flex items-center justify-center">
                     <span
-                      className={`text-4xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}
+                      className={`text-3xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}
                     >
                       {icon}
                     </span>
@@ -410,18 +410,18 @@ export default function CompanyPage({ params }: PageProps) {
                     />
                   </div>
                 ) : (
-                  <span className="text-4xl">{icon}</span>
+                  <span className="text-3xl">{icon}</span>
                 )}
               </div>
             </div>
 
-            {/* Company name - justified across full width */}
-            <div className="mb-4 pt-8">
+            {/* Company name - below logo */}
+            <div className="mb-4">
               <h1 className="text-2xl md:text-3xl font-bold text-center tracking-wide" style={{ wordSpacing: '0.3em' }}>
                 {company.name}
               </h1>
               {/* Rubric under company name - smaller and less contrasting */}
-              <p className="text-pink-200/80 mt-3 text-center text-base md:text-lg font-normal">
+              <p className="text-pink-200/80 mt-2 text-center text-base md:text-lg font-normal">
                 {primaryCategory ? primaryCategory.name : ""}
                 {primaryRubric ? ` → ${primaryRubric.name}` : ""}
                 {company.city ? ` • ${company.city}` : ""}

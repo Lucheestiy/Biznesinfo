@@ -1,16 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useMemo, useRef, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import AIAssistant from "@/components/AIAssistant";
 import MessageModal from "@/components/MessageModal";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useFavorites } from "@/contexts/FavoritesContext";
-import type { IbizCompanyResponse, IbizPhoneExt, IbizPhoto, IbizService, IbizProduct, IbizReview } from "@/lib/ibiz/types";
+import type { IbizCompanyResponse, IbizPhoneExt } from "@/lib/ibiz/types";
 import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
 import { IBIZ_ABOUT_OVERRIDES } from "@/lib/ibiz/aboutOverrides";
+import { IBIZ_HEADER_OVERRIDES } from "@/lib/ibiz/headerOverrides";
+import { IBIZ_LOGO_OVERRIDES } from "@/lib/ibiz/logoOverrides";
+import { getCompanyOverride } from "@/lib/companyOverrides";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -247,10 +249,30 @@ function generateUniqueDescription(company: {
   return parts.join("");
 }
 
+function capitalizeSentenceStart(value: string): string {
+  const s = (value || "").trim();
+  if (!s) return "";
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function truncateDescription(raw: string, maxLength = 250): string {
+  const text = capitalizeSentenceStart(raw);
+  if (text.length <= maxLength) return text;
+  const slice = text.slice(0, maxLength);
+  const lastPunct = Math.max(slice.lastIndexOf("."), slice.lastIndexOf("!"), slice.lastIndexOf("?"));
+  if (lastPunct >= Math.floor(maxLength * 0.6)) {
+    return slice.slice(0, lastPunct + 1);
+  }
+  const lastSpace = slice.lastIndexOf(" ");
+  if (lastSpace >= Math.floor(maxLength * 0.6)) {
+    return slice.slice(0, lastSpace);
+  }
+  return slice;
+}
+
 export default function CompanyPage({ params }: PageProps) {
   const { id } = use(params);
   const { t } = useLanguage();
-  const { isFavorite, toggleFavorite } = useFavorites();
   const [messageModalOpen, setMessageModalOpen] = useState(false);
   const [data, setData] = useState<IbizCompanyResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -262,37 +284,39 @@ export default function CompanyPage({ params }: PageProps) {
     setIsLoading(true);
     setLogoFailed(false);
     setLogoLoaded(false);
-    const normalizedId = (id || "").replace(/[-‐‑‒–—―]/g, "");
-    const idsToTry = normalizedId && normalizedId !== id ? [id, normalizedId] : [id];
-    (async () => {
-      let resp: IbizCompanyResponse | null = null;
-      for (const candidate of idsToTry) {
-        try {
-          const r = await fetch(`/api/ibiz/company/${encodeURIComponent(candidate)}`);
-          if (!r.ok) continue;
-          resp = (await r.json()) as IbizCompanyResponse;
-          break;
-        } catch {
-          // try next candidate
-        }
-      }
-      if (!isMounted) return;
-      setData(resp);
-      setIsLoading(false);
-    })();
+    fetch(`/api/ibiz/company/${encodeURIComponent(id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((resp: IbizCompanyResponse | null) => {
+        if (!isMounted) return;
+        setData(resp);
+        setIsLoading(false);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setData(null);
+        setIsLoading(false);
+      });
     return () => {
       isMounted = false;
     };
   }, [id]);
 
   const companyMaybe = data?.company ?? null;
+  const logoOverride = useMemo(() => {
+    const candidates = [id, companyMaybe?.source_id]
+      .filter(Boolean)
+      .map((value) => String(value).toLowerCase());
+    for (const key of candidates) {
+      const hit = IBIZ_LOGO_OVERRIDES[key];
+      if (hit) return hit;
+    }
+    return "";
+  }, [id, companyMaybe?.source_id]);
   const logoUrl = (companyMaybe?.logo_url || "").trim();
-  // Use local path directly if it starts with /, otherwise use proxy for external URLs
   const logoSrc = useMemo(() => {
-    if (!logoUrl) return "";
-    if (logoUrl.startsWith("/")) return logoUrl;
-    return `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}`;
-  }, [logoUrl]);
+    if (logoOverride) return logoOverride;
+    return logoUrl ? `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}` : "";
+  }, [logoOverride, logoUrl]);
 
   const phones: IbizPhoneExt[] = useMemo(() => {
     if (!companyMaybe) return [];
@@ -305,44 +329,6 @@ export default function CompanyPage({ params }: PageProps) {
     () => separateWebsitesAndSocials(companyMaybe?.websites),
     [companyMaybe?.websites]
   );
-
-  const companyNavRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const el = companyNavRef.current;
-    if (!el) return;
-
-    const ensureHeaderHeight = () => {
-      const raw = getComputedStyle(document.documentElement).getPropertyValue("--site-header-height").trim();
-      const current = Number.parseFloat(raw || "0");
-      if (!Number.isFinite(current) || current <= 0) {
-        const headerEl = document.querySelector("header");
-        const h = headerEl ? Math.round(headerEl.getBoundingClientRect().height) : 0;
-        const fallback = h > 0 ? h : 64;
-        document.documentElement.style.setProperty("--site-header-height", `${fallback}px`);
-      }
-    };
-
-    const update = () => {
-      const h = Math.round(el.getBoundingClientRect().height);
-      document.documentElement.style.setProperty("--company-nav-height", `${h}px`);
-      ensureHeaderHeight();
-    };
-
-    update();
-    window.addEventListener("resize", update);
-
-    let ro: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== "undefined") {
-      ro = new ResizeObserver(update);
-      ro.observe(el);
-    }
-
-    return () => {
-      window.removeEventListener("resize", update);
-      ro?.disconnect();
-    };
-  }, [companyMaybe?.source_id, isLoading]);
 
   if (isLoading) {
     return (
@@ -384,19 +370,46 @@ export default function CompanyPage({ params }: PageProps) {
   }
 
   const company = data.company;
-  const favorite = isFavorite(company.source_id);
 
   const primaryCategory = company.categories?.[0] ?? null;
   const primaryRubric = company.rubrics?.[0] ?? null;
 
   const icon = primaryCategory?.slug ? IBIZ_CATEGORY_ICONS[primaryCategory.slug] || "🏢" : "🏢";
-  const showLogo = Boolean(logoUrl) && !logoFailed;
+  const showLogo = Boolean(logoOverride || logoUrl) && !logoFailed;
+
+  // Company-specific overrides
+  const companyOverride = getCompanyOverride(company.source_id);
+  const logoPosition = companyOverride?.logoPosition || "left";
 
   const primaryPhone = phones?.[0]?.number || "";
   const primaryEmail = company.emails?.[0] || "";
 
-  // Priority: 1) company.about from API, 2) manual overrides, 3) auto-generated
   const aboutText = (company.about || "").trim() || (IBIZ_ABOUT_OVERRIDES[company.source_id] || "").trim() || generateUniqueDescription(company);
+
+  const headerOverride =
+    IBIZ_HEADER_OVERRIDES[company.source_id] ||
+    IBIZ_HEADER_OVERRIDES[String(company.source_id || "").toLowerCase()] ||
+    IBIZ_HEADER_OVERRIDES[String(id || "").toLowerCase()] ||
+    "";
+  const hasHeaderOverride = headerOverride.trim().length > 0;
+  const headerDescriptionSource = hasHeaderOverride
+    ? headerOverride.trim()
+    : (company.description || company.about || "").trim();
+  const headerDescription = hasHeaderOverride
+    ? headerDescriptionSource
+    : truncateDescription(headerDescriptionSource, 250);
+  const showHeaderDescription = headerDescription.length > 0;
+  const secondaryLabel = primaryRubric?.name || primaryCategory?.name || "";
+  const isMsu23 = (() => {
+    const keys = [id, company.source_id]
+      .filter(Boolean)
+      .map((value) => String(value).toLowerCase());
+    return keys.some((key) => key === "msu-23" || key === "msu23");
+  })();
+
+  const servicesList = company.services_list || [];
+  const photos = company.photos || [];
+  const reviews = company.reviews || [];
 
   const categoryLink = primaryCategory ? `/catalog/${primaryCategory.slug}` : "/#catalog";
   const rubricSubSlug = primaryRubric ? primaryRubric.slug.split("/").slice(1).join("/") : "";
@@ -436,47 +449,98 @@ export default function CompanyPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Hero Banner - Profile Header */}
+        {/* Header */}
         <div className="relative overflow-hidden">
-          {/* Beautiful gradient from light to dark purple */}
-          <div className="absolute inset-0 bg-gradient-to-br from-[#9a0660] via-[#820251] to-[#5a0138]" />
-          {/* Decorative circles */}
+          <div className="absolute inset-0 bg-gradient-to-br from-[#b10a78] via-[#820251] to-[#7a0150]" />
           <div className="absolute top-0 left-0 w-32 h-32 bg-white/5 rounded-full -translate-x-16 -translate-y-16" />
           <div className="absolute top-1/2 right-0 w-24 h-24 bg-white/5 rounded-full translate-x-12" />
           <div className="absolute bottom-0 left-1/4 w-40 h-40 bg-white/5 rounded-full translate-y-20" />
           <div className="absolute top-1/4 right-1/4 w-20 h-20 bg-white/5 rounded-full" />
-          
-          {/* Content */}
+          {!isMsu23 && company.hero_image && (
+            <img
+              src={company.hero_image}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover opacity-15 blur-sm"
+              decoding="async"
+              loading="lazy"
+            />
+          )}
+
           <div className="relative z-10 px-4 md:px-8 py-8 md:py-10">
-            <div className="max-w-5xl mx-auto">
-              {/* Large company name - centered */}
-              <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold text-white mb-3 tracking-wide drop-shadow-lg text-center">
-                {company.name}
-              </h1>
-              {/* Subrubric - centered */}
-              {primaryRubric && (
-                <p className="text-white/80 text-base md:text-lg mb-4 font-medium text-center">
-                  {primaryRubric.name}
-                </p>
-              )}
-              {/* Divider line */}
-              <div className="flex justify-center mb-5">
-                <div className="w-32 h-1 bg-white/40 rounded-full" />
+            {logoPosition === "left" && showLogo ? (
+              /* Layout: Logo left + Name right */
+              <div className="max-w-5xl mx-auto">
+                <div className="flex items-center gap-5 md:gap-8">
+                  {/* Logo */}
+                  <div className="w-20 h-20 md:w-28 md:h-28 bg-white rounded-xl shadow-lg flex-shrink-0 flex items-center justify-center overflow-hidden">
+                    <div className="w-full h-full relative flex items-center justify-center">
+                      <span className={`text-2xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}>
+                        {icon}
+                      </span>
+                      <img
+                        src={logoSrc}
+                        alt={company.name}
+                        className={`absolute inset-0 w-full h-full object-contain p-2 transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
+                        decoding="async"
+                        loading="eager"
+                        onLoad={() => setLogoLoaded(true)}
+                        onError={() => setLogoFailed(true)}
+                      />
+                    </div>
+                  </div>
+                  {/* Company info */}
+                  <div className="flex-1 min-w-0">
+                    <h1 className="text-xl md:text-3xl lg:text-4xl font-bold text-white mb-2 tracking-wide drop-shadow-lg">
+                      {company.name}
+                    </h1>
+                    {secondaryLabel && (
+                      <p className="text-white/80 text-sm md:text-base font-medium">
+                        {secondaryLabel}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {showHeaderDescription && (
+                  <p
+                    className={`text-white/90 text-sm md:text-base max-w-4xl leading-relaxed mt-5 ${
+                      hasHeaderOverride ? "" : "line-clamp-3"
+                    }`}
+                  >
+                    {headerDescription}
+                  </p>
+                )}
               </div>
-              {/* Info line - left aligned */}
-              {company.description && (
-                <p className="text-white/90 text-sm md:text-base max-w-4xl mx-auto leading-relaxed text-left">
-                  {company.description}
-                </p>
-              )}
-            </div>
+            ) : (
+              /* Default layout: Centered */
+              <div className="max-w-5xl mx-auto text-center">
+                <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold text-white mb-3 tracking-wide drop-shadow-lg">
+                  {company.name}
+                </h1>
+                {secondaryLabel && (
+                  <p className="text-white/80 text-base md:text-lg mb-4 font-medium">
+                    {secondaryLabel}
+                  </p>
+                )}
+                <div className="flex justify-center mb-5">
+                  <div className="w-32 h-1 bg-white/40 rounded-full" />
+                </div>
+                {showHeaderDescription && (
+                  <p
+                    className={`text-white/90 text-sm md:text-base max-w-4xl mx-auto leading-relaxed text-left ${
+                      hasHeaderOverride ? "" : "line-clamp-3"
+                    }`}
+                  >
+                    {headerDescription}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Anchor Menu - Sticky under header */}
+        {/* Anchor Menu */}
         <div
           id="company-menu"
-          ref={companyNavRef}
           className="sticky top-0 z-[60] bg-gradient-to-r from-[#820251] to-[#9a0660] shadow-lg"
         >
           <div className="container mx-auto px-4">
@@ -490,186 +554,192 @@ export default function CompanyPage({ params }: PageProps) {
                 <span>📋</span>
                 <span className="block text-center font-serif tracking-wide">О компании</span>
               </a>
+              {servicesList.length > 0 && (
+                <>
+                  <span className="text-white/40 text-xl">|</span>
+                  <a href="#services" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
+                    <span>⚡</span>
+                    <span className="block text-center font-serif tracking-wide">Наши услуги</span>
+                  </a>
+                </>
+              )}
+              {photos.length > 0 && (
+                <>
+                  <span className="text-white/40 text-xl">|</span>
+                  <a href="#photos" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
+                    <span>🖼️</span>
+                    <span className="block text-center font-serif tracking-wide">Фото</span>
+                  </a>
+                </>
+              )}
+              {reviews.length > 0 && (
+                <>
+                  <span className="text-white/40 text-xl">|</span>
+                  <a href="#reviews" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
+                    <span>⭐</span>
+                    <span className="block text-center font-serif tracking-wide">Отзывы</span>
+                  </a>
+                </>
+              )}
               <span className="text-white/40 text-xl">|</span>
-              <a href="#services" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
-                <span>⚡</span>
-                <span className="block text-center font-serif tracking-wide">Наши услуги</span>
+              <a href="#keywords" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
+                <span>🏷️</span>
+                <span className="block text-center font-serif tracking-wide">Ключевые слова</span>
               </a>
               <span className="text-white/40 text-xl">|</span>
-              <a href="#photos" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
-                <span>📷</span>
-                <span className="block text-center font-serif tracking-wide">Фото</span>
-              </a>
-              <span className="text-white/40 text-xl">|</span>
-              <a href="#vacancies" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
-                <span>👷</span>
-                <span className="block text-center font-serif tracking-wide">Вакансии</span>
-              </a>
-              <span className="text-white/40 text-xl">|</span>
-              <a href="#reviews" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
-                <span>⭐</span>
-                <span>Отзывы</span>
+              <a href="#map" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
+                <span>🗺️</span>
+                <span className="block text-center font-serif tracking-wide">Карта</span>
               </a>
             </nav>
           </div>
         </div>
 
-        {/* Floating menu button (variant 2) */}
-        <a
-          href="#company-menu"
-          className="fixed bottom-5 right-5 z-[70] flex items-center gap-2 rounded-full bg-[#820251] px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-[#9a0660] transition-colors"
-          aria-label="К меню"
-        >
-          <span>⬆️</span>
-          <span>Меню</span>
-        </a>
-
         {/* Content */}
-        <div className="container mx-auto pt-6 md:pt-8 px-4">
+        <div className="container mx-auto py-10 px-4">
           <div className="max-w-4xl mx-auto">
-            <div className="space-y-6">
-              {/* Logo - separate block */}
-              <div className="bg-white rounded-lg shadow-sm p-6 flex justify-center">
-                <div className="w-40 h-44 md:w-48 md:h-52 bg-gray-50 rounded-xl flex items-center justify-center overflow-hidden border-2 border-gray-200 shadow-inner">
-                  {showLogo ? (
-                    <div className="w-full h-full relative flex items-center justify-center p-3">
-                      <span className={`text-5xl md:text-6xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}>
+            <div className="space-y-8">
+              {/* Logo - only show here if not in header */}
+              {showLogo && logoPosition !== "left" && (
+                <div className="bg-white rounded-lg shadow-sm p-6 flex justify-center">
+                  <div className="w-32 h-32 md:w-44 md:h-44 bg-white rounded-xl shadow-md flex items-center justify-center overflow-hidden">
+                    <div className="w-full h-full relative flex items-center justify-center">
+                      <span className={`text-3xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}>
                         {icon}
                       </span>
                       <img
                         src={logoSrc}
                         alt={company.name}
-                        className={`absolute inset-3 w-[calc(100%-1.5rem)] h-[calc(100%-1.5rem)] object-contain transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
+                        className={`absolute inset-0 w-full h-full object-contain p-3 transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
                         decoding="async"
                         loading="eager"
                         onLoad={() => setLogoLoaded(true)}
                         onError={() => setLogoFailed(true)}
                       />
                     </div>
-                  ) : (
-                    <span className="text-5xl md:text-6xl">{icon}</span>
-                  )}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Contacts Card */}
-              <div id="contacts" className="company-section bg-white rounded-lg shadow-sm p-6">
+              {/* Contacts */}
+              <div id="contacts" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#820251]">
                 <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  <span className="w-1 h-6 bg-[#820251] rounded"></span>
+                  <span className="text-2xl">📞</span>
                   {t("company.contacts")}
                 </h2>
 
-                <div className="flex-1 space-y-4">
-                  {company.address && (
-                    <div>
-                      <div className="text-gray-500 text-sm mb-1">{t("company.address")}</div>
-                      <div className="flex items-start gap-2">
-                        <span className="text-[#820251]">📍</span>
-                        <span className="text-gray-700">{company.address}</span>
+                <div className="flex flex-col md:flex-row gap-6">
+                  {/* Contacts - full width now that logo is in header */}
+                  <div className="flex-1 space-y-4">
+                    {company.address && (
+                      <div>
+                        <div className="text-gray-500 text-sm mb-1">{t("company.address")}</div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-[#820251]">📍</span>
+                          <span className="text-gray-700">{company.address}</span>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  {/* Regular websites (not social media) */}
-                  {regularWebsites.length > 0 && (
-                    <div>
-                      <div className="text-gray-500 text-sm mb-1">{t("company.website")}</div>
-                      <div className="space-y-1">
-                        {regularWebsites.map((w) => (
-                          <div key={w} className="flex items-center gap-2">
-                            <span className="text-[#820251]">🌐</span>
-                            <a
-                              href={w}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[#820251] font-bold hover:underline truncate"
-                            >
-                              {displayUrl(w)}
-                            </a>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Social media links - separate section */}
-                  {socials.length > 0 && (
-                    <div>
-                      <div className="text-gray-500 text-sm mb-2">Социальные сети</div>
-                      <div className="space-y-2">
-                        {socials.map((social, idx) => (
-                          <a
-                            key={`${social.type}-${idx}`}
-                            href={social.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-[#820251] hover:bg-gray-50 transition-all group"
-                          >
-                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white text-lg ${social.bgClass}`}>
-                              {social.icon}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-gray-800 group-hover:text-[#820251] transition-colors">
-                                {social.name}
-                              </div>
-                              <div className="text-sm text-gray-400 truncate">
-                                {social.url.replace(/^https?:\/\//, '').split('/').slice(0, 2).join('/')}
+                    {phones && phones.length > 0 && (
+                      <div>
+                        <div className="text-gray-500 text-sm mb-2">{t("company.phone")}</div>
+                        <div className="space-y-2">
+                          {phones.map((p, idx) => (
+                            <div key={`${p.number}-${idx}`} className="flex items-start gap-2">
+                              <svg className="w-4 h-4 text-[#166534] mt-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.86 19.86 0 0 1 3 5.18 2 2 0 0 1 5 3h3a2 2 0 0 1 2 1.72 12.36 12.36 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L9.1 10.9a16 16 0 0 0 4 4l1.26-1.15a2 2 0 0 1 2.11-.45 12.36 12.36 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                              </svg>
+                              <div className="flex items-center gap-3 w-full flex-nowrap">
+                                <a href={`tel:${p.number}`} className="text-[#820251] font-semibold text-base md:text-lg hover:underline whitespace-nowrap">
+                                  {p.number}
+                                </a>
+                                {p.labels && p.labels.length > 0 && (
+                                  <div className="text-sm md:text-base text-gray-500 ml-auto text-right whitespace-nowrap">{p.labels.join(", ")}</div>
+                                )}
                               </div>
                             </div>
-                            <svg className="w-5 h-5 text-[#820251] group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                          </a>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {phones && phones.length > 0 && (
-                    <div>
-                      <div className="text-gray-500 text-sm mb-2">{t("company.phone")}</div>
-                      <div className="space-y-2">
-                        {phones.map((p, idx) => (
-                          <div key={`${p.number}-${idx}`} className="flex items-start gap-2">
-                            <svg className="w-4 h-4 text-[#166534] mt-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                              <path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.86 19.86 0 0 1 3 5.18 2 2 0 0 1 5 3h3a2 2 0 0 1 2 1.72 12.36 12.36 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L9.1 10.9a16 16 0 0 0 4 4l1.26-1.15a2 2 0 0 1 2.11-.45 12.36 12.36 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                            </svg>
-                            <div className="flex items-center gap-3 w-full flex-nowrap">
-                              <a href={`tel:${p.number}`} className="text-[#820251] font-semibold text-base md:text-lg hover:underline whitespace-nowrap">
-                                {p.number}
+                    {regularWebsites.length > 0 && (
+                      <div>
+                        <div className="text-gray-500 text-sm mb-1">{t("company.website")}</div>
+                        <div className="space-y-1">
+                          {regularWebsites.map((w) => (
+                            <div key={w} className="flex items-center gap-2">
+                              <span className="text-[#820251]">🌐</span>
+                              <a
+                                href={w}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[#820251] font-bold hover:underline truncate"
+                              >
+                                {displayUrl(w)}
                               </a>
-                              {p.labels && p.labels.length > 0 && (
-                                <div className="text-sm md:text-base text-gray-500 ml-auto text-right whitespace-nowrap">{p.labels.join(", ")}</div>
-                              )}
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  
-                  {company.emails && company.emails.length > 0 && (
-                    <div>
-                      <div className="text-gray-500 text-sm mb-1">{t("company.email")}</div>
-                      <div className="space-y-1">
-                        {company.emails.map((e) => (
-                          <div key={e} className="flex items-center gap-2">
-                            <svg className="w-4 h-4 text-[#16a34a]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                              <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
-                              <path d="M22 6l-10 7L2 6" />
-                            </svg>
+                    )}
+
+                    {company.emails && company.emails.length > 0 && (
+                      <div>
+                        <div className="text-gray-500 text-sm mb-1">{t("company.email")}</div>
+                        <div className="space-y-1">
+                          {company.emails.map((e) => (
+                            <div key={e} className="flex items-center gap-2">
+                              <svg className="w-4 h-4 text-[#166534]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
+                                <path d="M22 6l-10 7L2 6" />
+                              </svg>
+                              <a
+                                href={`https://mail.yandex.ru/compose?to=${encodeURIComponent(e)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[#820251] hover:underline truncate"
+                              >
+                                {e}
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {socials.length > 0 && (
+                      <div>
+                        <div className="text-gray-500 text-sm mb-2">Социальные сети</div>
+                        <div className="space-y-2">
+                          {socials.map((social, idx) => (
                             <a
-                              href={`https://mail.yandex.ru/compose?to=${encodeURIComponent(e)}`}
+                              key={`${social.type}-${idx}`}
+                              href={social.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-[#820251] hover:underline truncate"
+                              className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-[#820251] hover:bg-gray-50 transition-all group"
                             >
-                              {e}
+                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white text-lg ${social.bgClass}`}>
+                                {social.icon}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-gray-800 group-hover:text-[#820251] transition-colors">
+                                  {social.name}
+                                </div>
+                                <div className="text-sm text-gray-400 truncate">
+                                  {social.url.replace(/^https?:\/\//, '').split('/').slice(0, 2).join('/')}
+                                </div>
+                              </div>
+                              <svg className="w-5 h-5 text-[#820251] group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
                             </a>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
                   {(company.unp || company.contact_person) && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -700,17 +770,14 @@ export default function CompanyPage({ params }: PageProps) {
                       </div>
                     )}
                   </div>
+                </div>
 
                 {/* Actions */}
                 <div className="flex flex-wrap gap-3 mt-6">
                   <button
                     onClick={() => setMessageModalOpen(true)}
-                    className="flex-1 min-w-[140px] flex items-center justify-center gap-2.5 bg-white border border-[#166534] text-[#166534] py-3.5 rounded-md font-medium tracking-wide hover:bg-[#166534] hover:text-white transition-all duration-200"
+                    className="flex-1 min-w-[140px] border-2 border-[#166534] text-[#166534] py-3 rounded-lg font-semibold hover:bg-[#166534] hover:text-white transition-colors"
                   >
-                    <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                      <polyline points="22,6 12,13 2,6" />
-                    </svg>
                     {t("company.write")}
                   </button>
                   <div className="w-full sm:w-auto">
@@ -719,202 +786,138 @@ export default function CompanyPage({ params }: PageProps) {
                 </div>
               </div>
 
-              {/* About - Beautifully formatted (NO images, like belarusinfo.by) */}
-              <div id="about" className="company-section bg-white rounded-lg shadow-sm p-6">
+              {/* Divider between Contacts and About */}
+              <div className="h-3 bg-gradient-to-r from-[#820251]/10 via-[#820251]/20 to-[#820251]/10 rounded-full" aria-hidden="true" />
+
+              {/* About */}
+              <div id="about" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#820251]">
                 <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  <span className="w-1 h-6 bg-[#820251] rounded"></span>
+                  <span className="text-2xl">📋</span>
                   {t("company.about")}
                 </h2>
-                
-                {/* Render about text with formatting */}
-                <div className="text-gray-700 leading-relaxed space-y-4">
-                  {aboutText.split('\n\n').map((block, blockIdx) => {
-                    // Check if it's a header (starts with **)
-                    if (block.startsWith('**') && block.includes(':**')) {
-                      const headerText = block.replace(/\*\*/g, '').replace(':', '');
-                      return (
-                        <div key={blockIdx} className="mt-6 first:mt-0">
-                          <h3 className="text-lg font-bold text-[#820251] mb-3 flex items-center gap-2">
-                            <span className="w-8 h-8 bg-[#820251]/10 rounded-lg flex items-center justify-center">
-                              {headerText.includes('преимущества') || headerText.includes('выбирают') ? '⭐' : headerText.includes('Направления') || headerText.includes('деятельности') ? '🎯' : '📋'}
-                            </span>
-                            {headerText}
-                          </h3>
-                        </div>
-                      );
-                    }
-                    
-                    // Check if it's a list (starts with •)
-                    if (block.includes('•')) {
-                      const items = block.split('\n').filter(line => line.trim().startsWith('•'));
-                      return (
-                        <div key={blockIdx} className="space-y-2">
-                          {items.map((item, itemIdx) => {
-                            const text = item.replace('•', '').trim();
-                            const [title, description] = text.includes(' — ') ? text.split(' — ') : [text, ''];
-                            return (
-                              <div key={itemIdx} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                                <span className="w-6 h-6 bg-[#820251] text-white rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5">✓</span>
-                                <div>
-                                  <span className="font-medium text-gray-800">{title}</span>
-                                  {description && <span className="text-gray-600"> — {description}</span>}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    }
-                    
-                    // Regular paragraph
-                    if (block.trim()) {
-                      return (
-                        <p key={blockIdx} className="text-gray-700">
-                          {block.split('**').map((part, i) => 
-                            i % 2 === 1 ? <strong key={i} className="text-gray-900">{part}</strong> : part
-                          )}
-                        </p>
-                      );
-                    }
-                    return null;
-                  })}
-                </div>
-                
-{/* Final CTA - only for msu-23 */}
-                {id === "msu-23" && (
-                  <div className="mt-6 p-4 bg-gradient-to-r from-[#820251]/10 to-[#820251]/5 rounded-xl border border-[#820251]/20">
-                    <p className="text-[#820251] font-semibold text-center">
-                      🏗️ Доверьте строительство профессионалам!
-                    </p>
-                  </div>
-                )}
+                <p className="text-gray-700 leading-relaxed whitespace-pre-line">
+                  {aboutText || "—"}
+                </p>
               </div>
 
-              {/* Services with Images - like belarusinfo.by "Услуги" section */}
-              {company.services_list && company.services_list.length > 0 && (
-                <div id="services" className="company-section bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-2 flex items-center gap-2">
-                    <span className="w-1 h-6 bg-[#820251] rounded"></span>
+              {/* Services - only show if has actual services */}
+              {servicesList.length > 0 && (
+                <>
+                  {/* Divider */}
+                  <div className="flex items-center justify-center gap-3" aria-hidden="true">
+                    <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#820251]/20 to-transparent" />
+                    <span className="text-[#820251]/40">✦</span>
+                    <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#820251]/20 to-transparent" />
+                  </div>
+                  <div id="services" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#b10a78]">
+                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <span className="text-2xl">⚡</span>
                     Наши услуги
                   </h2>
-                  <p className="text-gray-500 text-sm mb-4">Оказание услуг организациям и физическим лицам</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                    {company.services_list.map((service, idx) => (
-                      <div key={idx} className="group rounded-xl overflow-hidden border border-gray-200 hover:border-[#820251]/50 hover:shadow-lg transition-all bg-white">
-                        {service.image_url && (
-                          <a href={service.image_url} target="_blank" rel="noopener noreferrer" className="block aspect-[4/3] overflow-hidden bg-gray-100">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {servicesList.map((service, idx) => (
+                      <div
+                        key={`${service.name}-${idx}`}
+                        className="group rounded-xl border border-gray-100 bg-gradient-to-r from-gray-50 to-white p-4 hover:border-[#820251]/30 hover:shadow-md transition-all"
+                      >
+                        {service.image_url ? (
+                          <div className="w-full h-32 rounded-lg overflow-hidden bg-gray-100 mb-3">
                             <img
                               src={service.image_url}
                               alt={service.name}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              className="w-full h-full object-cover"
                               loading="lazy"
                             />
-                          </a>
+                          </div>
+                        ) : (
+                          <div className="w-full h-32 rounded-lg bg-[#820251]/10 flex items-center justify-center text-2xl mb-3">
+                            ⚙️
+                          </div>
                         )}
-                        <div className="p-4">
-                          <h4 className="font-semibold text-gray-800 group-hover:text-[#820251] transition-colors">
-                            {service.name}
-                          </h4>
-                          {service.description && (
-                            <p className="text-sm text-gray-500 mt-1 line-clamp-2">{service.description}</p>
-                          )}
-                        </div>
+                        <div className="font-semibold text-gray-800 mb-1">{service.name}</div>
+                        {service.description && (
+                          <div className="text-sm text-gray-600 line-clamp-3">{service.description}</div>
+                        )}
                       </div>
                     ))}
                   </div>
                 </div>
+                </>
               )}
 
-              {/* Photo Gallery */}
-              {company.photos && company.photos.length > 0 ? (
-                <div id="photos" className="company-section bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                    Фотогалерея
-                  </h2>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {company.photos.map((photo, idx) => (
-                      <a
-                        key={idx}
-                        href={photo.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="group aspect-square rounded-lg overflow-hidden bg-gray-100 hover:shadow-lg transition-all"
-                      >
-                        <img
-                          src={photo.url}
-                          alt={photo.alt || `Фото ${idx + 1}`}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          loading="lazy"
-                        />
-                      </a>
-                    ))}
+              {/* Photos - only show if has photos */}
+              {photos.length > 0 && (
+                <>
+                  {/* Divider */}
+                  <div className="flex items-center justify-center gap-3" aria-hidden="true">
+                    <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#820251]/20 to-transparent" />
+                    <span className="text-[#820251]/40">✦</span>
+                    <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#820251]/20 to-transparent" />
                   </div>
-                </div>
-              ) : (
-                <div id="photos" className="company-section bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                    Фотогалерея
-                  </h2>
-                  <div className="text-center py-8 text-gray-400">
-                    <div className="text-4xl mb-2">📷</div>
-                    <p>Фотографий пока нет</p>
+                  <div id="photos" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#7a0150]">
+                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <span className="text-2xl">🖼️</span>
+                      Фотогалерея
+                    </h2>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {photos.map((photo, idx) => (
+                        <div key={`${photo.url}-${idx}`} className="aspect-square rounded-lg overflow-hidden bg-gray-100">
+                          <img
+                            src={photo.url}
+                            alt={photo.alt || company.name}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                </>
               )}
 
-              {/* Reviews */}
-              {company.reviews && company.reviews.length > 0 ? (
-                <div id="reviews" className="company-section bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                    Отзывы
-                  </h2>
-                  <div className="space-y-4">
-                    {company.reviews.map((review, idx) => (
-                      <div key={idx} className="p-4 rounded-lg bg-gray-50 border border-gray-100">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="w-10 h-10 rounded-full bg-[#820251]/10 flex items-center justify-center text-[#820251] font-bold">
-                            {review.author.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
+              {/* Reviews - only show if has reviews */}
+              {reviews.length > 0 && (
+                <>
+                  {/* Divider */}
+                  <div className="flex items-center justify-center gap-3" aria-hidden="true">
+                    <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#820251]/20 to-transparent" />
+                    <span className="text-[#820251]/40">✦</span>
+                    <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#820251]/20 to-transparent" />
+                  </div>
+                  <div id="reviews" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#820251]">
+                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <span className="text-2xl">⭐</span>
+                      Отзывы
+                    </h2>
+                    <div className="space-y-4">
+                      {reviews.map((review, idx) => (
+                        <div key={`${review.author}-${idx}`} className="p-4 border border-gray-100 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
                             <div className="font-semibold text-gray-800">{review.author}</div>
-                            {review.date && <div className="text-xs text-gray-400">{review.date}</div>}
+                            {review.date && <div className="text-sm text-gray-400">{review.date}</div>}
                           </div>
-                          {review.rating && (
-                            <div className="ml-auto flex items-center gap-1">
-                              {[...Array(5)].map((_, i) => (
-                                <span key={i} className={i < review.rating! ? "text-yellow-400" : "text-gray-300"}>★</span>
-                              ))}
-                            </div>
+                          {typeof review.rating === "number" && (
+                            <div className="text-sm text-yellow-600 mb-2">Рейтинг: {review.rating}/5</div>
                           )}
+                          <div className="text-gray-700">{review.text}</div>
                         </div>
-                        <p className="text-gray-600">{review.text}</p>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div id="reviews" className="company-section bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                    Отзывы
-                  </h2>
-                  <div className="text-center py-8 text-gray-400">
-                    <div className="text-4xl mb-2">💬</div>
-                    <p>Отзывов пока нет</p>
-                  </div>
-                  <button className="w-full mt-4 py-3 border-2 border-[#820251] text-[#820251] rounded-lg font-semibold hover:bg-[#820251] hover:text-white transition-colors">
-                    Оставить отзыв
-                  </button>
-                </div>
+                </>
               )}
+
+              {/* Divider before Keywords */}
+              <div className="flex items-center justify-center gap-3" aria-hidden="true">
+                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#820251]/20 to-transparent" />
+                <span className="text-[#820251]/40">✦</span>
+                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#820251]/20 to-transparent" />
+              </div>
 
               {/* Keywords / SEO Tags */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
+              <div id="keywords" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#b10a78]">
                 <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  <span className="w-1 h-6 bg-[#820251] rounded"></span>
+                  <span className="text-2xl">🏷️</span>
                   Ключевые слова
                 </h2>
                 <div className="flex flex-wrap gap-2">
@@ -932,18 +935,25 @@ export default function CompanyPage({ params }: PageProps) {
                   ))}
                 </div>
               </div>
+
+              {/* Divider before Map */}
+              <div className="flex items-center justify-center gap-3" aria-hidden="true">
+                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#820251]/20 to-transparent" />
+                <span className="text-[#820251]/40">✦</span>
+                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#820251]/20 to-transparent" />
+              </div>
             </div>
 
           </div>
 
           {/* Map */}
-          {hasGeo && lat != null && lng != null && (
-            <div className="mt-8 bg-white rounded-lg shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                  <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                  {t("company.locationOnMap")}
-                </h2>
+          <div id="map" className="max-w-4xl mx-auto bg-white rounded-xl shadow-md p-6 border-l-4 border-[#7a0150]">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <span className="text-2xl">🗺️</span>
+                {t("company.locationOnMap")}
+              </h2>
+              {hasGeo && lat != null && lng != null && (
                 <a
                   href={`https://yandex.ru/maps/?rtext=~${lat},${lng}&rtt=auto`}
                   target="_blank"
@@ -952,7 +962,9 @@ export default function CompanyPage({ params }: PageProps) {
                 >
                   {t("company.buildRoute")}
                 </a>
-              </div>
+              )}
+            </div>
+            {hasGeo && lat != null && lng != null ? (
               <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
                 <iframe
                   src={`https://yandex.ru/map-widget/v1/?ll=${lng}%2C${lat}&z=16&pt=${lng}%2C${lat}%2Cpm2rdm`}
@@ -963,8 +975,10 @@ export default function CompanyPage({ params }: PageProps) {
                   className="w-full h-full"
                 ></iframe>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="text-gray-500">Карта пока недоступна.</div>
+            )}
+          </div>
 
           {/* Back link */}
           <div className="mt-8">
@@ -977,6 +991,19 @@ export default function CompanyPage({ params }: PageProps) {
           </div>
         </div>
       </main>
+
+      {/* Floating menu / scroll-to-top button */}
+      <button
+        type="button"
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        className="fixed bottom-6 right-4 z-[70] flex items-center gap-2 px-4 py-2 rounded-full bg-[#820251] text-white shadow-lg hover:bg-[#7a0150] transition-colors"
+        aria-label="Наверх"
+      >
+        <span className="text-sm font-semibold">Меню</span>
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M18 15l-6-6-6 6" />
+        </svg>
+      </button>
 
       <Footer />
 
