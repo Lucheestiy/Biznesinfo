@@ -13,7 +13,7 @@ import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
 import { IBIZ_ABOUT_OVERRIDES } from "@/lib/ibiz/aboutOverrides";
 
 interface PageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 function displayUrl(raw: string): string {
@@ -248,7 +248,7 @@ function generateUniqueDescription(company: {
 }
 
 export default function CompanyPage({ params }: PageProps) {
-  const { id } = params;
+  const { id } = use(params);
   const { t } = useLanguage();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [messageModalOpen, setMessageModalOpen] = useState(false);
