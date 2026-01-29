@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import AIAssistant from "@/components/AIAssistant";
@@ -13,7 +13,7 @@ import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
 import { IBIZ_ABOUT_OVERRIDES } from "@/lib/ibiz/aboutOverrides";
 
 interface PageProps {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }
 
 function displayUrl(raw: string): string {
@@ -248,7 +248,7 @@ function generateUniqueDescription(company: {
 }
 
 export default function CompanyPage({ params }: PageProps) {
-  const { id } = use(params);
+  const { id } = params;
   const { t } = useLanguage();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [messageModalOpen, setMessageModalOpen] = useState(false);
@@ -262,18 +262,24 @@ export default function CompanyPage({ params }: PageProps) {
     setIsLoading(true);
     setLogoFailed(false);
     setLogoLoaded(false);
-    fetch(`/api/ibiz/company/${encodeURIComponent(id)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((resp: IbizCompanyResponse | null) => {
-        if (!isMounted) return;
-        setData(resp);
-        setIsLoading(false);
-      })
-      .catch(() => {
-        if (!isMounted) return;
-        setData(null);
-        setIsLoading(false);
-      });
+    const normalizedId = (id || "").replace(/[-‐‑‒–—―]/g, "");
+    const idsToTry = normalizedId && normalizedId !== id ? [id, normalizedId] : [id];
+    (async () => {
+      let resp: IbizCompanyResponse | null = null;
+      for (const candidate of idsToTry) {
+        try {
+          const r = await fetch(`/api/ibiz/company/${encodeURIComponent(candidate)}`);
+          if (!r.ok) continue;
+          resp = (await r.json()) as IbizCompanyResponse;
+          break;
+        } catch {
+          // try next candidate
+        }
+      }
+      if (!isMounted) return;
+      setData(resp);
+      setIsLoading(false);
+    })();
     return () => {
       isMounted = false;
     };
@@ -299,6 +305,44 @@ export default function CompanyPage({ params }: PageProps) {
     () => separateWebsitesAndSocials(companyMaybe?.websites),
     [companyMaybe?.websites]
   );
+
+  const companyNavRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = companyNavRef.current;
+    if (!el) return;
+
+    const ensureHeaderHeight = () => {
+      const raw = getComputedStyle(document.documentElement).getPropertyValue("--site-header-height").trim();
+      const current = Number.parseFloat(raw || "0");
+      if (!Number.isFinite(current) || current <= 0) {
+        const headerEl = document.querySelector("header");
+        const h = headerEl ? Math.round(headerEl.getBoundingClientRect().height) : 0;
+        const fallback = h > 0 ? h : 64;
+        document.documentElement.style.setProperty("--site-header-height", `${fallback}px`);
+      }
+    };
+
+    const update = () => {
+      const h = Math.round(el.getBoundingClientRect().height);
+      document.documentElement.style.setProperty("--company-nav-height", `${h}px`);
+      ensureHeaderHeight();
+    };
+
+    update();
+    window.addEventListener("resize", update);
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(update);
+      ro.observe(el);
+    }
+
+    return () => {
+      window.removeEventListener("resize", update);
+      ro?.disconnect();
+    };
+  }, [companyMaybe?.source_id, isLoading]);
 
   if (isLoading) {
     return (
@@ -429,28 +473,37 @@ export default function CompanyPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Anchor Menu - Sticky */}
-        <div className="bg-gradient-to-r from-[#820251] to-[#9a0660] shadow-lg sticky top-0 z-50">
+        {/* Anchor Menu - Sticky under header */}
+        <div
+          id="company-menu"
+          ref={companyNavRef}
+          className="sticky top-0 z-[60] bg-gradient-to-r from-[#820251] to-[#9a0660] shadow-lg"
+        >
           <div className="container mx-auto px-4">
             <nav className="flex items-center justify-center gap-1 md:gap-2 py-3 overflow-x-auto">
               <a href="#contacts" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
                 <span>📞</span>
-                <span>Контакты</span>
+                <span className="block text-center font-serif tracking-wide">Контакты</span>
               </a>
               <span className="text-white/40 text-xl">|</span>
               <a href="#about" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
                 <span>📋</span>
-                <span>О компании</span>
+                <span className="block text-center font-serif tracking-wide">О компании</span>
               </a>
               <span className="text-white/40 text-xl">|</span>
               <a href="#services" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
                 <span>⚡</span>
-                <span>Услуги</span>
+                <span className="block text-center font-serif tracking-wide">Наши услуги</span>
               </a>
               <span className="text-white/40 text-xl">|</span>
               <a href="#photos" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
                 <span>📷</span>
-                <span>Фото</span>
+                <span className="block text-center font-serif tracking-wide">Фото</span>
+              </a>
+              <span className="text-white/40 text-xl">|</span>
+              <a href="#vacancies" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
+                <span>👷</span>
+                <span className="block text-center font-serif tracking-wide">Вакансии</span>
               </a>
               <span className="text-white/40 text-xl">|</span>
               <a href="#reviews" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
@@ -460,6 +513,16 @@ export default function CompanyPage({ params }: PageProps) {
             </nav>
           </div>
         </div>
+
+        {/* Floating menu button (variant 2) */}
+        <a
+          href="#company-menu"
+          className="fixed bottom-5 right-5 z-[70] flex items-center gap-2 rounded-full bg-[#820251] px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-[#9a0660] transition-colors"
+          aria-label="К меню"
+        >
+          <span>⬆️</span>
+          <span>Меню</span>
+        </a>
 
         {/* Content */}
         <div className="container mx-auto pt-6 md:pt-8 px-4">
@@ -490,13 +553,22 @@ export default function CompanyPage({ params }: PageProps) {
               </div>
 
               {/* Contacts Card */}
-              <div id="contacts" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-20">
+              <div id="contacts" className="company-section bg-white rounded-lg shadow-sm p-6">
                 <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                   <span className="w-1 h-6 bg-[#820251] rounded"></span>
                   {t("company.contacts")}
                 </h2>
 
                 <div className="flex-1 space-y-4">
+                  {company.address && (
+                    <div>
+                      <div className="text-gray-500 text-sm mb-1">{t("company.address")}</div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-[#820251]">📍</span>
+                        <span className="text-gray-700">{company.address}</span>
+                      </div>
+                    </div>
+                  )}
                   {/* Regular websites (not social media) */}
                   {regularWebsites.length > 0 && (
                     <div>
@@ -552,13 +624,39 @@ export default function CompanyPage({ params }: PageProps) {
                     </div>
                   )}
 
+                  {phones && phones.length > 0 && (
+                    <div>
+                      <div className="text-gray-500 text-sm mb-2">{t("company.phone")}</div>
+                      <div className="space-y-2">
+                        {phones.map((p, idx) => (
+                          <div key={`${p.number}-${idx}`} className="flex items-start gap-2">
+                            <svg className="w-4 h-4 text-[#16a34a] mt-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.86 19.86 0 0 1 3 5.18 2 2 0 0 1 5 3h3a2 2 0 0 1 2 1.72 12.36 12.36 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L9.1 10.9a16 16 0 0 0 4 4l1.26-1.15a2 2 0 0 1 2.11-.45 12.36 12.36 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                            </svg>
+                            <div className="flex items-center gap-3 w-full flex-nowrap">
+                              <a href={`tel:${p.number}`} className="text-[#820251] font-semibold text-sm hover:underline whitespace-nowrap">
+                                {p.number}
+                              </a>
+                              {p.labels && p.labels.length > 0 && (
+                                <div className="text-xs text-gray-500 ml-auto text-right whitespace-nowrap">{p.labels.join(", ")}</div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
                   {company.emails && company.emails.length > 0 && (
                     <div>
                       <div className="text-gray-500 text-sm mb-1">{t("company.email")}</div>
                       <div className="space-y-1">
                         {company.emails.map((e) => (
                           <div key={e} className="flex items-center gap-2">
-                            <span className="text-[#820251]">✉️</span>
+                            <svg className="w-4 h-4 text-[#16a34a]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
+                              <path d="M22 6l-10 7L2 6" />
+                            </svg>
                             <a
                               href={`https://mail.yandex.ru/compose?to=${encodeURIComponent(e)}`}
                               target="_blank"
@@ -569,37 +667,6 @@ export default function CompanyPage({ params }: PageProps) {
                             </a>
                           </div>
                         ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {phones && phones.length > 0 && (
-                    <div>
-                      <div className="text-gray-500 text-sm mb-2">{t("company.phone")}</div>
-                      <div className="space-y-2">
-                        {phones.map((p, idx) => (
-                          <div key={`${p.number}-${idx}`} className="flex items-start gap-2">
-                            <span className="text-[#820251] mt-0.5">📞</span>
-                            <div>
-                              <a href={`tel:${p.number}`} className="text-[#820251] font-bold hover:underline">
-                                {p.number}
-                              </a>
-                              {p.labels && p.labels.length > 0 && (
-                                <div className="text-sm text-gray-500">{p.labels.join(", ")}</div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {company.address && (
-                    <div>
-                      <div className="text-gray-500 text-sm mb-1">{t("company.address")}</div>
-                      <div className="flex items-start gap-2">
-                        <span className="text-[#820251]">📍</span>
-                        <span className="text-gray-700">{company.address}</span>
                       </div>
                     </div>
                   )}
@@ -649,7 +716,7 @@ export default function CompanyPage({ params }: PageProps) {
               </div>
 
               {/* About - Beautifully formatted (NO images, like belarusinfo.by) */}
-              <div id="about" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-16">
+              <div id="about" className="company-section bg-white rounded-lg shadow-sm p-6">
                 <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                   <span className="w-1 h-6 bg-[#820251] rounded"></span>
                   {t("company.about")}
@@ -721,10 +788,10 @@ export default function CompanyPage({ params }: PageProps) {
 
               {/* Services with Images - like belarusinfo.by "Услуги" section */}
               {company.services_list && company.services_list.length > 0 && (
-                <div id="services" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-16">
+                <div id="services" className="company-section bg-white rounded-lg shadow-sm p-6">
                   <h2 className="text-xl font-bold text-gray-800 mb-2 flex items-center gap-2">
                     <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                    Услуги
+                    Наши услуги
                   </h2>
                   <p className="text-gray-500 text-sm mb-4">Оказание услуг организациям и физическим лицам</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -756,7 +823,7 @@ export default function CompanyPage({ params }: PageProps) {
 
               {/* Photo Gallery */}
               {company.photos && company.photos.length > 0 ? (
-                <div id="photos" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-16">
+                <div id="photos" className="company-section bg-white rounded-lg shadow-sm p-6">
                   <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                     <span className="w-1 h-6 bg-[#820251] rounded"></span>
                     Фотогалерея
@@ -781,7 +848,7 @@ export default function CompanyPage({ params }: PageProps) {
                   </div>
                 </div>
               ) : (
-                <div id="photos" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-16">
+                <div id="photos" className="company-section bg-white rounded-lg shadow-sm p-6">
                   <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                     <span className="w-1 h-6 bg-[#820251] rounded"></span>
                     Фотогалерея
@@ -795,7 +862,7 @@ export default function CompanyPage({ params }: PageProps) {
 
               {/* Reviews */}
               {company.reviews && company.reviews.length > 0 ? (
-                <div id="reviews" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-20">
+                <div id="reviews" className="company-section bg-white rounded-lg shadow-sm p-6">
                   <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                     <span className="w-1 h-6 bg-[#820251] rounded"></span>
                     Отзывы
@@ -825,7 +892,7 @@ export default function CompanyPage({ params }: PageProps) {
                   </div>
                 </div>
               ) : (
-                <div id="reviews" className="bg-white rounded-lg shadow-sm p-6 scroll-mt-20">
+                <div id="reviews" className="company-section bg-white rounded-lg shadow-sm p-6">
                   <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                     <span className="w-1 h-6 bg-[#820251] rounded"></span>
                     Отзывы

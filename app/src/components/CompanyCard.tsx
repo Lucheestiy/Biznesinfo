@@ -685,7 +685,19 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
 
             {primaryEmail && (
               <div className="flex items-center gap-2">
-                <span className="text-[#820251] w-5 text-center">✉️</span>
+                <svg
+                  className="w-4 h-4 text-[#16a34a] flex-shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
+                  <path d="M22 6l-10 7L2 6" />
+                </svg>
                 <a
                   href={`https://mail.yandex.ru/compose?to=${encodeURIComponent(primaryEmail)}`}
                   target="_blank"
@@ -699,7 +711,18 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
 
             {phones.length > 0 && (
               <div className="flex items-start gap-2">
-                <span className="text-[#820251] w-5 text-center mt-0.5">📞</span>
+                <svg
+                  className="w-4 h-4 text-[#16a34a] mt-1 flex-shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.86 19.86 0 0 1 3 5.18 2 2 0 0 1 5 3h3a2 2 0 0 1 2 1.72 12.36 12.36 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L9.1 10.9a16 16 0 0 0 4 4l1.26-1.15a2 2 0 0 1 2.11-.45 12.36 12.36 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                </svg>
                 <div className="flex flex-col gap-1">
                   {(phonesExpanded ? phones : phones.slice(0, 3)).map((p, idx) => (
                     <a

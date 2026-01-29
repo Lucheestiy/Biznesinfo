@@ -687,7 +687,8 @@ export async function ibizGetRubricCompanies(params: {
 
 export async function ibizGetCompany(id: string): Promise<IbizCompanyResponse> {
   const store = await getStore();
-  const company = store.companiesById.get(id);
+  const company = store.companiesById.get(id)
+    || store.companiesById.get(id.replace(/-/g, ""));
   if (!company) {
     throw new Error(`company_not_found:${id}`);
   }
