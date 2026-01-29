@@ -705,8 +705,12 @@ export default function CompanyPage({ params }: PageProps) {
                 <div className="flex flex-wrap gap-3 mt-6">
                   <button
                     onClick={() => setMessageModalOpen(true)}
-                    className="flex-1 min-w-[140px] bg-[#16a34a] text-white py-3 rounded-lg font-semibold hover:bg-[#15803d] transition-colors"
+                    className="flex-1 min-w-[140px] flex items-center justify-center gap-2 bg-[#166534] text-white py-3 rounded-lg font-medium hover:bg-[#14532d] transition-colors shadow-sm"
                   >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                      <polyline points="22,6 12,13 2,6" />
+                    </svg>
                     {t("company.write")}
                   </button>
                   <div className="w-full sm:w-auto">
