@@ -705,7 +705,7 @@ export default function CompanyPage({ params }: PageProps) {
                 <div className="flex flex-wrap gap-3 mt-6">
                   <button
                     onClick={() => setMessageModalOpen(true)}
-                    className="flex-1 min-w-[140px] border-2 border-[#820251] text-[#820251] py-3 rounded-lg font-semibold hover:bg-[#820251] hover:text-white transition-colors"
+                    className="flex-1 min-w-[140px] bg-[#16a34a] text-white py-3 rounded-lg font-semibold hover:bg-[#15803d] transition-colors"
                   >
                     {t("company.write")}
                   </button>
