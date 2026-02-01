@@ -361,6 +361,14 @@ const translations: Record<Language, Record<string, string>> = {
     "company.buildRoute": "Построить маршрут",
     "company.found": "Найдено",
 
+    // Map (Yandex)
+    "map.searchPlaceholder": "Поиск по карте",
+    "map.needsApiKeyShort": "Для интерактивной карты и геопоиска нужен ключ Yandex Maps API. Сейчас показан упрощённый вид.",
+    "map.unavailableNoCoordsNoKey": "Карта пока недоступна (нет координат и не настроен ключ Yandex Maps API).",
+    "map.loading": "Загрузка карты...",
+    "map.loadError": "Не удалось загрузить карту.",
+    "map.coordsFromAddressNote": "Координаты определены по адресу. Уточните точку на карте через поиск, если нужно.",
+
 		    // Filter labels
 		    "filter.locationLabel": "Регион, город, улица, дом",
 		    "filter.chooseRegion": "Выбрать регион",
@@ -955,6 +963,14 @@ const translations: Record<Language, Record<string, string>> = {
     "company.buildRoute": "Build Route",
     "company.found": "Found",
 
+    // Map (Yandex)
+    "map.searchPlaceholder": "Search on map",
+    "map.needsApiKeyShort": "An API key is required for the interactive map and geo search. Showing a simplified view.",
+    "map.unavailableNoCoordsNoKey": "Map is unavailable (no coordinates and Yandex Maps API key is not configured).",
+    "map.loading": "Loading map...",
+    "map.loadError": "Failed to load map.",
+    "map.coordsFromAddressNote": "Coordinates were resolved from the address. Use the map search to fine-tune the location if needed.",
+
 		    // Filter labels
 		    "filter.locationLabel": "Region, city, street, house",
 		    "filter.chooseRegion": "Choose region",
@@ -1547,6 +1563,14 @@ const translations: Record<Language, Record<string, string>> = {
     "company.buildRoute": "Пабудаваць маршрут",
     "company.found": "Знойдзена",
 
+    // Map (Yandex)
+    "map.searchPlaceholder": "Пошук па карце",
+    "map.needsApiKeyShort": "Для інтэрактыўнай карты і геапошуку патрэбны ключ Yandex Maps API. Зараз паказаны спрошчаны выгляд.",
+    "map.unavailableNoCoordsNoKey": "Карта пакуль недаступная (няма каардынат і не наладжаны ключ Yandex Maps API).",
+    "map.loading": "Загрузка карты...",
+    "map.loadError": "Не атрымалася загрузіць карту.",
+    "map.coordsFromAddressNote": "Каардынаты вызначаны па адрасе. Удакладніце кропку на карце праз пошук, калі трэба.",
+
 		    // Filter labels
 		    "filter.locationLabel": "Рэгіён, горад, вуліца, дом",
 		    "filter.chooseRegion": "Выбраць рэгіён",
@@ -2138,6 +2162,14 @@ const translations: Record<Language, Record<string, string>> = {
     "company.locationOnMap": "地图位置",
     "company.buildRoute": "规划路线",
     "company.found": "找到",
+
+    // Map (Yandex)
+    "map.searchPlaceholder": "在地图上搜索",
+    "map.needsApiKeyShort": "交互式地图和地理搜索需要 Yandex Maps API Key。目前显示简化视图。",
+    "map.unavailableNoCoordsNoKey": "地图不可用（没有坐标且未配置 Yandex Maps API Key）。",
+    "map.loading": "正在加载地图…",
+    "map.loadError": "无法加载地图。",
+    "map.coordsFromAddressNote": "坐标由地址解析得到。如有需要，可通过地图搜索来微调位置。",
 
 		    // Filter labels
 		    "filter.locationLabel": "地区、城市、街道、门牌号",

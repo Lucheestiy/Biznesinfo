@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import AIAssistant from "@/components/AIAssistant";
 import MessageModal from "@/components/MessageModal";
+import CompanyLocationMap from "@/components/CompanyLocationMap";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { IbizCompanyResponse, IbizPhoneExt } from "@/lib/ibiz/types";
 import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
@@ -947,37 +948,13 @@ export default function CompanyPage({ params }: PageProps) {
           </div>
 
           {/* Map */}
-          <div id="map" className="max-w-4xl mx-auto bg-white rounded-xl shadow-md p-6 border-l-4 border-[#7a0150]">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                <span className="text-2xl">🗺️</span>
-                {t("company.locationOnMap")}
-              </h2>
-              {hasGeo && lat != null && lng != null && (
-                <a
-                  href={`https://yandex.ru/maps/?rtext=~${lat},${lng}&rtt=auto`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 bg-[#820251] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#7a0150] transition-colors text-sm"
-                >
-                  {t("company.buildRoute")}
-                </a>
-              )}
-            </div>
-            {hasGeo && lat != null && lng != null ? (
-              <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
-                <iframe
-                  src={`https://yandex.ru/map-widget/v1/?ll=${lng}%2C${lat}&z=16&pt=${lng}%2C${lat}%2Cpm2rdm`}
-                  width="100%"
-                  height="100%"
-                  frameBorder="0"
-                  allowFullScreen
-                  className="w-full h-full"
-                ></iframe>
-              </div>
-            ) : (
-              <div className="text-gray-500">Карта пока недоступна.</div>
-            )}
+          <div id="map">
+            <CompanyLocationMap
+              companyName={company.name}
+              address={company.address}
+              lat={hasGeo ? lat : null}
+              lng={hasGeo ? lng : null}
+            />
           </div>
 
           {/* Back link */}
