@@ -8,12 +8,13 @@ usage() {
 Rebuild and restart the biznesinfo Docker Compose stack with a clean, no-cache build.
 
 Usage:
-  srbizinfo [--project-dir DIR] [--volumes] [--builder-prune] [--clear-logo-cache] [--logs]
+  srbizinfo [--project-dir DIR] [--volumes] [--no-system-prune] [--builder-prune] [--clear-logo-cache] [--logs]
 
 Options:
   --project-dir DIR     Override project directory (defaults to this script's folder)
   --volumes             Also remove named/anonymous volumes (can delete data)
-  --builder-prune       Prune Docker build cache after stopping containers
+  --no-system-prune     Skip pruning unused Docker images/build cache (default: prune)
+  --builder-prune       Prune Docker build cache before building
   --clear-logo-cache    Wipe ./app/.cache/ibiz-logo-cache on the host
   --logs                Follow logs after bringing stack up
   -h, --help            Show this help
@@ -27,6 +28,7 @@ die() {
 
 PROJECT_DIR=""
 WIPE_VOLUMES=0
+PRUNE_SYSTEM=1
 PRUNE_BUILDER=0
 CLEAR_LOGO_CACHE=0
 FOLLOW_LOGS=0
@@ -40,6 +42,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --volumes)
       WIPE_VOLUMES=1
+      shift
+      ;;
+    --no-system-prune)
+      PRUNE_SYSTEM=0
+      shift
+      ;;
+    --system-prune)
+      PRUNE_SYSTEM=1
       shift
       ;;
     --builder-prune)
@@ -91,28 +101,30 @@ fi
 echo "==> Project: ${PROJECT_DIR}"
 echo "==> Compose: ${COMPOSE_FILE}"
 
-if [[ "${CLEAR_LOGO_CACHE}" -eq 1 ]]; then
-  CACHE_DIR="${PROJECT_DIR}/app/.cache/ibiz-logo-cache"
-  echo "==> Clearing logo cache: ${CACHE_DIR}"
-  rm -rf "${CACHE_DIR}"
-  install -d -m 0777 "${CACHE_DIR}"
+if [[ "${PRUNE_SYSTEM}" -eq 1 ]]; then
+  echo "==> Pruning unused Docker images/build cache (safe: no volumes)..."
+  docker system prune -af 2>&1 | tail -n 20
 fi
 
-DOWN_ARGS=(down --remove-orphans --rmi local)
-if [[ "${WIPE_VOLUMES}" -eq 1 ]]; then
-  DOWN_ARGS+=(--volumes)
-fi
-
-echo "==> Stopping/removing containers..."
-"${COMPOSE[@]}" "${DOWN_ARGS[@]}"
-
-if [[ "${PRUNE_BUILDER}" -eq 1 ]]; then
+if [[ "${PRUNE_SYSTEM}" -eq 0 ]] && [[ "${PRUNE_BUILDER}" -eq 1 ]]; then
   echo "==> Pruning Docker build cache..."
   docker builder prune -af
 fi
 
 echo "==> Building (no cache, pull base images)..."
 "${COMPOSE[@]}" build --no-cache --pull
+
+if [[ "${WIPE_VOLUMES}" -eq 1 ]]; then
+  echo "==> Stopping/removing containers (with volumes)..."
+  "${COMPOSE[@]}" down --remove-orphans --volumes
+fi
+
+if [[ "${CLEAR_LOGO_CACHE}" -eq 1 ]]; then
+  CACHE_DIR="${PROJECT_DIR}/app/.cache/ibiz-logo-cache"
+  echo "==> Clearing logo cache: ${CACHE_DIR}"
+  rm -rf "${CACHE_DIR}"
+  install -d -m 0777 "${CACHE_DIR}"
+fi
 
 echo "==> Starting stack (force recreate)..."
 "${COMPOSE[@]}" up -d --force-recreate --remove-orphans
@@ -124,3 +136,5 @@ if [[ "${FOLLOW_LOGS}" -eq 1 ]]; then
   echo "==> Following logs (Ctrl+C to stop)..."
   "${COMPOSE[@]}" logs -f --tail=200
 fi
+
+echo "==> Done"

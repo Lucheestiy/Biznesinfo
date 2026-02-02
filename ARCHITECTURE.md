@@ -87,13 +87,13 @@ ssh root@97.107.142.128 "certbot renew"
 
 | Container | Image | Port | Purpose |
 |-----------|-------|------|---------|
-| news-nginx | nginx:1.25-alpine | 8116:80 | Reverse proxy for app |
-| news-app | biznesinfolucheestiycom-app | 3000 (internal) | Next.js application |
-| news-meilisearch | getmeili/meilisearch:v1.12 | 7700 (internal) | Search engine |
+| biznesinfo-nginx | nginx:1.25-alpine | 8116:80 | Reverse proxy for app |
+| biznesinfo-app | biznesinfolucheestiycom-app | 3000 (internal) | Next.js application |
+| biznesinfo-meilisearch | getmeili/meilisearch:v1.12 | 7700 (internal) | Search engine |
 
 ### Docker Network
 
-- Network: `biznesinfolucheestiycom_news-network`
+- Network: `biznesinfolucheestiycom_biznesinfo-network`
 - Driver: bridge
 
 ### Port Mapping
@@ -130,7 +130,7 @@ MEILI_HOST=http://meilisearch:7700
 | ./app/public/data/ibiz | /app/public/data/ibiz | IBIZ company data (read-only) |
 | ./app/public/companies | /app/public/companies | Additional company data |
 | ./app/.cache/ibiz-logo-cache | /tmp/ibiz-logo-cache | Logo image cache |
-| news-meilisearch-data (volume) | /meili_data | Meilisearch indexed data |
+| biznesinfo-meilisearch-data (volume) | /meili_data | Meilisearch indexed data |
 
 ### Build & Run Scripts
 
@@ -158,7 +158,8 @@ The project includes a robust rebuild script that handles all cleanup and rebuil
 |--------|-------------|
 | `--project-dir DIR` | Override project directory |
 | `--volumes` | Remove named/anonymous volumes (DATA LOSS!) |
-| `--builder-prune` | Prune Docker build cache after stop |
+| `--no-system-prune` | Skip automatic `docker system prune -af` (default is to prune unused images/build cache) |
+| `--builder-prune` | Prune Docker build cache before building |
 | `--clear-logo-cache` | Wipe logo cache directory |
 | `--logs` | Follow logs after startup |
 | `-h, --help` | Show help |
@@ -215,8 +216,8 @@ docker compose up -d
 **Check container health:**
 ```bash
 docker compose ps
-docker logs news-nginx
-docker logs news-app
+docker logs biznesinfo-nginx
+docker logs biznesinfo-app
 ```
 
 **Check if local port is responding:**
@@ -227,7 +228,7 @@ curl -v http://127.0.0.1:8116/
 **Check Meilisearch health:**
 ```bash
 curl http://127.0.0.1:8116/api/health  # or check meilisearch directly
-docker exec news-meilisearch curl http://localhost:7700/health
+docker exec biznesinfo-meilisearch curl http://localhost:7700/health
 ```
 
 ### 3. SSL Certificate Issues
@@ -252,7 +253,7 @@ ssh root@97.107.142.128 "nginx -s reload"
 
 **Check Meilisearch status:**
 ```bash
-docker exec news-meilisearch curl -u MASTER_KEY:http://localhost:7700/health
+docker exec biznesinfo-meilisearch curl -u MASTER_KEY:http://localhost:7700/health
 ```
 
 **Re-index data:**
@@ -295,9 +296,9 @@ ssh root@97.107.142.128 "curl -v http://100.93.127.52:8116/"
 |----------|---------|
 | `/var/log/nginx/biznesinfo.lucheestiy.com.access.log` | Droplet nginx access |
 | `/var/log/nginx/biznesinfo.lucheestiy.com.error.log` | Droplet nginx errors |
-| `docker logs news-nginx` | Local nginx container |
-| `docker logs news-app` | Next.js application |
-| `docker logs news-meilisearch` | Meilisearch instance |
+| `docker logs biznesinfo-nginx` | Local nginx container |
+| `docker logs biznesinfo-app` | Next.js application |
+| `docker logs biznesinfo-meilisearch` | Meilisearch instance |
 
 ## Common Issues & Solutions
 
@@ -305,7 +306,7 @@ ssh root@97.107.142.128 "curl -v http://100.93.127.52:8116/"
 |-------|-------|----------|
 | White screen on load | Stale cache | Clear browser cache or hard refresh (Ctrl+Shift+R) |
 | 502 from droplet | Container not running | Start containers with `docker compose up -d` |
-| 504 timeout | App unresponsive | Check `docker logs news-app` for errors |
+| 504 timeout | App unresponsive | Check `docker logs biznesinfo-app` for errors |
 | Search returns no results | Meilisearch empty | Run `npm run index:meili` |
 | Images not loading | Missing volume mounts | Verify `./app/public/data` exists |
 | SSL expired | Certbot didn't renew | Run `certbot renew` on droplet |
@@ -357,7 +358,7 @@ docker compose logs -f --tail=100
                     │  /home/mlweb/biznesinfo.lucheestiy.com             │
                     │                                                     │
                     │  ┌─────────────────────────────────────────────┐   │
-                    │  │ Docker Network: news-network               │   │
+                    │  │ Docker Network: biznesinfo-network        │   │
                     │  │                                             │   │
                     │  │  ┌─────────────┐    ┌───────────────────┐  │   │
                     │  │  │ nginx:8116  │───▶│ Next.js App       │  │   │
@@ -509,8 +510,8 @@ systemctl start scrape-belarusinfo.service
 | Aspect | biznesinfo (this site) | biznes.lucheestiy.com (reference) |
 |--------|------------------------|-----------------------------------|
 | Local Port | 8116 | 8115 |
-| Container Names | news-\* | biznes-\* |
-| Network | news-network | biznes-network |
+| Container Names | biznesinfo-\* | biznes-\* |
+| Network | biznesinfo-network | biznes-network |
 | Next.js Port | 3000 | 3000 |
 | Meilisearch Port | 7700 | 7700 |
 | Droplet Proxy | 100.93.127.52:8116 | 100.93.127.52:8115 |

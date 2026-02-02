@@ -5,7 +5,7 @@ services:
     build:
       context: ./app
       dockerfile: Dockerfile
-    container_name: news-app
+    container_name: biznesinfo-app
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -15,7 +15,7 @@ services:
       ADMIN_SECRET: ${ADMIN_SECRET:-dev-secret-change-me}
       YANDEX_MAPS_API_KEY: ${YANDEX_MAPS_API_KEY:-}
     networks:
-      - news-network
+      - biznesinfo-network
     volumes:
       - ./app/public/data/ibiz:/app/public/data/ibiz:ro
       - ./app/public/companies:/app/public/companies:ro
@@ -27,22 +27,22 @@ services:
 
   meilisearch:
     image: getmeili/meilisearch:v1.12
-    container_name: news-meilisearch
+    container_name: biznesinfo-meilisearch
     restart: unless-stopped
     environment:
       MEILI_ENV: production
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-changeme-min-16-chars}
       MEILI_NO_ANALYTICS: true
     volumes:
-      - news-meilisearch-data:/meili_data
+      - biznesinfo-meilisearch-data:/meili_data
     networks:
-      - news-network
+      - biznesinfo-network
     expose:
       - "7700"
 
   nginx:
     image: nginx:1.25-alpine
-    container_name: news-nginx
+    container_name: biznesinfo-nginx
     restart: unless-stopped
     ports:
       - "${HOST_PORT:-8116}:80"
@@ -52,11 +52,11 @@ services:
     depends_on:
       - app
     networks:
-      - news-network
+      - biznesinfo-network
 
 networks:
-  news-network:
+  biznesinfo-network:
     driver: bridge
 
 volumes:
-  news-meilisearch-data:
+  biznesinfo-meilisearch-data:

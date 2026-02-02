@@ -515,10 +515,6 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
             </div>
           </div>
 
-          {/* Sparkles */}
-          <div className="absolute top-2 left-3 text-yellow-400 animate-ping opacity-60 text-sm">✦</div>
-          <div className="absolute bottom-2 right-3 text-yellow-300 animate-ping opacity-50 text-xs" style={{animationDelay: '0.5s'}}>✦</div>
-          <div className="absolute top-1/2 right-1/4 text-yellow-400 animate-ping opacity-40 text-xs" style={{animationDelay: '1s'}}>✦</div>
         </button>
       </div>
     </form>
