@@ -42,12 +42,10 @@ export async function configureCompaniesIndex(): Promise<void> {
   // Configure sortable attributes
   await index.updateSortableAttributes([
     "name",
-    "logo_rank",
   ]);
 
   // Configure ranking rules
   await index.updateRankingRules([
-    "desc(logo_rank)",
     "words",
     "typo",
     "proximity",
