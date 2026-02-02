@@ -66,12 +66,12 @@ export default function Header() {
     <header ref={headerRef} className="bg-[#a0006d] text-white shadow-lg sticky top-0 z-50">
       <div className="container mx-auto px-4">
         {/* Mobile Header - Compact single row */}
-        <div className="md:hidden flex items-center justify-between py-2">
+        <div className="md:hidden flex items-center justify-between py-2 gap-2">
           {/* Logo Left */}
           <Link
             href="/"
             onClick={handleMobileLogoClick}
-            className="flex items-center gap-2 group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d] active:bg-white/10 rounded-lg transition-colors"
+            className="flex items-center gap-2 group min-w-0 flex-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d] active:bg-white/10 rounded-lg transition-colors"
           >
             <div className="relative w-10 h-10 flex-shrink-0 animate-[float_4s_ease-in-out_infinite]">
               <svg
@@ -93,14 +93,14 @@ export default function Header() {
                 <path d="M30 34 Q36 30 44 34 Q48 38 46 42 Q42 44 36 42 Q30 40 30 36Z" fill="#9D174D" opacity="0.7" />
               </svg>
             </div>
-            <span className="text-lg font-bold">
+            <span className="text-base sm:text-lg font-bold min-w-0 truncate">
               <span className="text-yellow-400 transition-colors duration-200 group-active:text-yellow-300">Biznesinfo</span>
-              <span className="text-white transition-colors duration-200 group-active:text-yellow-100">.by</span>
+              <span className="text-white transition-colors duration-200 group-active:text-yellow-100 hidden min-[360px]:inline">.by</span>
             </span>
           </Link>
 
           {/* Right side - Region, Lang, Menu */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-shrink-0">
             {/* Region Button - Compact */}
             <button
               onClick={() => setRegionMenuOpen(!regionMenuOpen)}
