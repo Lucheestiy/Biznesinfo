@@ -24,6 +24,27 @@ function asArrayBuffer(body: Uint8Array): ArrayBuffer {
   return buf;
 }
 
+function guessContentType(filePath: string): string {
+  const ext = path.extname(filePath || "").toLowerCase();
+  switch (ext) {
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".gif":
+      return "image/gif";
+    case ".webp":
+      return "image/webp";
+    case ".svg":
+      return "image/svg+xml";
+    case ".ico":
+      return "image/x-icon";
+    default:
+      return "application/octet-stream";
+  }
+}
+
 function isAllowedHost(hostname: string): boolean {
   const h = (hostname || "").toLowerCase();
   return h === "ibiz.by" || h.endsWith(".ibiz.by");
@@ -71,8 +92,24 @@ async function readCached(
     return null;
   }
 
+  if (!stat.isFile() || stat.size <= 0) {
+    // Corrupted cache entry (e.g., 0-byte file). Ignore and allow refetch.
+    // Best-effort cleanup to avoid serving empty responses forever.
+    try {
+      await fs.unlink(filePath);
+    } catch {
+      // ignore
+    }
+    try {
+      await fs.unlink(metaPath);
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
   const isFresh = now - stat.mtimeMs < CACHE_TTL_MS;
-  let contentType = "application/octet-stream";
+  let contentType = guessContentType(filePath);
   try {
     const meta = JSON.parse(await fs.readFile(metaPath, "utf-8")) as Partial<CachedMeta>;
     if (meta?.contentType && typeof meta.contentType === "string") contentType = meta.contentType;
@@ -82,6 +119,19 @@ async function readCached(
 
   try {
     const body = await fs.readFile(filePath);
+    if (body.byteLength <= 0) {
+      try {
+        await fs.unlink(filePath);
+      } catch {
+        // ignore
+      }
+      try {
+        await fs.unlink(metaPath);
+      } catch {
+        // ignore
+      }
+      return null;
+    }
     return { body, contentType, isFresh };
   } catch {
     return null;

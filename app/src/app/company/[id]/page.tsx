@@ -337,7 +337,7 @@ export default function CompanyPage({ params }: PageProps) {
   const logoUrl = (companyMaybe?.logo_url || "").trim();
   const logoSrc = useMemo(() => {
     if (logoOverride) return logoOverride;
-    return logoUrl ? `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}` : "";
+    return logoUrl ? `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}&v=2` : "";
   }, [logoOverride, logoUrl]);
 
   const phones: IbizPhoneExt[] = useMemo(() => {

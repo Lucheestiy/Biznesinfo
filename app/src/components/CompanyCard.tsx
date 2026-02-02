@@ -11,6 +11,8 @@ import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
 import { companySlugForUrl } from "@/lib/ibiz/slug";
 import { buildHighlightRegex, highlightText } from "@/lib/utils/highlight";
 
+const LOGO_PROXY_VERSION = "2";
+
 interface CompanyCardProps {
   company: IbizCompanySummary;
   showCategory?: boolean;
@@ -276,7 +278,7 @@ function SearchCompanyCard({
   const logoSrc = useMemo(() => {
     if (!logoUrl) return "";
     if (logoUrl.startsWith("/")) return logoUrl;
-    return `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}`;
+    return `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}&v=${LOGO_PROXY_VERSION}`;
   }, [logoUrl]);
   const showLogo = Boolean(logoUrl) && !logoFailed;
 
@@ -530,7 +532,7 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
   const logoSrc = useMemo(() => {
     if (!logoUrl) return "";
     if (logoUrl.startsWith("/")) return logoUrl;
-    return `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}`;
+    return `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}&v=${LOGO_PROXY_VERSION}`;
   }, [logoUrl]);
   const showLogo = Boolean(logoUrl) && !logoFailed;
   
