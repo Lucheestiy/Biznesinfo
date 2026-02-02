@@ -108,7 +108,7 @@ export default function Header() {
               aria-haspopup="menu"
               aria-label={selectedRegion ? regionName : t("search.allRegions")}
               title={selectedRegion ? regionName : t("search.allRegions")}
-              className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 border border-white/20 text-white shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d]"
+              className="flex items-center justify-center gap-0.5 w-8 h-8 rounded-lg bg-white/10 border border-white/20 text-white shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d]"
             >
               <svg className="w-3.5 h-3.5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
