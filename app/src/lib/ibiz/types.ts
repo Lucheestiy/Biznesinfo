@@ -153,6 +153,7 @@ export interface IbizRubricResponse {
 }
 
 export interface IbizCompanyResponse {
+  id: string;
   company: IbizCompany;
   primary: {
     category_slug: string | null;

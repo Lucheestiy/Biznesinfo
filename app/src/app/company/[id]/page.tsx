@@ -8,6 +8,7 @@ import AIAssistant from "@/components/AIAssistant";
 import MessageModal from "@/components/MessageModal";
 import CompanyLocationMap from "@/components/CompanyLocationMap";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useFavorites } from "@/contexts/FavoritesContext";
 import type { IbizCompanyResponse, IbizPhoneExt } from "@/lib/ibiz/types";
 import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
 import { IBIZ_ABOUT_OVERRIDES } from "@/lib/ibiz/aboutOverrides";
@@ -28,6 +29,121 @@ function displayUrl(raw: string): string {
   } catch {
     return s.replace(/^https?:\/\//i, "").split("/")[0] || s;
   }
+}
+
+function normalizePhoneForTel(phone: string): string {
+  const trimmed = (phone || "").trim();
+  if (!trimmed) return "";
+  const cleaned = trimmed.replace(/[^\d+]/g, "");
+  if (!cleaned) return trimmed;
+  if (cleaned.startsWith("+")) return `+${cleaned.slice(1).replace(/\+/g, "")}`;
+  return cleaned.replace(/\+/g, "");
+}
+
+function getWorkStatusDotClass(workStatus: { isOpen: boolean }): string {
+  if (workStatus.isOpen) {
+    return "bg-green-700 animate-pulse shadow-[0_0_10px_rgba(21,128,61,0.35)]";
+  }
+  return "bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.35)]";
+}
+
+/**
+ * Determines if the company is currently open based on work_time.
+ * Returns { isOpen, statusText, workTime } or null if cannot determine.
+ */
+function getWorkStatus(workHours: { work_time?: string; break_time?: string; status?: string } | null | undefined): {
+  isOpen: boolean;
+  statusText: string;
+  workTime: string;
+} | null {
+  if (!workHours?.work_time) return null;
+  
+  const workTime = workHours.work_time.trim();
+  const workTimeLower = workTime.toLowerCase();
+  if (
+    workTimeLower.includes("круглосуточ") ||
+    workTimeLower.includes("24/7") ||
+    workTimeLower.includes("24х7") ||
+    workTimeLower.includes("24x7")
+  ) {
+    return { isOpen: true, statusText: "Открыто", workTime };
+  }
+  
+  // Parse time range like "08:00-17:00" or "8:00 - 17:00" or "08.00-17.00"
+  const timeMatch = workTime.match(/(\d{1,2})[.:,](\d{2})\s*[-–—]\s*(\d{1,2})[.:,](\d{2})/);
+  if (!timeMatch) {
+    // Cannot parse, return status from data if available
+    return null;
+  }
+  
+  const openHour = parseInt(timeMatch[1], 10);
+  const openMin = parseInt(timeMatch[2], 10);
+  const closeHour = parseInt(timeMatch[3], 10);
+  const closeMin = parseInt(timeMatch[4], 10);
+  
+  // Get current time in Minsk timezone (UTC+3, no DST).
+  // Avoid Intl timeZone conversions here because Safari/WebKit can throw
+  // "Invalid time zone specified" depending on ICU/timezone data availability.
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
+  const minskDate = new Date(utcMs + 3 * 60 * 60 * 1000);
+  const currentHour = minskDate.getUTCHours();
+  const currentMin = minskDate.getUTCMinutes();
+  
+  // Convert to minutes for easier comparison
+  const currentMins = currentHour * 60 + currentMin;
+  const openMins = openHour * 60 + openMin;
+  const closeMins = closeHour * 60 + closeMin;
+  
+  // Check if currently within work hours
+  // Handle overnight schedules (e.g., 22:00-06:00)
+  let isOpen: boolean;
+  if (closeMins > openMins) {
+    // Normal schedule (e.g., 08:00-17:00)
+    isOpen = currentMins >= openMins && currentMins < closeMins;
+  } else {
+    // Overnight schedule (e.g., 22:00-06:00)
+    isOpen = currentMins >= openMins || currentMins < closeMins;
+  }
+  
+  // Check for break time
+  if (isOpen && workHours.break_time) {
+    const breakMatch = workHours.break_time.match(/(\d{1,2})[.:,](\d{2})\s*[-–—]\s*(\d{1,2})[.:,](\d{2})/);
+    if (breakMatch) {
+      const breakStartMins = parseInt(breakMatch[1], 10) * 60 + parseInt(breakMatch[2], 10);
+      const breakEndMins = parseInt(breakMatch[3], 10) * 60 + parseInt(breakMatch[4], 10);
+      if (currentMins >= breakStartMins && currentMins < breakEndMins) {
+        return {
+          isOpen: false,
+          statusText: "Перерыв",
+          workTime: workHours.break_time,
+        };
+      }
+    }
+  }
+  
+  // Check day of week (0 = Sunday, 6 = Saturday)
+  const dayOfWeek = minskDate.getUTCDay();
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  
+  // If status mentions weekend closure and it's weekend
+  const statusLower = (workHours.status || "").toLowerCase();
+  if (isWeekend && (statusLower.includes("выходн") || statusLower.includes("сб") || statusLower.includes("вс"))) {
+    // Check if status indicates weekend work
+    if (!statusLower.includes("работ") && !statusLower.includes("откр")) {
+      return {
+        isOpen: false,
+        statusText: "Выходной",
+        workTime,
+      };
+    }
+  }
+  
+  return {
+    isOpen,
+    statusText: isOpen ? "Открыто" : "Закрыто",
+    workTime,
+  };
 }
 
 // Social media detection
@@ -98,6 +214,13 @@ function separateWebsitesAndSocials(websites: string[] | null | undefined): { we
   }
   
   return { websites: regularWebsites, socials };
+}
+
+function getOptimizedLocalImageSrc(src: string | null | undefined, width: 256 | 384): string | null {
+  const raw = (src || "").trim();
+  if (!raw) return null;
+  if (!raw.startsWith("/")) return raw;
+  return `/_next/image?url=${encodeURIComponent(raw)}&w=${width}&q=75`;
 }
 
 // Generate 5 mid-frequency keywords based on company rubrics and category
@@ -274,6 +397,7 @@ function truncateDescription(raw: string, maxLength = 250): string {
 export default function CompanyPage({ params }: PageProps) {
   const { id } = use(params);
   const { t } = useLanguage();
+  const { isFavorite, toggleFavorite } = useFavorites();
   const [messageModalOpen, setMessageModalOpen] = useState(false);
   const [data, setData] = useState<IbizCompanyResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -331,6 +455,9 @@ export default function CompanyPage({ params }: PageProps) {
     [companyMaybe?.websites]
   );
 
+  // Calculate work status based on current time in Minsk (must be above conditional returns to keep hooks order stable)
+  const workStatus = useMemo(() => getWorkStatus(companyMaybe?.work_hours), [companyMaybe?.work_hours]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col font-sans bg-gray-100">
@@ -370,7 +497,9 @@ export default function CompanyPage({ params }: PageProps) {
     );
   }
 
+  const companyId = data.id;
   const company = data.company;
+  const favorite = isFavorite(companyId);
 
   const primaryCategory = company.categories?.[0] ?? null;
   const primaryRubric = company.rubrics?.[0] ?? null;
@@ -459,7 +588,7 @@ export default function CompanyPage({ params }: PageProps) {
           <div className="absolute top-1/4 right-1/4 w-20 h-20 bg-white/5 rounded-full" />
           {!isMsu23 && company.hero_image && (
             <img
-              src={company.hero_image}
+              src={getOptimizedLocalImageSrc(company.hero_image, 384) || company.hero_image}
               alt=""
               className="absolute inset-0 w-full h-full object-cover opacity-15 blur-sm"
               decoding="async"
@@ -510,6 +639,55 @@ export default function CompanyPage({ params }: PageProps) {
                     {headerDescription}
                   </p>
                 )}
+                {/* Share button */}
+                <div className="mt-4 flex justify-start gap-2 flex-wrap">
+                  <button
+                    onClick={() => {
+                      const url = window.location.href;
+                      const text = `${company.name} — ${primaryCategory?.name || ""}`;
+                      if (navigator.share) {
+                        navigator.share({ title: company.name, text, url }).catch(() => {});
+                      } else {
+                        navigator.clipboard.writeText(url).then(() => {
+                          alert("Ссылка скопирована!");
+                        }).catch(() => {});
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors bg-white/10 text-white hover:bg-white/20 border border-white/20"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                    </svg>
+                    <span>Поделиться</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    aria-pressed={favorite}
+                    aria-label={favorite ? t("favorites.remove") : t("favorites.add")}
+                    title={favorite ? t("favorites.remove") : t("favorites.add")}
+                    onClick={() => toggleFavorite(companyId)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors border border-white/20 text-white ${
+                      favorite ? "bg-white/20" : "bg-white/10 hover:bg-white/20"
+                    }`}
+                  >
+                    <svg
+                      className={`w-4 h-4 ${favorite ? "text-red-400 fill-current" : "text-white"}`}
+                      fill={favorite ? "currentColor" : "none"}
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                      />
+                    </svg>
+                    <span className="hidden sm:inline">{t("favorites.title")}</span>
+                  </button>
+                </div>
               </div>
             ) : (
               /* Default layout: Centered */
@@ -534,6 +712,55 @@ export default function CompanyPage({ params }: PageProps) {
                     {headerDescription}
                   </p>
                 )}
+                {/* Share button */}
+                <div className="mt-4 flex justify-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => {
+                      const url = window.location.href;
+                      const text = `${company.name} — ${primaryCategory?.name || ""}`;
+                      if (navigator.share) {
+                        navigator.share({ title: company.name, text, url }).catch(() => {});
+                      } else {
+                        navigator.clipboard.writeText(url).then(() => {
+                          alert("Ссылка скопирована!");
+                        }).catch(() => {});
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors bg-white/10 text-white hover:bg-white/20 border border-white/20"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                    </svg>
+                    <span>Поделиться</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    aria-pressed={favorite}
+                    aria-label={favorite ? t("favorites.remove") : t("favorites.add")}
+                    title={favorite ? t("favorites.remove") : t("favorites.add")}
+                    onClick={() => toggleFavorite(companyId)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors border border-white/20 text-white ${
+                      favorite ? "bg-white/20" : "bg-white/10 hover:bg-white/20"
+                    }`}
+                  >
+                    <svg
+                      className={`w-4 h-4 ${favorite ? "text-red-400 fill-current" : "text-white"}`}
+                      fill={favorite ? "currentColor" : "none"}
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                      />
+                    </svg>
+                    <span className="hidden sm:inline">{t("favorites.title")}</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -546,50 +773,93 @@ export default function CompanyPage({ params }: PageProps) {
         >
           <div className="container mx-auto px-4">
             <nav className="flex items-center justify-center gap-1 md:gap-2 py-3 overflow-x-auto">
-              <a href="#contacts" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
-                <span>📞</span>
+              <a
+                href="#contacts"
+                className="group flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/90 rounded-lg text-sm font-semibold text-[#820251] hover:bg-[#820251] hover:text-white transition-colors whitespace-nowrap border border-[#820251]/30"
+              >
+                <svg className="w-4 h-4 text-[#D97706] group-hover:text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.86 19.86 0 0 1 3 5.18 2 2 0 0 1 5 3h3a2 2 0 0 1 2 1.72 12.36 12.36 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L9.1 10.9a16 16 0 0 0 4 4l1.26-1.15a2 2 0 0 1 2.11-.45 12.36 12.36 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                </svg>
                 <span className="block text-center font-serif tracking-wide">Контакты</span>
               </a>
-              <span className="text-white/40 text-xl">|</span>
-              <a href="#about" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
-                <span>📋</span>
+              <span className="text-white/30 text-xl">|</span>
+              <a
+                href="#about"
+                className="group flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/90 rounded-lg text-sm font-semibold text-[#820251] hover:bg-[#820251] hover:text-white transition-colors whitespace-nowrap border border-[#820251]/30"
+              >
+                <svg className="w-4 h-4 text-[#D97706] group-hover:text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <path d="M14 2v6h6" />
+                  <path d="M16 13H8" />
+                  <path d="M16 17H8" />
+                  <path d="M10 9H8" />
+                </svg>
                 <span className="block text-center font-serif tracking-wide">О компании</span>
               </a>
               {servicesList.length > 0 && (
                 <>
-                  <span className="text-white/40 text-xl">|</span>
-                  <a href="#services" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
-                    <span>⚡</span>
+                  <span className="text-white/30 text-xl">|</span>
+                  <a
+                    href="#services"
+                    className="group flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/90 rounded-lg text-sm font-semibold text-[#820251] hover:bg-[#820251] hover:text-white transition-colors whitespace-nowrap border border-[#820251]/30"
+                  >
+                    <svg className="w-4 h-4 text-[#D97706] group-hover:text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                    </svg>
                     <span className="block text-center font-serif tracking-wide">Наши услуги</span>
                   </a>
                 </>
               )}
               {photos.length > 0 && (
                 <>
-                  <span className="text-white/40 text-xl">|</span>
-                  <a href="#photos" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
-                    <span>🖼️</span>
+                  <span className="text-white/30 text-xl">|</span>
+                  <a
+                    href="#photos"
+                    className="group flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/90 rounded-lg text-sm font-semibold text-[#820251] hover:bg-[#820251] hover:text-white transition-colors whitespace-nowrap border border-[#820251]/30"
+                  >
+                    <svg className="w-4 h-4 text-[#D97706] group-hover:text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <path d="M21 15l-5-5L5 21" />
+                    </svg>
                     <span className="block text-center font-serif tracking-wide">Фото</span>
                   </a>
                 </>
               )}
               {reviews.length > 0 && (
                 <>
-                  <span className="text-white/40 text-xl">|</span>
-                  <a href="#reviews" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
-                    <span>⭐</span>
+                  <span className="text-white/30 text-xl">|</span>
+                  <a
+                    href="#reviews"
+                    className="group flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/90 rounded-lg text-sm font-semibold text-[#820251] hover:bg-[#820251] hover:text-white transition-colors whitespace-nowrap border border-[#820251]/30"
+                  >
+                    <svg className="w-4 h-4 text-[#D97706] group-hover:text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14l-5-4.87 6.91-1.01L12 2z" />
+                    </svg>
                     <span className="block text-center font-serif tracking-wide">Отзывы</span>
                   </a>
                 </>
               )}
-              <span className="text-white/40 text-xl">|</span>
-              <a href="#keywords" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
-                <span>🏷️</span>
+              <span className="text-white/30 text-xl">|</span>
+              <a
+                href="#keywords"
+                className="group flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/90 rounded-lg text-sm font-semibold text-[#820251] hover:bg-[#820251] hover:text-white transition-colors whitespace-nowrap border border-[#820251]/30"
+              >
+                <svg className="w-4 h-4 text-[#D97706] group-hover:text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M20.59 13.41L11 3H4v7l9.59 9.59a2 2 0 0 0 2.82 0l4.18-4.18a2 2 0 0 0 0-2.82z" />
+                  <path d="M7 7h.01" />
+                </svg>
                 <span className="block text-center font-serif tracking-wide">Ключевые слова</span>
               </a>
-              <span className="text-white/40 text-xl">|</span>
-              <a href="#map" className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold text-white hover:bg-white/30 transition-all whitespace-nowrap border border-white/30">
-                <span>🗺️</span>
+              <span className="text-white/30 text-xl">|</span>
+              <a
+                href="#map"
+                className="group flex items-center gap-1.5 px-3 md:px-4 py-2 bg-white/90 rounded-lg text-sm font-semibold text-[#820251] hover:bg-[#820251] hover:text-white transition-colors whitespace-nowrap border border-[#820251]/30"
+              >
+                <svg className="w-4 h-4 text-[#D97706] group-hover:text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
                 <span className="block text-center font-serif tracking-wide">Карта</span>
               </a>
             </nav>
@@ -624,7 +894,7 @@ export default function CompanyPage({ params }: PageProps) {
 
               {/* Contacts */}
               <div id="contacts" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#820251]">
-                <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <h2 className="text-xl font-bold text-[#14532d] mb-4 flex items-center gap-2">
                   <span className="text-2xl">📞</span>
                   {t("company.contacts")}
                 </h2>
@@ -648,12 +918,24 @@ export default function CompanyPage({ params }: PageProps) {
                         <div className="space-y-2">
                           {phones.map((p, idx) => (
                             <div key={`${p.number}-${idx}`} className="flex items-start gap-2">
-                              <svg className="w-4 h-4 text-[#166534] mt-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.86 19.86 0 0 1 3 5.18 2 2 0 0 1 5 3h3a2 2 0 0 1 2 1.72 12.36 12.36 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L9.1 10.9a16 16 0 0 0 4 4l1.26-1.15a2 2 0 0 1 2.11-.45 12.36 12.36 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                              </svg>
                               <div className="flex items-center gap-3 w-full flex-nowrap">
-                                <a href={`tel:${p.number}`} className="text-[#820251] font-semibold text-base md:text-lg hover:underline whitespace-nowrap">
-                                  {p.number}
+                                <a
+                                  href={`tel:${normalizePhoneForTel(p.number) || p.number}`}
+                                  className="flex items-start gap-2 text-[#820251] font-semibold text-base md:text-lg hover:underline whitespace-nowrap"
+                                >
+                                  <svg
+                                    className="w-4 h-4 text-[#14532d] mt-1"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth={2}
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    aria-hidden="true"
+                                  >
+                                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.86 19.86 0 0 1 3 5.18 2 2 0 0 1 5 3h3a2 2 0 0 1 2 1.72 12.36 12.36 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L9.1 10.9a16 16 0 0 0 4 4l1.26-1.15a2 2 0 0 1 2.11-.45 12.36 12.36 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                                  </svg>
+                                  <span>{p.number}</span>
                                 </a>
                                 {p.labels && p.labels.length > 0 && (
                                   <div className="text-sm md:text-base text-gray-500 ml-auto text-right whitespace-nowrap">{p.labels.join(", ")}</div>
@@ -670,17 +952,16 @@ export default function CompanyPage({ params }: PageProps) {
                         <div className="text-gray-500 text-sm mb-1">{t("company.website")}</div>
                         <div className="space-y-1">
                           {regularWebsites.map((w) => (
-                            <div key={w} className="flex items-center gap-2">
-                              <span className="text-[#820251]">🌐</span>
-                              <a
-                                href={w}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[#820251] font-bold hover:underline truncate"
-                              >
-                                {displayUrl(w)}
-                              </a>
-                            </div>
+                            <a
+                              key={w}
+                              href={w}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 min-w-0 text-[#820251] font-bold hover:underline"
+                            >
+                              <span aria-hidden className="text-[#820251]">🌐</span>
+                              <span className="truncate">{displayUrl(w)}</span>
+                            </a>
                           ))}
                         </div>
                       </div>
@@ -691,20 +972,28 @@ export default function CompanyPage({ params }: PageProps) {
                         <div className="text-gray-500 text-sm mb-1">{t("company.email")}</div>
                         <div className="space-y-1">
                           {company.emails.map((e) => (
-                            <div key={e} className="flex items-center gap-2">
-                              <svg className="w-4 h-4 text-[#166534]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <a
+                              key={e}
+                              href={`https://mail.yandex.ru/compose?to=${encodeURIComponent(e)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 min-w-0 text-[#820251] hover:underline"
+                            >
+                              <svg
+                                className="w-4 h-4 text-[#14532d] flex-shrink-0"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                              >
                                 <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
                                 <path d="M22 6l-10 7L2 6" />
                               </svg>
-                              <a
-                                href={`https://mail.yandex.ru/compose?to=${encodeURIComponent(e)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[#820251] hover:underline truncate"
-                              >
-                                {e}
-                              </a>
-                            </div>
+                              <span className="truncate">{e}</span>
+                            </a>
                           ))}
                         </div>
                       </div>
@@ -764,7 +1053,18 @@ export default function CompanyPage({ params }: PageProps) {
                       <div>
                         <div className="text-gray-500 text-sm mb-1">{t("company.workHours")}</div>
                         <div className="text-gray-700 space-y-1">
-                          {company.work_hours.work_time && <div>{company.work_hours.work_time}</div>}
+                          {company.work_hours.work_time && (
+                            <div className="flex items-center gap-2">
+                              {workStatus && (
+                                <span
+                                  className={`inline-block w-2.5 h-2.5 rounded-full ${getWorkStatusDotClass(workStatus)}`}
+                                  role="img"
+                                  aria-label={workStatus.isOpen ? "Открыто" : "Закрыто"}
+                                />
+                              )}
+                              <span>{company.work_hours.work_time}</span>
+                            </div>
+                          )}
                           {company.work_hours.break_time && <div>Перерыв: {company.work_hours.break_time}</div>}
                           {company.work_hours.status && <div className="text-sm text-gray-500">{company.work_hours.status}</div>}
                         </div>
@@ -777,7 +1077,7 @@ export default function CompanyPage({ params }: PageProps) {
                 <div className="flex flex-wrap gap-3 mt-6">
                   <button
                     onClick={() => setMessageModalOpen(true)}
-                    className="flex-1 min-w-[140px] border-2 border-[#166534] text-[#166534] py-3 rounded-lg font-semibold hover:bg-[#166534] hover:text-white transition-colors"
+                    className="flex-1 min-w-[140px] border-2 border-[#14532d] text-[#14532d] py-3 rounded-lg font-semibold hover:bg-[#14532d] hover:text-white transition-colors"
                   >
                     {t("company.write")}
                   </button>
@@ -792,7 +1092,7 @@ export default function CompanyPage({ params }: PageProps) {
 
               {/* About */}
               <div id="about" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#820251]">
-                <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <h2 className="text-xl font-bold text-[#14532d] mb-4 flex items-center gap-2">
                   <span className="text-2xl">📋</span>
                   {t("company.about")}
                 </h2>
@@ -805,17 +1105,17 @@ export default function CompanyPage({ params }: PageProps) {
               {servicesList.length > 0 && (
                 <>
                   {/* Divider */}
-                  <div className="flex items-center justify-center gap-3" aria-hidden="true">
-                    <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#820251]/20 to-transparent" />
-                    <span className="text-[#820251]/40">✦</span>
-                    <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#820251]/20 to-transparent" />
-                  </div>
-                  <div id="services" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#b10a78]">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span className="text-2xl">⚡</span>
-                    Наши услуги
-                  </h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+	                  <div className="flex items-center justify-center gap-3" aria-hidden="true">
+	                    <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#820251]/20 to-transparent" />
+	                    <span className="text-[#820251]/40">✦</span>
+	                    <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#820251]/20 to-transparent" />
+	                  </div>
+	                  <div id="services" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#b10a78]">
+	                  <h2 className="text-xl font-bold text-[#14532d] mb-4 flex items-center gap-2">
+	                    <span className="text-2xl">⚡</span>
+	                    Наши услуги
+	                  </h2>
+	                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {servicesList.map((service, idx) => (
                       <div
                         key={`${service.name}-${idx}`}
@@ -824,7 +1124,7 @@ export default function CompanyPage({ params }: PageProps) {
                         {service.image_url ? (
                           <div className="w-full h-32 rounded-lg overflow-hidden bg-gray-100 mb-3">
                             <img
-                              src={service.image_url}
+                              src={getOptimizedLocalImageSrc(service.image_url, 384) || service.image_url}
                               alt={service.name}
                               className="w-full h-full object-cover"
                               loading="lazy"
@@ -855,16 +1155,16 @@ export default function CompanyPage({ params }: PageProps) {
                     <span className="text-[#820251]/40">✦</span>
                     <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#820251]/20 to-transparent" />
                   </div>
-                  <div id="photos" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#7a0150]">
-                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                      <span className="text-2xl">🖼️</span>
-                      Фотогалерея
-                    </h2>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+	                  <div id="photos" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#7a0150]">
+	                    <h2 className="text-xl font-bold text-[#14532d] mb-4 flex items-center gap-2">
+	                      <span className="text-2xl">🖼️</span>
+	                      Фотогалерея
+	                    </h2>
+	                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       {photos.map((photo, idx) => (
                         <div key={`${photo.url}-${idx}`} className="aspect-square rounded-lg overflow-hidden bg-gray-100">
                           <img
-                            src={photo.url}
+                            src={getOptimizedLocalImageSrc(photo.url, 256) || photo.url}
                             alt={photo.alt || company.name}
                             className="w-full h-full object-cover"
                             loading="lazy"
@@ -917,7 +1217,7 @@ export default function CompanyPage({ params }: PageProps) {
 
               {/* Keywords / SEO Tags */}
               <div id="keywords" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#b10a78]">
-                <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <h2 className="text-xl font-bold text-[#14532d] mb-4 flex items-center gap-2">
                   <span className="text-2xl">🏷️</span>
                   Ключевые слова
                 </h2>

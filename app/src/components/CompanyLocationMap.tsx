@@ -217,7 +217,7 @@ export default function CompanyLocationMap(props: {
   return (
     <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md p-6 border-l-4 border-[#7a0150]">
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-        <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+        <h2 className="text-xl font-bold text-[#14532d] flex items-center gap-2">
           <span className="text-2xl">🗺️</span>
           {t("company.locationOnMap")}
         </h2>

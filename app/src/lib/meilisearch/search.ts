@@ -525,7 +525,15 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearch
 
   const attrs = new Set<string>();
   if (company) attrs.add("name");
-  if (service || keywords) attrs.add("keywords");
+  if (service || keywords) {
+    attrs.add("keywords");
+    // Also search through the descriptive fields so that belarusinfo-only companies
+    // (or companies with sparse rubrics) can be found by the keywords in their text.
+    attrs.add("description");
+    attrs.add("about");
+    attrs.add("rubric_names");
+    attrs.add("category_names");
+  }
   if (city && !useCityExactFilter) {
     attrs.add("city");
     attrs.add("address");

@@ -693,16 +693,33 @@ export async function ibizGetRubricCompanies(params: {
 
 export async function ibizGetCompany(id: string): Promise<IbizCompanyResponse> {
   const store = await getStore();
-  const company = store.companiesById.get(id)
-    || store.companiesById.get(id.replace(/-/g, ""));
-  if (!company) {
-    throw new Error(`company_not_found:${id}`);
+  const rawId = (id || "").trim();
+  if (!rawId) throw new Error("company_not_found:");
+
+  const direct = store.companiesById.get(rawId);
+  if (direct) {
+    return {
+      id: rawId,
+      company: direct,
+      primary: {
+        category_slug: direct.categories?.[0]?.slug ?? null,
+        rubric_slug: direct.rubrics?.[0]?.slug ?? null,
+      },
+    };
+  }
+
+  const normalized = rawId.replace(/[-‐‑‒–—―]/g, "");
+  const normalizedCompany =
+    normalized && normalized !== rawId ? store.companiesById.get(normalized) : undefined;
+  if (!normalizedCompany) {
+    throw new Error(`company_not_found:${rawId}`);
   }
   return {
-    company,
+    id: normalized,
+    company: normalizedCompany,
     primary: {
-      category_slug: company.categories?.[0]?.slug ?? null,
-      rubric_slug: company.rubrics?.[0]?.slug ?? null,
+      category_slug: normalizedCompany.categories?.[0]?.slug ?? null,
+      rubric_slug: normalizedCompany.rubrics?.[0]?.slug ?? null,
     },
   };
 }
