@@ -19,6 +19,7 @@ export default function Header() {
   const { selectedRegion, setSelectedRegion, regionName } = useRegion();
   const pathname = usePathname();
   const headerRef = useRef<HTMLElement | null>(null);
+  const [isIOS, setIsIOS] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
@@ -60,6 +61,15 @@ export default function Header() {
       window.removeEventListener("resize", update);
       ro?.disconnect();
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined") return;
+    const ua = navigator.userAgent || "";
+    const isiPhone = /iPhone/i.test(ua);
+    const isiPad = /iPad/i.test(ua) || (navigator.platform === "MacIntel" && (navigator.maxTouchPoints || 0) > 1);
+    const isiPod = /iPod/i.test(ua);
+    setIsIOS(isiPhone || isiPad || isiPod);
   }, []);
 
   return (
@@ -108,12 +118,21 @@ export default function Header() {
               aria-haspopup="menu"
               aria-label={selectedRegion ? regionName : t("search.allRegions")}
               title={selectedRegion ? regionName : t("search.allRegions")}
-              className="flex items-center justify-center gap-0.5 w-8 h-8 rounded-lg bg-white/10 border border-white/20 text-white shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d]"
+              className={
+                isIOS
+                  ? "flex items-center gap-1.5 px-2 h-8 rounded-lg bg-white/10 border border-white/20 text-white text-xs shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d]"
+                  : "flex items-center justify-center gap-0.5 w-8 h-8 rounded-lg bg-white/10 border border-white/20 text-white shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d]"
+              }
             >
               <svg className="w-3.5 h-3.5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
+              {isIOS && (
+                <span className="max-w-[60px] truncate">
+                  {selectedRegion ? regionName.split(" ")[0] : t("search.allRegions").split(" ")[0]}
+                </span>
+              )}
               <svg className="w-3.5 h-3.5 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
