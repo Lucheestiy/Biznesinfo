@@ -300,12 +300,14 @@ export default function CompanyPage({ params }: PageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
+  const [showAllWebsites, setShowAllWebsites] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
     setLogoFailed(false);
     setLogoLoaded(false);
+    setShowAllWebsites(false);
     fetch(`/api/ibiz/company/${encodeURIComponent(id)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((resp: IbizCompanyResponse | null) => {
@@ -351,6 +353,14 @@ export default function CompanyPage({ params }: PageProps) {
     () => separateWebsitesAndSocials(companyMaybe?.websites),
     [companyMaybe?.websites]
   );
+  const websitesToRender = useMemo(() => {
+    if (showAllWebsites) return regularWebsites;
+    return regularWebsites.slice(0, 1);
+  }, [regularWebsites, showAllWebsites]);
+  const hiddenWebsitesCount = useMemo(() => {
+    if (showAllWebsites) return 0;
+    return Math.max(0, regularWebsites.length - websitesToRender.length);
+  }, [regularWebsites.length, showAllWebsites, websitesToRender.length]);
 
   // Calculate work status based on current time in Minsk (must be above conditional returns to keep hooks order stable)
   const workStatus = useMemo(() => getWorkStatus(companyMaybe?.work_hours), [companyMaybe?.work_hours]);
@@ -848,7 +858,7 @@ export default function CompanyPage({ params }: PageProps) {
                       <div>
                         <div className="text-gray-500 text-sm mb-1">{t("company.website")}</div>
                         <div className="space-y-1">
-                          {regularWebsites.map((w) => (
+                          {websitesToRender.map((w) => (
                             <a
                               key={w}
                               href={w}
@@ -860,6 +870,24 @@ export default function CompanyPage({ params }: PageProps) {
                               <span className="truncate">{displayUrl(w)}</span>
                             </a>
                           ))}
+                          {hiddenWebsitesCount > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAllWebsites(true)}
+                              className="text-sm text-gray-500 hover:text-gray-700 underline underline-offset-2"
+                            >
+                              {t("common.more")} {hiddenWebsitesCount}
+                            </button>
+                          )}
+                          {showAllWebsites && regularWebsites.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAllWebsites(false)}
+                              className="text-sm text-gray-500 hover:text-gray-700 underline underline-offset-2"
+                            >
+                              {t("common.hide")}
+                            </button>
+                          )}
                         </div>
                       </div>
                     )}
