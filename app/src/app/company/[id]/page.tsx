@@ -802,7 +802,22 @@ export default function CompanyPage({ params }: PageProps) {
               {/* Contacts */}
               <div id="contacts" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#820251]">
                 <h2 className="text-xl font-bold text-[#14532d] mb-4 flex items-center gap-2">
-                  <span className="text-2xl">📞</span>
+                  <span
+                    className="w-9 h-9 rounded-full bg-[#14532d]/10 flex items-center justify-center flex-shrink-0"
+                    aria-hidden
+                  >
+                    <svg
+                      className="w-5 h-5 text-[#14532d]"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2.25}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.86 19.86 0 0 1 3 5.18 2 2 0 0 1 5 3h3a2 2 0 0 1 2 1.72 12.36 12.36 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L9.1 10.9a16 16 0 0 0 4 4l1.26-1.15a2 2 0 0 1 2.11-.45 12.36 12.36 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                    </svg>
+                  </span>
                   {t("company.contacts")}
                 </h2>
 
