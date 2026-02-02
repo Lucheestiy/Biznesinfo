@@ -8,6 +8,7 @@ import type { MeiliSearchParams, MeiliCompanyDocument } from "./types";
 import type { IbizCompanySummary, IbizSearchResponse, IbizSuggestResponse } from "../ibiz/types";
 import { IBIZ_CATEGORY_ICONS } from "../ibiz/icons";
 import { IBIZ_LOGO_OVERRIDES } from "../ibiz/logoOverrides";
+import { IBIZ_WEBSITE_OVERRIDES } from "../ibiz/websiteOverrides";
 import { companySlugForUrl } from "../ibiz/slug";
 import { isAddressLikeLocationQuery, normalizeCityForFilter } from "../utils/location";
 
@@ -443,6 +444,20 @@ function normalizeWebsites(raw: unknown): string[] {
   return [...Array.from(byHost.values()).map((v) => v.url), ...fallback];
 }
 
+function applyWebsiteOverride(companyId: string, websites: string[]): string[] {
+  const raw = (companyId || "").trim();
+  if (!raw) return websites;
+  const key = raw.toLowerCase();
+
+  const hasOverride =
+    Object.prototype.hasOwnProperty.call(IBIZ_WEBSITE_OVERRIDES, raw) ||
+    Object.prototype.hasOwnProperty.call(IBIZ_WEBSITE_OVERRIDES, key);
+  if (!hasOverride) return websites;
+
+  const override = IBIZ_WEBSITE_OVERRIDES[raw] ?? IBIZ_WEBSITE_OVERRIDES[key];
+  return normalizeWebsites(override);
+}
+
 function documentToSummary(doc: MeiliCompanyDocument): IbizCompanySummary {
   return {
     id: doc.id,
@@ -458,7 +473,7 @@ function documentToSummary(doc: MeiliCompanyDocument): IbizCompanySummary {
     phones_ext: doc.phones_ext || [],
     phones: doc.phones,
     emails: doc.emails,
-    websites: normalizeWebsites(doc.websites),
+    websites: applyWebsiteOverride(doc.id, normalizeWebsites(doc.websites)),
     description: doc.description,
     about: doc.about || "",
     logo_url: IBIZ_LOGO_OVERRIDES[doc.id] || doc.logo_url,

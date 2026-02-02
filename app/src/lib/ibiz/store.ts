@@ -5,6 +5,7 @@ import { createInterface } from "node:readline";
 import { isAddressLikeLocationQuery, normalizeCityForFilter } from "@/lib/utils/location";
 import { generateCompanyKeywords } from "./keywords";
 import { IBIZ_LOGO_OVERRIDES } from "./logoOverrides";
+import { IBIZ_WEBSITE_OVERRIDES } from "./websiteOverrides";
 import { companySlugForUrl } from "./slug";
 
 import type {
@@ -370,6 +371,20 @@ function normalizeWebsites(raw: unknown): string[] {
   return [...Array.from(byHost.values()).map((v) => v.url), ...fallback];
 }
 
+function applyWebsiteOverride(companyId: string, websites: string[]): string[] {
+  const raw = (companyId || "").trim();
+  if (!raw) return websites;
+  const key = raw.toLowerCase();
+
+  const hasOverride =
+    Object.prototype.hasOwnProperty.call(IBIZ_WEBSITE_OVERRIDES, raw) ||
+    Object.prototype.hasOwnProperty.call(IBIZ_WEBSITE_OVERRIDES, key);
+  if (!hasOverride) return websites;
+
+  const override = (IBIZ_WEBSITE_OVERRIDES as Record<string, string[]>)[raw] ?? (IBIZ_WEBSITE_OVERRIDES as Record<string, string[]>)[key];
+  return normalizeWebsites(override);
+}
+
 function buildCompanySummary(company: IbizCompany, regionSlug: string | null): IbizCompanySummary {
   const primaryCategory = company.categories?.[0] ?? null;
   const primaryRubric = company.rubrics?.[0] ?? null;
@@ -489,7 +504,7 @@ async function loadStoreFrom(sourcePath: string, stat: fs.Stats): Promise<Store>
     if (logoOverride) {
       company.logo_url = logoOverride;
     }
-    company.websites = normalizeWebsites(company.websites);
+    company.websites = applyWebsiteOverride(company.source_id, normalizeWebsites(company.websites));
 
     const regionSlug = normalizeRegionSlug(company.city || "", company.region || "", company.address || "");
     companiesById.set(id, company);

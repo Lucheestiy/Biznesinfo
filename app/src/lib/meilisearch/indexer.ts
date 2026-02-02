@@ -5,6 +5,7 @@ import { configureCompaniesIndex } from "./config";
 import type { MeiliCompanyDocument } from "./types";
 import type { IbizCompany } from "../ibiz/types";
 import { generateCompanyKeywords } from "../ibiz/keywords";
+import { IBIZ_WEBSITE_OVERRIDES } from "../ibiz/websiteOverrides";
 import { normalizeCityForFilter } from "../utils/location";
 
 // Region normalization logic (reused from store.ts)
@@ -60,6 +61,19 @@ function computeLogoRank(company: IbizCompany): number {
   return 0;
 }
 
+function applyWebsiteOverride(companyId: string, websites: string[]): string[] {
+  const raw = (companyId || "").trim();
+  if (!raw) return websites;
+  const key = raw.toLowerCase();
+
+  const hasOverride =
+    Object.prototype.hasOwnProperty.call(IBIZ_WEBSITE_OVERRIDES, raw) ||
+    Object.prototype.hasOwnProperty.call(IBIZ_WEBSITE_OVERRIDES, key);
+  if (!hasOverride) return websites;
+
+  return IBIZ_WEBSITE_OVERRIDES[raw] ?? IBIZ_WEBSITE_OVERRIDES[key] ?? websites;
+}
+
 function companyToDocument(company: IbizCompany): MeiliCompanyDocument {
   const regionSlug = normalizeRegionSlug(company.city, company.region, company.address);
   const primaryCategory = company.categories?.[0] ?? null;
@@ -77,7 +91,7 @@ function companyToDocument(company: IbizCompany): MeiliCompanyDocument {
     region: regionSlug || "",
     phones: company.phones || [],
     emails: company.emails || [],
-    websites: company.websites || [],
+    websites: applyWebsiteOverride(company.source_id, company.websites || []),
     logo_url: normalizeLogoUrl(company.logo_url || ""),
     logo_rank: computeLogoRank(company),
     contact_person: company.contact_person || "",
