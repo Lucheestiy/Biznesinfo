@@ -9,12 +9,13 @@ import MessageModal from "@/components/MessageModal";
 import CompanyLocationMap from "@/components/CompanyLocationMap";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useFavorites } from "@/contexts/FavoritesContext";
-import type { IbizCompanyResponse, IbizPhoneExt } from "@/lib/ibiz/types";
+import type { IbizCompany, IbizCompanyResponse, IbizPhoneExt } from "@/lib/ibiz/types";
 import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
 import { IBIZ_ABOUT_OVERRIDES } from "@/lib/ibiz/aboutOverrides";
 import { IBIZ_HEADER_OVERRIDES } from "@/lib/ibiz/headerOverrides";
 import { IBIZ_LOGO_OVERRIDES } from "@/lib/ibiz/logoOverrides";
 import { getCompanyOverride } from "@/lib/companyOverrides";
+import { generateCompanyKeywordPhrases } from "@/lib/ibiz/keywords";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -223,113 +224,9 @@ function getOptimizedLocalImageSrc(src: string | null | undefined, width: 256 | 
   return `/_next/image?url=${encodeURIComponent(raw)}&w=${width}&q=75`;
 }
 
-// Generate 5 mid-frequency keywords based on company rubrics and category
-function generateKeywords(company: {
-  rubrics?: { name: string; category_name?: string }[];
-  categories?: { name: string }[];
-  description?: string;
-}): string[] {
-  const keywords: string[] = [];
-  const rubrics = company.rubrics || [];
-  const categories = company.categories || [];
-  const description = company.description || "";
-
-  // Keywords mapping by category/rubric type
-  const keywordsByCategory: Record<string, string[]> = {
-    // Автомобили
-    "автозапчасти": ["купить запчасти", "автозапчасти оптом", "запчасти для авто", "автомагазин", "детали для машин"],
-    "автосервис": ["ремонт авто", "СТО Беларусь", "техобслуживание", "диагностика авто", "автомастерская"],
-    "грузоперевозки": ["доставка грузов", "транспортные услуги", "перевозка товаров", "логистика", "грузовое такси"],
-    // Строительство
-    "строительство": ["строительные услуги", "ремонт под ключ", "строительная компания", "отделочные работы", "капитальный ремонт"],
-    "проектные работы": ["проектирование зданий", "архитектурный проект", "строительный проект", "чертежи", "проектная документация"],
-    "стройматериалы": ["купить стройматериалы", "строительные материалы", "оптом стройматериалы", "доставка материалов", "склад стройматериалов"],
-    // Недвижимость
-    "недвижимость": ["аренда помещений", "продажа недвижимости", "коммерческая недвижимость", "офис в аренду", "складские помещения"],
-    // Сельское хозяйство
-    "сельское хозяйство": ["сельхозпродукция", "фермерское хозяйство", "агропромышленный комплекс", "продукция АПК", "сельхозтехника"],
-    "животноводство": ["крупный рогатый скот", "молочная продукция", "мясо оптом", "фермерское мясо", "молоко оптом"],
-    "растениеводство": ["зерновые культуры", "семена оптом", "урожай зерна", "сельхозкультуры", "рапс подсолнечник"],
-    "лесное хозяйство": ["лесоматериалы", "древесина оптом", "пиломатериалы", "круглый лес", "лесозаготовка"],
-    // Деревообработка
-    "деревообработка": ["изделия из дерева", "деревянные конструкции", "столярные изделия", "мебель на заказ", "обработка древесины"],
-    "пиломатериалы": ["доска обрезная", "брус строительный", "вагонка", "пиломатериалы оптом", "сухая древесина"],
-    "деревянные дома": ["дом из бруса", "сруб под ключ", "деревянная баня", "строительство дома", "каркасный дом"],
-    // Промышленность
-    "оборудование": ["промышленное оборудование", "станки и машины", "техника для производства", "оборудование оптом", "монтаж оборудования"],
-    "холодильное": ["холодильные установки", "рефрижераторы", "промышленное охлаждение", "холодильные камеры", "климатическое оборудование"],
-    // Продукты питания
-    "продукты питания": ["продукты оптом", "пищевая продукция", "оптовая база продуктов", "поставки продуктов", "продовольственные товары"],
-    "молочные продукты": ["молоко оптом", "сыр масло", "кисломолочные продукты", "молочная продукция", "творог сметана"],
-    "мясные продукты": ["мясо оптом", "колбасные изделия", "мясная продукция", "полуфабрикаты", "свинина говядина"],
-    // Услуги
-    "юридические услуги": ["консультация юриста", "правовая помощь", "юридическое сопровождение", "адвокат Беларусь", "регистрация фирмы"],
-    "бухгалтерские услуги": ["ведение бухгалтерии", "бухгалтер на аутсорсе", "налоговый учет", "финансовая отчетность", "аудит компании"],
-    "it услуги": ["разработка сайтов", "программное обеспечение", "IT поддержка", "автоматизация бизнеса", "цифровые решения"],
-    // Торговля
-    "оптовая торговля": ["товары оптом", "оптовые поставки", "дистрибьютор", "оптовый склад", "закупки оптом"],
-    "розничная торговля": ["магазин", "торговая точка", "розничные продажи", "потребительские товары", "ритейл"],
-    // Медицина
-    "медицинские услуги": ["клиника", "медицинский центр", "врач специалист", "диагностика", "лечение"],
-    "аптека": ["лекарства", "медикаменты", "фармацевтика", "аптечная сеть", "препараты"],
-    // Образование
-    "образование": ["курсы обучения", "повышение квалификации", "тренинги", "обучающие программы", "сертификация"],
-    // Туризм
-    "туризм": ["туристические услуги", "путевки", "экскурсии", "отдых в Беларуси", "туроператор"],
-    "гостиницы": ["бронирование номеров", "отель", "гостиничный комплекс", "проживание", "размещение"],
-    // Реклама
-    "реклама": ["рекламные услуги", "маркетинг", "продвижение бизнеса", "наружная реклама", "digital маркетинг"],
-    "полиграфия": ["печать", "типография", "визитки буклеты", "рекламная продукция", "широкоформатная печать"],
-    // Безопасность
-    "охрана": ["охранные услуги", "безопасность объекта", "видеонаблюдение", "пожарная сигнализация", "контроль доступа"],
-    // Клининг
-    "клининг": ["уборка помещений", "клининговые услуги", "чистка", "профессиональная уборка", "мойка окон"],
-    // Металл
-    "металлопрокат": ["металл оптом", "арматура", "трубы металлические", "листовой металл", "металлоизделия"],
-    // Электрика
-    "электрооборудование": ["электротовары", "кабельная продукция", "электромонтаж", "освещение", "электроустановки"],
-    // Текстиль
-    "текстиль": ["ткани оптом", "швейная продукция", "текстильные изделия", "спецодежда", "постельное белье"],
-  };
-
-  // Find matching keywords based on rubrics and categories
-  const allText = [
-    ...rubrics.map(r => r.name.toLowerCase()),
-    ...categories.map(c => c.name.toLowerCase()),
-    description.toLowerCase()
-  ].join(" ");
-
-  // Check each category for keyword matches
-  for (const [key, words] of Object.entries(keywordsByCategory)) {
-    if (allText.includes(key)) {
-      keywords.push(...words);
-      if (keywords.length >= 5) break;
-    }
-  }
-
-  // If not enough keywords, generate from rubric names
-  if (keywords.length < 5) {
-    for (const rubric of rubrics) {
-      const rubricName = rubric.name.toLowerCase();
-      if (!keywords.some(k => k.toLowerCase().includes(rubricName.split(" ")[0]))) {
-        keywords.push(`${rubric.name} Беларусь`);
-      }
-      if (keywords.length >= 5) break;
-    }
-  }
-
-  // If still not enough, add generic business keywords
-  const genericKeywords = ["услуги в Беларуси", "компания Минск", "заказать услугу", "цены на услуги", "качественный сервис"];
-  while (keywords.length < 5) {
-    const generic = genericKeywords[keywords.length];
-    if (generic && !keywords.includes(generic)) {
-      keywords.push(generic);
-    } else {
-      break;
-    }
-  }
-
-  return keywords.slice(0, 5);
+// Generate up to 10 relevant keywords (comma-style phrases) for search/SEO tags.
+function generateKeywords(company: IbizCompany): string[] {
+  return generateCompanyKeywordPhrases(company, { maxKeywords: 10 });
 }
 
 function generateUniqueDescription(company: {
@@ -1225,7 +1122,7 @@ export default function CompanyPage({ params }: PageProps) {
                   {generateKeywords(company).map((keyword, idx) => (
                     <Link
                       key={idx}
-                      href={`/?q=${encodeURIComponent(keyword)}`}
+                      href={`/search?service=${encodeURIComponent(keyword)}`}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-[#820251]/10 to-[#820251]/5 text-[#820251] rounded-full text-sm font-medium hover:from-[#820251]/20 hover:to-[#820251]/10 transition-all hover:shadow-sm"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

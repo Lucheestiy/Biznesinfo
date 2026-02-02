@@ -13,6 +13,7 @@ export interface MeiliCompanyDocument {
   emails: string[];
   websites: string[];
   logo_url: string;
+  logo_rank: number;            // 2 = has logo, 1 = fallback avatar, 0 = none
   contact_person: string;
 
   // Categories & Rubrics (denormalized for filtering)

@@ -200,6 +200,26 @@ function tokenizeLocation(raw: string): string[] {
 }
 
 function tokenizeServiceText(raw: string): string[] {
+  // Transactional words should not block matching (e.g., "купить тетради", "заказать сантехнику").
+  const QUERY_STOP_WORDS = new Set([
+    "купить",
+    "куплю",
+    "заказать",
+    "закажу",
+    "продажа",
+    "покупка",
+    "оптом",
+    "розница",
+    "услуга",
+    "услуги",
+    "работа",
+    "работы",
+    "компания",
+    "компании",
+    "организация",
+    "организации",
+  ]);
+
   const cleaned = safeLower(raw)
     .replace(/ё/gu, "е")
     .replace(/[«»"'“”„]/gu, " ")
@@ -208,7 +228,8 @@ function tokenizeServiceText(raw: string): string[] {
   return cleaned
     .split(/\s+/u)
     .map((t) => t.trim())
-    .filter((t) => t.length >= 2);
+    .filter((t) => t.length >= 2)
+    .filter((t) => !QUERY_STOP_WORDS.has(t));
 }
 
 function matchesServiceToken(companyTokens: string[], token: string): boolean {
@@ -257,6 +278,19 @@ function matchesServiceTokens(companyTokens: string[], queryTokens: string[]): b
   return queryTokens.every((t) => matchesServiceToken(companyTokens, t));
 }
 
+function scoreServiceTokens(companyTokens: string[], queryTokens: string[]): number {
+  let score = 0;
+  for (const token of queryTokens) {
+    if (!token) continue;
+    if (companyTokens.includes(token)) {
+      score += 2;
+      continue;
+    }
+    if (companyTokens.some((t) => (t || "").startsWith(token))) score += 1;
+  }
+  return score;
+}
+
 function normalizeLogoUrl(raw: string): string {
   const url = (raw || "").trim();
   if (!url) return "";
@@ -265,6 +299,13 @@ function normalizeLogoUrl(raw: string): string {
   if (low.includes("/images/logo/no-logo")) return "";
   if (low.includes("/images/logo/no_logo")) return "";
   return url;
+}
+
+function computeLogoRank(summary: IbizCompanySummary | undefined): number {
+  if (!summary) return 0;
+  if (normalizeLogoUrl(summary.logo_url || "")) return 2;
+  if ((summary.name || "").trim()) return 1;
+  return 0;
 }
 
 function normalizeWebsites(raw: unknown): string[] {
@@ -809,16 +850,16 @@ export async function ibizSearch(params: {
   // No filters = no results
   if (!q && serviceTokens.length === 0 && cityTokens.length === 0 && !cityNorm) return { query: params.query, total: 0, companies: [] };
 
-  const matches: string[] = [];
+  const qNorm = q.replace(/ё/gu, "е");
+  const matches: Array<{ id: string; logoRank: number; score: number; name: string }> = [];
   for (const [id, search] of store.companySearchById.entries()) {
     const companyRegionSlug = store.companyRegionById.get(id) || null;
     if (!applyRegionAlias(params.region, companyRegionSlug)) continue;
 
+    const summary = store.companySummaryById.get(id);
     if (useCityExactFilter) {
-      const summary = store.companySummaryById.get(id);
       if (normalizeCityForFilter(summary?.city || "") !== cityNorm) continue;
     } else if (cityTokens.length > 0) {
-      const summary = store.companySummaryById.get(id);
       const cityHaystack = safeLower(`${summary?.city || ""} ${summary?.address || ""}`);
       let ok = true;
       for (const token of cityTokens) {
@@ -832,40 +873,50 @@ export async function ibizSearch(params: {
     
     const companyTokens = store.companyKeywordsById.get(id) || [];
 
+    const pushMatch = () => {
+      const logoRank = computeLogoRank(summary);
+      const name = summary?.name || id;
+      const nameNorm = safeLower(name).replace(/ё/gu, "е");
+      let score = 0;
+      if (serviceTokens.length > 0) score += scoreServiceTokens(companyTokens, serviceTokens);
+      if (qNorm) {
+        if (nameNorm.startsWith(qNorm)) score += 20;
+        else if (nameNorm.includes(qNorm)) score += 10;
+        else score += 5;
+      }
+      matches.push({ id, logoRank, score, name });
+    };
+
     // Combined search: company name (and/or other text) + product/service keywords.
     if (q && serviceTokens.length > 0) {
-      if (search.includes(q) && matchesServiceTokens(companyTokens, serviceTokens)) matches.push(id);
+      if (search.includes(q) && matchesServiceTokens(companyTokens, serviceTokens)) pushMatch();
       continue;
     }
 
     // Service search: match category/rubric tokens (word/prefix match, not substring).
     if (serviceTokens.length > 0) {
-      if (matchesServiceTokens(companyTokens, serviceTokens)) matches.push(id);
+      if (matchesServiceTokens(companyTokens, serviceTokens)) pushMatch();
       continue;
     }
 
     // Company name search (fallback uses combined text index)
     if (q) {
-      if (search.includes(q)) matches.push(id);
+      if (search.includes(q)) pushMatch();
       continue;
     }
 
     // City-only filter
-    matches.push(id);
+    pushMatch();
   }
 
   const total = matches.length;
-  // Keep ordering consistent with Meilisearch behavior: companies with real logos first.
-  const withLogo: string[] = [];
-  const withoutLogo: string[] = [];
-  for (const id of matches) {
-    const summary = store.companySummaryById.get(id);
-    if ((summary?.logo_url || "").trim()) withLogo.push(id);
-    else withoutLogo.push(id);
-  }
+  matches.sort((a, b) => {
+    if (b.logoRank !== a.logoRank) return b.logoRank - a.logoRank;
+    if (b.score !== a.score) return b.score - a.score;
+    return a.name.localeCompare(b.name, "ru", { sensitivity: "base" });
+  });
 
-  const ordered = [...withLogo, ...withoutLogo];
-  const pageIds = ordered.slice(offset, offset + limit);
+  const pageIds = matches.slice(offset, offset + limit).map((m) => m.id);
   const companies: IbizCompanySummary[] = [];
   for (const id of pageIds) {
     const summary = store.companySummaryById.get(id);

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "sync:ibiz": "node scripts/sync_ibiz_data.mjs",
+    "keywords:gen": "npx tsx scripts/generate_company_keywords.ts",
     "index:meili": "npx tsx scripts/index_meilisearch.ts"
   },
   "dependencies": {

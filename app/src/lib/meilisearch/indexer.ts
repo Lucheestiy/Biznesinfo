@@ -54,6 +54,12 @@ function normalizeLogoUrl(raw: string): string {
   return url;
 }
 
+function computeLogoRank(company: IbizCompany): number {
+  if (normalizeLogoUrl(company.logo_url || "")) return 2;
+  if ((company.name || "").trim()) return 1;
+  return 0;
+}
+
 function companyToDocument(company: IbizCompany): MeiliCompanyDocument {
   const regionSlug = normalizeRegionSlug(company.city, company.region, company.address);
   const primaryCategory = company.categories?.[0] ?? null;
@@ -73,6 +79,7 @@ function companyToDocument(company: IbizCompany): MeiliCompanyDocument {
     emails: company.emails || [],
     websites: company.websites || [],
     logo_url: normalizeLogoUrl(company.logo_url || ""),
+    logo_rank: computeLogoRank(company),
     contact_person: company.contact_person || "",
 
     category_slugs: (company.categories || []).map(c => c.slug),
