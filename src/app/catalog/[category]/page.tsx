@@ -7,7 +7,7 @@ import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
 import { regions } from "@/data/regions";
-import type { IbizCatalogCategory, IbizCatalogResponse } from "@/lib/ibiz/types";
+import type { BiznesinfoCatalogCategory, BiznesinfoCatalogResponse } from "@/lib/biznesinfo/types";
 
 interface PageProps {
   params: Promise<{ category: string }>;
@@ -18,16 +18,16 @@ export default function CategoryPage({ params }: PageProps) {
   const { t } = useLanguage();
   const { selectedRegion, setSelectedRegion, regionName } = useRegion();
 
-  const [catalog, setCatalog] = useState<IbizCatalogResponse | null>(null);
+  const [catalog, setCatalog] = useState<BiznesinfoCatalogResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
     const region = selectedRegion || "";
-    fetch(`/api/ibiz/catalog?region=${encodeURIComponent(region)}`)
+    fetch(`/api/biznesinfo/catalog?region=${encodeURIComponent(region)}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: IbizCatalogResponse | null) => {
+      .then((data: BiznesinfoCatalogResponse | null) => {
         if (!isMounted) return;
         setCatalog(data);
         setIsLoading(false);
@@ -42,8 +42,8 @@ export default function CategoryPage({ params }: PageProps) {
     };
   }, [selectedRegion]);
 
-  const categoryData: IbizCatalogCategory | null =
-    (catalog?.categories || []).find((c: IbizCatalogCategory) => c.slug === category) || null;
+  const categoryData: BiznesinfoCatalogCategory | null =
+    (catalog?.categories || []).find((c: BiznesinfoCatalogCategory) => c.slug === category) || null;
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-gray-100">

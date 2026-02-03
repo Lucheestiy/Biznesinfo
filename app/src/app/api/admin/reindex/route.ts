@@ -10,8 +10,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const jsonlPath = process.env.IBIZ_COMPANIES_JSONL_PATH
-    || "/app/public/data/ibiz/companies.jsonl";
+  const jsonlPath = process.env.BIZNESINFO_COMPANIES_JSONL_PATH
+    || "/app/public/data/biznesinfo/companies.jsonl";
 
   try {
     console.log(`Starting reindex from: ${jsonlPath}`);

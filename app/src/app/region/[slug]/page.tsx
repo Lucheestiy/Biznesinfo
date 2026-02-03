@@ -7,7 +7,7 @@ import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
 import { regions } from "@/data/regions";
-import type { IbizCatalogResponse } from "@/lib/ibiz/types";
+import type { BiznesinfoCatalogResponse } from "@/lib/biznesinfo/types";
 import { formatCompanyCount } from "@/lib/utils/plural";
 
 interface PageProps {
@@ -18,7 +18,7 @@ export default function RegionPage({ params }: PageProps) {
   const { slug } = use(params);
   const { t } = useLanguage();
   const { setSelectedRegion } = useRegion();
-  const [catalog, setCatalog] = useState<IbizCatalogResponse | null>(null);
+  const [catalog, setCatalog] = useState<BiznesinfoCatalogResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const regionData = useMemo(() => regions.find((r) => r.slug === slug) || null, [slug]);
@@ -32,9 +32,9 @@ export default function RegionPage({ params }: PageProps) {
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
-    fetch(`/api/ibiz/catalog?region=${encodeURIComponent(slug)}`)
+    fetch(`/api/biznesinfo/catalog?region=${encodeURIComponent(slug)}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: IbizCatalogResponse | null) => {
+      .then((data: BiznesinfoCatalogResponse | null) => {
         if (!isMounted) return;
         setCatalog(data);
         setIsLoading(false);

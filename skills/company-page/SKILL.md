@@ -215,9 +215,9 @@ export const COMPANY_OVERRIDES: Record<string, CompanyOverride> = {
 |------|------------|
 | `app/src/app/company/[id]/page.tsx` | Основной компонент |
 | `app/src/lib/companyOverrides.ts` | Персональные настройки |
-| `app/src/lib/ibiz/aboutOverrides.ts` | Тексты "О компании" |
-| `app/src/lib/ibiz/headerOverrides.ts` | Тексты для шапки |
-| `app/src/lib/ibiz/logoOverrides.ts` | Переопределение логотипов |
+| `app/src/lib/biznesinfo/aboutOverrides.ts` | Тексты "О компании" |
+| `app/src/lib/biznesinfo/headerOverrides.ts` | Тексты для шапки |
+| `app/src/lib/biznesinfo/logoOverrides.ts` | Переопределение логотипов |
 
 ---
 

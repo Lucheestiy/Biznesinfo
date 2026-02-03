@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
-import type { IbizSuggestResponse } from "@/lib/ibiz/types";
+import type { BiznesinfoSuggestResponse } from "@/lib/biznesinfo/types";
 import Rubricator from "./Rubricator";
 import { formatCompanyCount } from "@/lib/utils/plural";
 
@@ -69,21 +69,21 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
     const abort = new AbortController();
     const region = selectedRegion || "";
     
-    // "Название компании" → /api/ibiz/suggest (companies)
-    // "Продукция и услуги" → /api/ibiz/catalog/suggest (categories/rubrics)
+    // "Название компании" → /api/biznesinfo/suggest (companies)
+    // "Продукция и услуги" → /api/biznesinfo/catalog/suggest (categories/rubrics)
     const isCompanySearch = activeInput === "company";
     const apiUrl = isCompanySearch 
-      ? `/api/ibiz/suggest?q=${encodeURIComponent(q)}&region=${encodeURIComponent(region)}`
-      : `/api/ibiz/catalog/suggest?q=${encodeURIComponent(q)}&region=${encodeURIComponent(region)}`;
+      ? `/api/biznesinfo/suggest?q=${encodeURIComponent(q)}&region=${encodeURIComponent(region)}`
+      : `/api/biznesinfo/catalog/suggest?q=${encodeURIComponent(q)}&region=${encodeURIComponent(region)}`;
     
     fetch(apiUrl, { signal: abort.signal })
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: IbizSuggestResponse | null) => {
+      .then((data: BiznesinfoSuggestResponse | null) => {
         if (!data) return;
         
         // API already returns correct type:
-        // - /api/ibiz/suggest → companies
-        // - /api/ibiz/catalog/suggest → categories/rubrics
+        // - /api/biznesinfo/suggest → companies
+        // - /api/biznesinfo/catalog/suggest → categories/rubrics
         
         const mapped: SearchSuggestion[] = (data.suggestions || [])
           .map((s) => ({

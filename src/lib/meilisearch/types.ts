@@ -1,7 +1,7 @@
 // Document structure for Meilisearch index
 export interface MeiliCompanyDocument {
   id: string;                    // source_id (primary key)
-  source: "ibiz" | "belarusinfo";
+  source: "biznesinfo";
   name: string;
   description: string;
   about: string;

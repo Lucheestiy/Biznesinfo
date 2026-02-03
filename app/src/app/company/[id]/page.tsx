@@ -9,13 +9,13 @@ import MessageModal from "@/components/MessageModal";
 import CompanyLocationMap from "@/components/CompanyLocationMap";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useFavorites } from "@/contexts/FavoritesContext";
-import type { IbizCompany, IbizCompanyResponse, IbizPhoneExt } from "@/lib/ibiz/types";
-import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
-import { IBIZ_ABOUT_OVERRIDES } from "@/lib/ibiz/aboutOverrides";
-import { IBIZ_HEADER_OVERRIDES } from "@/lib/ibiz/headerOverrides";
-import { IBIZ_LOGO_OVERRIDES } from "@/lib/ibiz/logoOverrides";
+import type { BiznesinfoCompany, BiznesinfoCompanyResponse, BiznesinfoPhoneExt } from "@/lib/biznesinfo/types";
+import { BIZNESINFO_CATEGORY_ICONS } from "@/lib/biznesinfo/icons";
+import { BIZNESINFO_ABOUT_OVERRIDES } from "@/lib/biznesinfo/aboutOverrides";
+import { BIZNESINFO_HEADER_OVERRIDES } from "@/lib/biznesinfo/headerOverrides";
+import { BIZNESINFO_LOGO_OVERRIDES } from "@/lib/biznesinfo/logoOverrides";
 import { getCompanyOverride } from "@/lib/companyOverrides";
-import { generateCompanyKeywordPhrases } from "@/lib/ibiz/keywords";
+import { generateCompanyKeywordPhrases } from "@/lib/biznesinfo/keywords";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -30,6 +30,25 @@ function displayUrl(raw: string): string {
   } catch {
     return s.replace(/^https?:\/\//i, "").split("/")[0] || s;
   }
+}
+
+function logoProxyUrl(companyId: string, rawLogoUrl: string): string {
+  const logoUrl = (rawLogoUrl || "").trim();
+  if (!logoUrl) return "";
+  if (logoUrl.startsWith("/api/biznesinfo/logo")) return logoUrl;
+  if (logoUrl.startsWith("/") && !logoUrl.startsWith("/images/")) return logoUrl;
+
+  const pathname = (() => {
+    try {
+      const u = new URL(logoUrl);
+      return u.pathname || "";
+    } catch {
+      return logoUrl.split("?")[0] || "";
+    }
+  })();
+
+  if (!pathname.startsWith("/images/")) return "";
+  return `/api/biznesinfo/logo?id=${encodeURIComponent(companyId)}&path=${encodeURIComponent(pathname)}&v=2`;
 }
 
 function normalizePhoneForTel(phone: string): string {
@@ -225,7 +244,7 @@ function getOptimizedLocalImageSrc(src: string | null | undefined, width: 256 | 
 }
 
 // Generate up to 10 relevant keywords (comma-style phrases) for search/SEO tags.
-function generateKeywords(company: IbizCompany): string[] {
+function generateKeywords(company: BiznesinfoCompany): string[] {
   return generateCompanyKeywordPhrases(company, { maxKeywords: 10 });
 }
 
@@ -296,7 +315,7 @@ export default function CompanyPage({ params }: PageProps) {
   const { t } = useLanguage();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [messageModalOpen, setMessageModalOpen] = useState(false);
-  const [data, setData] = useState<IbizCompanyResponse | null>(null);
+  const [data, setData] = useState<BiznesinfoCompanyResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
@@ -308,9 +327,9 @@ export default function CompanyPage({ params }: PageProps) {
     setLogoFailed(false);
     setLogoLoaded(false);
     setShowAllWebsites(false);
-    fetch(`/api/ibiz/company/${encodeURIComponent(id)}`)
+    fetch(`/api/biznesinfo/company/${encodeURIComponent(id)}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((resp: IbizCompanyResponse | null) => {
+      .then((resp: BiznesinfoCompanyResponse | null) => {
         if (!isMounted) return;
         setData(resp);
         setIsLoading(false);
@@ -331,7 +350,7 @@ export default function CompanyPage({ params }: PageProps) {
       .filter(Boolean)
       .map((value) => String(value).toLowerCase());
     for (const key of candidates) {
-      const hit = IBIZ_LOGO_OVERRIDES[key];
+      const hit = BIZNESINFO_LOGO_OVERRIDES[key];
       if (hit) return hit;
     }
     return "";
@@ -339,10 +358,10 @@ export default function CompanyPage({ params }: PageProps) {
   const logoUrl = (companyMaybe?.logo_url || "").trim();
   const logoSrc = useMemo(() => {
     if (logoOverride) return logoOverride;
-    return logoUrl ? `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}&v=2` : "";
-  }, [logoOverride, logoUrl]);
+    return logoUrl ? logoProxyUrl(companyMaybe?.source_id || id, logoUrl) : "";
+  }, [id, companyMaybe?.source_id, logoOverride, logoUrl]);
 
-  const phones: IbizPhoneExt[] = useMemo(() => {
+  const phones: BiznesinfoPhoneExt[] = useMemo(() => {
     if (!companyMaybe) return [];
     if (companyMaybe.phones_ext && companyMaybe.phones_ext.length > 0) return companyMaybe.phones_ext;
     return (companyMaybe.phones || []).map((number) => ({ number, labels: [] as string[] }));
@@ -411,7 +430,7 @@ export default function CompanyPage({ params }: PageProps) {
   const primaryCategory = company.categories?.[0] ?? null;
   const primaryRubric = company.rubrics?.[0] ?? null;
 
-  const icon = primaryCategory?.slug ? IBIZ_CATEGORY_ICONS[primaryCategory.slug] || "🏢" : "🏢";
+  const icon = primaryCategory?.slug ? BIZNESINFO_CATEGORY_ICONS[primaryCategory.slug] || "🏢" : "🏢";
   const showLogo = Boolean(logoOverride || logoUrl) && !logoFailed;
 
   // Company-specific overrides
@@ -421,12 +440,14 @@ export default function CompanyPage({ params }: PageProps) {
   const primaryPhone = phones?.[0]?.number || "";
   const primaryEmail = company.emails?.[0] || "";
 
-  const aboutText = (company.about || "").trim() || (IBIZ_ABOUT_OVERRIDES[company.source_id] || "").trim() || generateUniqueDescription(company);
+  const aboutText = (company.about || "").trim()
+    || (BIZNESINFO_ABOUT_OVERRIDES[company.source_id] || "").trim()
+    || generateUniqueDescription(company);
 
   const headerOverride =
-    IBIZ_HEADER_OVERRIDES[company.source_id] ||
-    IBIZ_HEADER_OVERRIDES[String(company.source_id || "").toLowerCase()] ||
-    IBIZ_HEADER_OVERRIDES[String(id || "").toLowerCase()] ||
+    BIZNESINFO_HEADER_OVERRIDES[company.source_id] ||
+    BIZNESINFO_HEADER_OVERRIDES[String(company.source_id || "").toLowerCase()] ||
+    BIZNESINFO_HEADER_OVERRIDES[String(id || "").toLowerCase()] ||
     "";
   const hasHeaderOverride = headerOverride.trim().length > 0;
   const headerDescriptionSource = hasHeaderOverride

@@ -1,6 +1,9 @@
 .DS_Store
 *.log
 
+# local DBs/state (not committed)
+data/
+
 # env (keep example)
 .env
 .env.*
@@ -22,10 +25,11 @@ memory/
 # root deps/build
 node_modules/
 *.tsbuildinfo
+.next/
 
-# ibiz scraped data exports (generated, root-level)
-public/data/ibiz/
-public/data/ibiz/companies.jsonl
-public/data/ibiz/*.csv
-public/data/ibiz/*.tmp
-public/data/ibiz/*.backup-*.jsonl
+# biznesinfo data exports (generated, root-level)
+public/data/biznesinfo/
+public/data/biznesinfo/companies.jsonl
+public/data/biznesinfo/*.csv
+public/data/biznesinfo/*.tmp
+public/data/biznesinfo/*.backup-*.jsonl

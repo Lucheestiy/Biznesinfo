@@ -5,11 +5,12 @@ import path from "node:path";
 
 import { getCompaniesIndex, isMeiliHealthy } from "./client";
 import type { MeiliSearchParams, MeiliCompanyDocument } from "./types";
-import type { IbizCompanySummary, IbizSearchResponse, IbizSuggestResponse } from "../ibiz/types";
-import { IBIZ_CATEGORY_ICONS } from "../ibiz/icons";
+import type { BiznesinfoCompanySummary, BiznesinfoSearchResponse, BiznesinfoSuggestResponse } from "../biznesinfo/types";
+import { BIZNESINFO_CATEGORY_ICONS } from "../biznesinfo/icons";
 import { isAddressLikeLocationQuery, normalizeCityForFilter } from "../utils/location";
 
-const LOGO_CACHE_DIR = process.env.IBIZ_LOGO_CACHE_DIR?.trim() || path.join(os.tmpdir(), "ibiz-logo-cache");
+const LOGO_CACHE_DIR = process.env.BIZNESINFO_LOGO_CACHE_DIR?.trim() || path.join(os.tmpdir(), "biznesinfo-logo-cache");
+const LOGO_UPSTREAM_SUFFIX = process.env.BIZNESINFO_LOGO_UPSTREAM_SUFFIX?.trim() || "";
 const LOGO_SNIFF_BYTES = 4096;
 const LOGO_FETCH_TIMEOUT_MS = 5000;
 
@@ -153,16 +154,50 @@ async function countKeywordFilteredTotal(params: {
 function normalizeLogoTargetUrl(raw: string): URL | null {
   const s = (raw || "").trim();
   if (!s) return null;
-  let u: URL;
-  try {
-    u = new URL(s);
-  } catch {
-    return null;
+
+  const safeParse = (): URL | null => {
+    try {
+      if (s.startsWith("/")) return new URL(s, "http://localhost");
+      return new URL(s);
+    } catch {
+      return null;
+    }
+  };
+
+  const u = safeParse();
+  if (!u) return null;
+
+  const isValidCompanyId = (id: string): boolean => {
+    const v = (id || "").trim().toLowerCase();
+    if (!v || v.length > 63) return false;
+    return /^[a-z0-9-]+$/u.test(v);
+  };
+
+  const isValidLogoPath = (p: string): boolean => {
+    const v = (p || "").trim();
+    if (!v.startsWith("/images/")) return false;
+    if (v.includes("..")) return false;
+    if (v.includes("\\")) return false;
+    return true;
+  };
+
+  // Internal proxy URL: resolve to upstream URL (to share cache/sniff logic).
+  if (u.pathname === "/api/biznesinfo/logo") {
+    if (!LOGO_UPSTREAM_SUFFIX) return null;
+    const id = (u.searchParams.get("id") || "").trim();
+    const logoPath = (u.searchParams.get("path") || u.searchParams.get("p") || "").trim();
+    if (!isValidCompanyId(id) || !isValidLogoPath(logoPath)) return null;
+    return new URL(`https://${id.toLowerCase()}.${LOGO_UPSTREAM_SUFFIX}${logoPath}`);
   }
+
+  // Direct upstream URL (legacy): allow only hosts under the configured suffix.
   if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+  if (!LOGO_UPSTREAM_SUFFIX) return null;
   const host = (u.hostname || "").toLowerCase();
-  if (host !== "ibiz.by" && !host.endsWith(".ibiz.by")) return null;
+  const suffix = LOGO_UPSTREAM_SUFFIX.toLowerCase();
+  if (host !== suffix && !host.endsWith(`.${suffix}`)) return null;
   if (!u.pathname.startsWith("/images/")) return null;
+
   u.username = "";
   u.password = "";
   u.protocol = "https:";
@@ -441,7 +476,7 @@ function normalizeWebsites(raw: unknown): string[] {
   return [...Array.from(byHost.values()).map((v) => v.url), ...fallback];
 }
 
-function documentToSummary(doc: MeiliCompanyDocument): IbizCompanySummary {
+function documentToSummary(doc: MeiliCompanyDocument): BiznesinfoCompanySummary {
   return {
     id: doc.id,
     source: doc.source,
@@ -467,7 +502,7 @@ function documentToSummary(doc: MeiliCompanyDocument): IbizCompanySummary {
   };
 }
 
-export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearchResponse> {
+export async function meiliSearch(params: MeiliSearchParams): Promise<BiznesinfoSearchResponse> {
   const index = getCompaniesIndex();
   const offset = Math.max(0, params.offset || 0);
   const limit = Math.max(1, Math.min(200, params.limit || 24));
@@ -622,7 +657,7 @@ export async function meiliSuggest(params: {
   query: string;
   region?: string | null;
   limit?: number;
-}): Promise<IbizSuggestResponse> {
+}): Promise<BiznesinfoSuggestResponse> {
   const index = getCompaniesIndex();
 
   const filter: string[] = [];
@@ -641,12 +676,12 @@ export async function meiliSuggest(params: {
     ],
   });
 
-  const suggestions: IbizSuggestResponse["suggestions"] = result.hits.map(hit => ({
+  const suggestions: BiznesinfoSuggestResponse["suggestions"] = result.hits.map(hit => ({
     type: "company" as const,
     id: hit.id,
     name: hit.name,
     url: `/company/${hit.id}`,
-    icon: hit.primary_category_slug ? IBIZ_CATEGORY_ICONS[hit.primary_category_slug] || null : null,
+    icon: hit.primary_category_slug ? BIZNESINFO_CATEGORY_ICONS[hit.primary_category_slug] || null : null,
     subtitle: hit.address || hit.city || "",
   }));
 

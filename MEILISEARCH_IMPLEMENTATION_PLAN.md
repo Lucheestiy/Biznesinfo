@@ -1,11 +1,11 @@
-# Meilisearch Implementation Plan for biznes.lucheestiy.com
+# Meilisearch Implementation Plan for biznesinfo.lucheestiy.com
 
 ## Project Overview
 
 **Current State:**
 - Next.js 16.1.1 + React 19 + TypeScript + Tailwind CSS
-- ~87,000 companies stored in JSONL file (`public/data/ibiz/companies.jsonl`)
-- In-memory search using simple substring matching in `src/lib/ibiz/store.ts`
+- ~87,000 companies stored in JSONL file (`public/data/biznesinfo/companies.jsonl`)
+- In-memory search using simple substring matching in `src/lib/biznesinfo/store.ts`
 - Docker deployment: app + nginx containers on port 8102
 
 **Goal:** Replace current in-memory search with Meilisearch for faster, typo-tolerant, relevance-ranked search.
@@ -46,7 +46,7 @@ Add Meilisearch connection variables to app service:
 ```yaml
 environment:
   NODE_ENV: production
-  IBIZ_COMPANIES_JSONL_PATH: /app/public/data/ibiz/companies.jsonl
+  BIZNESINFO_COMPANIES_JSONL_PATH: /app/public/data/biznesinfo/companies.jsonl
   MEILI_HOST: http://meilisearch:7700
   MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-your-secure-master-key-here}
 ```
@@ -77,7 +77,7 @@ Create `src/lib/meilisearch/types.ts`:
 // Document structure for Meilisearch index
 export interface MeiliCompanyDocument {
   id: string;                    // source_id (primary key)
-  source: "ibiz" | "belarusinfo";
+  source: "biznesinfo";
   name: string;
   description: string;
   about: string;
@@ -254,7 +254,7 @@ import { createInterface } from 'node:readline';
 import { getMeiliClient, COMPANIES_INDEX } from './client';
 import { configureCompaniesIndex } from './config';
 import type { MeiliCompanyDocument } from './types';
-import type { IbizCompany } from '../ibiz/types';
+import type { BiznesinfoCompany } from '../biznesinfo/types';
 
 // Reuse region normalization from store.ts
 function normalizeRegionSlug(city: string, region: string, address: string): string | null {
@@ -293,7 +293,7 @@ function normalizeRegionSlug(city: string, region: string, address: string): str
   return null;
 }
 
-function companyToDocument(company: IbizCompany): MeiliCompanyDocument {
+function companyToDocument(company: BiznesinfoCompany): MeiliCompanyDocument {
   const regionSlug = normalizeRegionSlug(company.city, company.region, company.address);
   const primaryCategory = company.categories?.[0] ?? null;
   const primaryRubric = company.rubrics?.[0] ?? null;
@@ -353,7 +353,7 @@ export async function indexCompanies(jsonlPath: string): Promise<{ total: number
     if (!raw) continue;
 
     try {
-      const company = JSON.parse(raw) as IbizCompany;
+      const company = JSON.parse(raw) as BiznesinfoCompany;
       if (!company.source_id) continue;
 
       documents.push(companyToDocument(company));
@@ -393,8 +393,8 @@ Create `scripts/index_meilisearch.mjs`:
 import { indexCompanies } from '../src/lib/meilisearch/indexer.js';
 import path from 'node:path';
 
-const jsonlPath = process.env.IBIZ_COMPANIES_JSONL_PATH
-  || path.join(process.cwd(), 'public', 'data', 'ibiz', 'companies.jsonl');
+const jsonlPath = process.env.BIZNESINFO_COMPANIES_JSONL_PATH
+  || path.join(process.cwd(), 'public', 'data', 'biznesinfo', 'companies.jsonl');
 
 console.log(`Starting Meilisearch indexing from: ${jsonlPath}`);
 
@@ -426,9 +426,9 @@ Create `src/lib/meilisearch/search.ts`:
 ```typescript
 import { getCompaniesIndex } from './client';
 import type { MeiliSearchParams, MeiliSearchResult, MeiliCompanyDocument } from './types';
-import type { IbizCompanySummary, IbizSearchResponse, IbizSuggestResponse } from '../ibiz/types';
+import type { BiznesinfoCompanySummary, BiznesinfoSearchResponse, BiznesinfoSuggestResponse } from '../biznesinfo/types';
 
-function documentToSummary(doc: MeiliCompanyDocument): IbizCompanySummary {
+function documentToSummary(doc: MeiliCompanyDocument): BiznesinfoCompanySummary {
   return {
     id: doc.id,
     source: doc.source,
@@ -453,7 +453,7 @@ function documentToSummary(doc: MeiliCompanyDocument): IbizCompanySummary {
   };
 }
 
-export async function meiliSearch(params: MeiliSearchParams): Promise<IbizSearchResponse> {
+export async function meiliSearch(params: MeiliSearchParams): Promise<BiznesinfoSearchResponse> {
   const index = getCompaniesIndex();
 
   const filter: string[] = [];
@@ -492,7 +492,7 @@ export async function meiliSuggest(params: {
   query: string;
   region?: string | null;
   limit?: number;
-}): Promise<IbizSuggestResponse> {
+}): Promise<BiznesinfoSuggestResponse> {
   const index = getCompaniesIndex();
 
   const filter: string[] = [];
@@ -509,7 +509,7 @@ export async function meiliSuggest(params: {
     ],
   });
 
-  const suggestions: IbizSuggestResponse['suggestions'] = result.hits.map(hit => ({
+  const suggestions: BiznesinfoSuggestResponse['suggestions'] = result.hits.map(hit => ({
     type: 'company' as const,
     id: hit.id,
     name: hit.name,
@@ -527,7 +527,7 @@ export async function meiliSuggest(params: {
 
 ### 5.2 Update Search API Route
 
-Modify `src/app/api/ibiz/search/route.ts`:
+Modify `src/app/api/biznesinfo/search/route.ts`:
 
 ```typescript
 import { NextResponse } from "next/server";
@@ -551,8 +551,8 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('Meilisearch error:', error);
     // Fallback to in-memory search if Meilisearch fails
-    const { ibizSearch } = await import("@/lib/ibiz/store");
-    const data = await ibizSearch({
+    const { biznesinfoSearch } = await import("@/lib/biznesinfo/store");
+    const data = await biznesinfoSearch({
       query,
       region,
       offset: Number.isFinite(offset) ? offset : 0,
@@ -565,7 +565,7 @@ export async function GET(request: Request) {
 
 ### 5.3 Update Suggest API Route
 
-Modify `src/app/api/ibiz/suggest/route.ts` similarly with Meilisearch integration.
+Modify `src/app/api/biznesinfo/suggest/route.ts` similarly with Meilisearch integration.
 
 ---
 
@@ -587,8 +587,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const jsonlPath = process.env.IBIZ_COMPANIES_JSONL_PATH
-    || '/app/public/data/ibiz/companies.jsonl';
+  const jsonlPath = process.env.BIZNESINFO_COMPANIES_JSONL_PATH
+    || '/app/public/data/biznesinfo/companies.jsonl';
 
   try {
     const result = await indexCompanies(jsonlPath);
@@ -656,7 +656,7 @@ docker compose exec meilisearch curl http://localhost:7700/indexes/companies/sta
   -H "Authorization: Bearer <MEILI_MASTER_KEY>"
 
 # Test search
-curl "http://localhost:8102/api/ibiz/search?q=ремонт"
+curl "http://localhost:8102/api/biznesinfo/search?q=ремонт"
 ```
 
 ---
@@ -712,8 +712,8 @@ exec node server.js
 |------|---------|
 | `docker-compose.yml` | Add meilisearch service, volume, env vars |
 | `package.json` | Add meilisearch dependency, index:meili script |
-| `src/app/api/ibiz/search/route.ts` | Use Meilisearch with fallback |
-| `src/app/api/ibiz/suggest/route.ts` | Use Meilisearch with fallback |
+| `src/app/api/biznesinfo/search/route.ts` | Use Meilisearch with fallback |
+| `src/app/api/biznesinfo/suggest/route.ts` | Use Meilisearch with fallback |
 
 ---
 

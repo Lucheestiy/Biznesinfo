@@ -8,9 +8,9 @@ import AIAssistant from "@/components/AIAssistant";
 import MessageModal from "@/components/MessageModal";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useFavorites } from "@/contexts/FavoritesContext";
-import type { IbizCompanyResponse, IbizPhoneExt } from "@/lib/ibiz/types";
-import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
-import { IBIZ_ABOUT_OVERRIDES } from "@/lib/ibiz/aboutOverrides";
+import type { BiznesinfoCompanyResponse, BiznesinfoPhoneExt } from "@/lib/biznesinfo/types";
+import { BIZNESINFO_CATEGORY_ICONS } from "@/lib/biznesinfo/icons";
+import { BIZNESINFO_ABOUT_OVERRIDES } from "@/lib/biznesinfo/aboutOverrides";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -252,7 +252,7 @@ export default function CompanyPage({ params }: PageProps) {
   const { t } = useLanguage();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [messageModalOpen, setMessageModalOpen] = useState(false);
-  const [data, setData] = useState<IbizCompanyResponse | null>(null);
+  const [data, setData] = useState<BiznesinfoCompanyResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
@@ -262,9 +262,9 @@ export default function CompanyPage({ params }: PageProps) {
     setIsLoading(true);
     setLogoFailed(false);
     setLogoLoaded(false);
-    fetch(`/api/ibiz/company/${encodeURIComponent(id)}`)
+    fetch(`/api/biznesinfo/company/${encodeURIComponent(id)}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((resp: IbizCompanyResponse | null) => {
+      .then((resp: BiznesinfoCompanyResponse | null) => {
         if (!isMounted) return;
         setData(resp);
         setIsLoading(false);
@@ -281,9 +281,25 @@ export default function CompanyPage({ params }: PageProps) {
 
   const companyMaybe = data?.company ?? null;
   const logoUrl = (companyMaybe?.logo_url || "").trim();
-  const logoSrc = useMemo(() => (logoUrl ? `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}` : ""), [logoUrl]);
+  const logoSrc = useMemo(() => {
+    if (!logoUrl) return "";
+    const companyId = companyMaybe?.source_id || "";
+    if (!companyId) return "";
 
-  const phones: IbizPhoneExt[] = useMemo(() => {
+    const pathname = (() => {
+      try {
+        const u = new URL(logoUrl);
+        return u.pathname || "";
+      } catch {
+        return logoUrl.split("?")[0] || "";
+      }
+    })();
+
+    if (!pathname.startsWith("/images/")) return "";
+    return `/api/biznesinfo/logo?id=${encodeURIComponent(companyId)}&path=${encodeURIComponent(pathname)}`;
+  }, [companyMaybe?.source_id, logoUrl]);
+
+  const phones: BiznesinfoPhoneExt[] = useMemo(() => {
     if (!companyMaybe) return [];
     if (companyMaybe.phones_ext && companyMaybe.phones_ext.length > 0) return companyMaybe.phones_ext;
     return (companyMaybe.phones || []).map((number) => ({ number, labels: [] as string[] }));
@@ -340,13 +356,13 @@ export default function CompanyPage({ params }: PageProps) {
   const primaryCategory = company.categories?.[0] ?? null;
   const primaryRubric = company.rubrics?.[0] ?? null;
 
-  const icon = primaryCategory?.slug ? IBIZ_CATEGORY_ICONS[primaryCategory.slug] || "🏢" : "🏢";
+  const icon = primaryCategory?.slug ? BIZNESINFO_CATEGORY_ICONS[primaryCategory.slug] || "🏢" : "🏢";
   const showLogo = Boolean(logoUrl) && !logoFailed;
 
   const primaryPhone = phones?.[0]?.number || "";
   const primaryEmail = company.emails?.[0] || "";
 
-  const aboutText = (IBIZ_ABOUT_OVERRIDES[company.source_id] || "").trim() || generateUniqueDescription(company);
+  const aboutText = (BIZNESINFO_ABOUT_OVERRIDES[company.source_id] || "").trim() || generateUniqueDescription(company);
 
   const categoryLink = primaryCategory ? `/catalog/${primaryCategory.slug}` : "/#catalog";
   const rubricSubSlug = primaryRubric ? primaryRubric.slug.split("/").slice(1).join("/") : "";
@@ -650,7 +666,7 @@ export default function CompanyPage({ params }: PageProps) {
                       const catSlug = rubric.category_slug;
                       const rubricSubSlug = rubric.slug.split("/").slice(1).join("/");
                       const rubricHref = catSlug && rubricSubSlug ? `/catalog/${catSlug}/${rubricSubSlug}` : `/catalog/${catSlug}`;
-                      const catIcon = catSlug ? IBIZ_CATEGORY_ICONS[catSlug] || "📋" : "📋";
+                      const catIcon = catSlug ? BIZNESINFO_CATEGORY_ICONS[catSlug] || "📋" : "📋";
 
                       return (
                         <Link

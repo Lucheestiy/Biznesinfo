@@ -8,7 +8,7 @@ import CompanyCard from "@/components/CompanyCard";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
 import { regions } from "@/data/regions";
-import type { IbizCompanySummary, IbizSearchResponse } from "@/lib/ibiz/types";
+import type { BiznesinfoCompanySummary, BiznesinfoSearchResponse } from "@/lib/biznesinfo/types";
 import { formatCompanyCount } from "@/lib/utils/plural";
 import { tokenizeHighlightQuery } from "@/lib/utils/highlight";
 import Pagination from "@/components/Pagination";
@@ -85,7 +85,7 @@ function SearchResults() {
     else router.push(url);
   };
 
-  const [data, setData] = useState<IbizSearchResponse | null>(null);
+  const [data, setData] = useState<BiznesinfoSearchResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -132,9 +132,9 @@ function SearchResults() {
     params.set("offset", String((page - 1) * PAGE_SIZE));
     params.set("limit", String(PAGE_SIZE));
 
-    fetch(`/api/ibiz/search?${params.toString()}`)
+    fetch(`/api/biznesinfo/search?${params.toString()}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((resp: IbizSearchResponse | null) => {
+      .then((resp: BiznesinfoSearchResponse | null) => {
         if (!isMounted) return;
         setData(resp);
         setIsLoading(false);
@@ -157,8 +157,8 @@ function SearchResults() {
 
   const companies = useMemo(() => {
     const items = data?.companies || [];
-    const withLogo: IbizCompanySummary[] = [];
-    const withoutLogo: IbizCompanySummary[] = [];
+    const withLogo: BiznesinfoCompanySummary[] = [];
+    const withoutLogo: BiznesinfoCompanySummary[] = [];
     for (const c of items) {
       if ((c.logo_url || "").trim()) withLogo.push(c);
       else withoutLogo.push(c);

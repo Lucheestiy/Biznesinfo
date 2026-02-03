@@ -15,7 +15,7 @@ Options:
   --volumes             Also remove named/anonymous volumes (can delete data)
   --no-system-prune     Skip pruning unused Docker images/build cache (default: prune)
   --builder-prune       Prune Docker build cache before building
-  --clear-logo-cache    Wipe ./app/.cache/ibiz-logo-cache on the host
+  --clear-logo-cache    Wipe ./app/.cache/biznesinfo-logo-cache on the host
   --logs                Follow logs after bringing stack up
   -h, --help            Show this help
 EOF
@@ -120,7 +120,7 @@ if [[ "${WIPE_VOLUMES}" -eq 1 ]]; then
 fi
 
 if [[ "${CLEAR_LOGO_CACHE}" -eq 1 ]]; then
-  CACHE_DIR="${PROJECT_DIR}/app/.cache/ibiz-logo-cache"
+  CACHE_DIR="${PROJECT_DIR}/app/.cache/biznesinfo-logo-cache"
   echo "==> Clearing logo cache: ${CACHE_DIR}"
   rm -rf "${CACHE_DIR}"
   install -d -m 0777 "${CACHE_DIR}"

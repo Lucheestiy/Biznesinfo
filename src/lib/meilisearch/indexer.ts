@@ -3,8 +3,8 @@ import { createInterface } from "node:readline";
 import { getMeiliClient, COMPANIES_INDEX } from "./client";
 import { configureCompaniesIndex } from "./config";
 import type { MeiliCompanyDocument } from "./types";
-import type { IbizCompany } from "../ibiz/types";
-import { generateCompanyKeywords } from "../ibiz/keywords";
+import type { BiznesinfoCompany } from "../biznesinfo/types";
+import { generateCompanyKeywords } from "../biznesinfo/keywords";
 import { normalizeCityForFilter } from "../utils/location";
 
 // Region normalization logic (reused from store.ts)
@@ -54,7 +54,7 @@ function normalizeLogoUrl(raw: string): string {
   return url;
 }
 
-function companyToDocument(company: IbizCompany): MeiliCompanyDocument {
+function companyToDocument(company: BiznesinfoCompany): MeiliCompanyDocument {
   const regionSlug = normalizeRegionSlug(company.city, company.region, company.address);
   const primaryCategory = company.categories?.[0] ?? null;
   const primaryRubric = company.rubrics?.[0] ?? null;
@@ -124,7 +124,7 @@ export async function indexCompanies(jsonlPath: string): Promise<{ total: number
     if (!raw) continue;
 
     try {
-      const company = JSON.parse(raw) as IbizCompany;
+      const company = JSON.parse(raw) as BiznesinfoCompany;
       if (!company.source_id) continue;
 
       documents.push(companyToDocument(company));

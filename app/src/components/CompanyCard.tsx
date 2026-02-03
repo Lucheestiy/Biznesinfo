@@ -6,20 +6,39 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useFavorites } from "@/contexts/FavoritesContext";
 import AIAssistant from "./AIAssistant";
 import MessageModal from "./MessageModal";
-import type { IbizCompanySummary } from "@/lib/ibiz/types";
-import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
-import { companySlugForUrl } from "@/lib/ibiz/slug";
+import type { BiznesinfoCompanySummary } from "@/lib/biznesinfo/types";
+import { BIZNESINFO_CATEGORY_ICONS } from "@/lib/biznesinfo/icons";
+import { companySlugForUrl } from "@/lib/biznesinfo/slug";
 import { buildHighlightRegex, highlightText } from "@/lib/utils/highlight";
 
 const LOGO_PROXY_VERSION = "2";
 
 interface CompanyCardProps {
-  company: IbizCompanySummary;
+  company: BiznesinfoCompanySummary;
   showCategory?: boolean;
   variant?: "default" | "search";
   highlightNameTokens?: string[];
   highlightServiceTokens?: string[];
   highlightLocationTokens?: string[];
+}
+
+function logoProxyUrl(companyId: string, rawLogoUrl: string): string {
+  const logoUrl = (rawLogoUrl || "").trim();
+  if (!logoUrl) return "";
+
+  const extractPath = (): string => {
+    try {
+      const u = new URL(logoUrl);
+      return u.pathname || "";
+    } catch {
+      return logoUrl.split("?")[0] || "";
+    }
+  };
+
+  const pathname = extractPath();
+  if (!pathname.startsWith("/images/")) return "";
+
+  return `/api/biznesinfo/logo?id=${encodeURIComponent(companyId)}&path=${encodeURIComponent(pathname)}&v=${LOGO_PROXY_VERSION}`;
 }
 
 function displayUrl(raw: string): string {
@@ -273,13 +292,14 @@ function SearchCompanyCard({
   const companySlug = companySlugForUrl(company.id);
   const companyHref = `/company/${encodeURIComponent(companySlug)}`;
   const favorite = isFavorite(company.id);
-  const icon = company.primary_category_slug ? IBIZ_CATEGORY_ICONS[company.primary_category_slug] || "🏢" : "🏢";
+  const icon = company.primary_category_slug ? BIZNESINFO_CATEGORY_ICONS[company.primary_category_slug] || "🏢" : "🏢";
   const logoUrl = (company.logo_url || "").trim();
   const logoSrc = useMemo(() => {
     if (!logoUrl) return "";
-    if (logoUrl.startsWith("/")) return logoUrl;
-    return `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}&v=${LOGO_PROXY_VERSION}`;
-  }, [logoUrl]);
+    if (logoUrl.startsWith("/api/biznesinfo/logo")) return logoUrl;
+    if (logoUrl.startsWith("/") && !logoUrl.startsWith("/images/")) return logoUrl;
+    return logoProxyUrl(company.id, logoUrl);
+  }, [company.id, logoUrl]);
   const showLogo = Boolean(logoUrl) && !logoFailed;
 
   const initials = useMemo(() => {
@@ -411,9 +431,6 @@ function SearchCompanyCard({
               >
                 {highlightText(company.name, highlightNameTokens)}
               </Link>
-              {company.source === "belarusinfo" && (
-                <span aria-hidden className="ml-2 inline-block w-2 h-2 rounded-full bg-white/50 align-middle" />
-              )}
             </h3>
             {industryText && (
               <div className="mt-2">
@@ -527,13 +544,14 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
   const workTime = (company.work_hours?.work_time || "").trim();
   const workHoursText = [workStatus, workTime && !workStatus.includes(workTime) ? workTime : ""].filter(Boolean).join(" • ");
 
-  const icon = company.primary_category_slug ? IBIZ_CATEGORY_ICONS[company.primary_category_slug] || "🏢" : "🏢";
+  const icon = company.primary_category_slug ? BIZNESINFO_CATEGORY_ICONS[company.primary_category_slug] || "🏢" : "🏢";
   const logoUrl = (company.logo_url || "").trim();
   const logoSrc = useMemo(() => {
     if (!logoUrl) return "";
-    if (logoUrl.startsWith("/")) return logoUrl;
-    return `/api/ibiz/logo?u=${encodeURIComponent(logoUrl)}&v=${LOGO_PROXY_VERSION}`;
-  }, [logoUrl]);
+    if (logoUrl.startsWith("/api/biznesinfo/logo")) return logoUrl;
+    if (logoUrl.startsWith("/") && !logoUrl.startsWith("/images/")) return logoUrl;
+    return logoProxyUrl(company.id, logoUrl);
+  }, [company.id, logoUrl]);
   const showLogo = Boolean(logoUrl) && !logoFailed;
   
   // Generate initials for companies without logo
@@ -634,12 +652,6 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
             <div className="min-w-0 flex-1">
               <h3 className="font-bold text-white text-lg leading-tight">
                 {company.name}
-                {company.source === "belarusinfo" && (
-                  <span
-                    aria-hidden
-                    className="ml-2 inline-block w-2 h-2 rounded-full bg-white/40 align-middle"
-                  />
-                )}
               </h3>
               {showCategory && company.primary_rubric_name && (
                 <span className="inline-block mt-2 text-xs text-pink-200 bg-white/10 px-2 py-1 rounded">

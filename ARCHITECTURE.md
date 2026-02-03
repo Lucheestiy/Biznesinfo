@@ -119,7 +119,8 @@ HOST_PORT=8116                           # Local port for nginx
 MEILI_MASTER_KEY=***                     # Meilisearch authentication
 ADMIN_SECRET=***                         # Admin API secret
 NODE_ENV=production
-IBIZ_COMPANIES_JSONL_PATH=/app/public/data/ibiz/companies.jsonl
+BIZNESINFO_COMPANIES_JSONL_PATH=/app/public/data/biznesinfo/companies.jsonl
+BIZNESINFO_LOGO_UPSTREAM_SUFFIX=         # Optional: enables logo proxy fetch/caching
 MEILI_HOST=http://meilisearch:7700
 ```
 
@@ -127,9 +128,9 @@ MEILI_HOST=http://meilisearch:7700
 
 | Host Path | Container Path | Purpose |
 |-----------|----------------|---------|
-| ./app/public/data/ibiz | /app/public/data/ibiz | IBIZ company data (read-only) |
+| ./app/public/data/biznesinfo | /app/public/data/biznesinfo | Biznesinfo company data (read-only) |
 | ./app/public/companies | /app/public/companies | Additional company data |
-| ./app/.cache/ibiz-logo-cache | /tmp/ibiz-logo-cache | Logo image cache |
+| ./app/.cache/biznesinfo-logo-cache | /tmp/biznesinfo-logo-cache | Logo image cache |
 | biznesinfo-meilisearch-data (volume) | /meili_data | Meilisearch indexed data |
 
 ### Build & Run Scripts
@@ -192,7 +193,7 @@ npm run dev          # Development server
 npm run build        # Production build
 npm run start        # Start production server
 npm run lint         # Run ESLint
-npm run sync:ibiz    # Sync IBIZ company data
+npm run sync:biznesinfo    # Sync Biznesinfo company data
 npm run index:meili  # Re-index Meilisearch
 ```
 
@@ -373,7 +374,7 @@ docker compose logs -f --tail=100
                     │  └─────────────────────────────────────────────┘   │
                     │                                                     │
                     │  Data Sources:                                     │
-                    │  - ./app/public/data/ibiz/companies.jsonl          │
+                    │  - ./app/public/data/biznesinfo/companies.jsonl    │
                     │  - ./app/public/companies/                         │
                     └─────────────────────────────────────────────────────┘
 ```
@@ -386,14 +387,14 @@ docker compose logs -f --tail=100
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/ibiz/search` | GET | Full-text company search |
-| `/api/ibiz/suggest` | GET | Company name suggestions |
-| `/api/ibiz/catalog` | GET | Catalog with categories/rubrics |
-| `/api/ibiz/catalog/suggest` | GET | Category/rubric suggestions |
-| `/api/ibiz/rubric` | GET | Companies in a rubric |
-| `/api/ibiz/company/[id]` | GET | Single company details |
-| `/api/ibiz/companies` | GET | Multiple companies by IDs |
-| `/api/ibiz/logo` | GET | Proxy for company logos (cached) |
+| `/api/biznesinfo/search` | GET | Full-text company search |
+| `/api/biznesinfo/suggest` | GET | Company name suggestions |
+| `/api/biznesinfo/catalog` | GET | Catalog with categories/rubrics |
+| `/api/biznesinfo/catalog/suggest` | GET | Category/rubric suggestions |
+| `/api/biznesinfo/rubric` | GET | Companies in a rubric |
+| `/api/biznesinfo/company/[id]` | GET | Single company details |
+| `/api/biznesinfo/companies` | GET | Multiple companies by IDs |
+| `/api/biznesinfo/logo` | GET | Proxy for company logos (cached) |
 | `/api/news` | GET | News feed |
 
 ### Admin Endpoints
@@ -412,32 +413,30 @@ curl -X POST http://127.0.0.1:8116/api/admin/reindex \
 
 ## Data Synchronization
 
-### IBIZ Data Sync
+### Biznesinfo Data Sync
 
-IBIZ data is sourced from the shared location at `Info-ibiz/output/companies.jsonl`.
+The site reads `companies.jsonl` from the mounted volume:
+`./app/public/data/biznesinfo/companies.jsonl` → `/app/public/data/biznesinfo/companies.jsonl`.
 
-**Sync script:** `/home/mlweb/biznesinfo.lucheestiy.com/scripts/sync_ibiz_data.mjs`
+**Sync script:** `/home/mlweb/biznesinfo.lucheestiy.com/scripts/sync_biznesinfo_data.mjs`
 
 **Manual sync:**
 ```bash
 cd /home/mlweb/biznesinfo.lucheestiy.com
-npm run sync:ibiz
+npm run sync:biznesinfo
 ```
 
-**Note:** This script copies data from the parent `Info-ibiz` directory. Changes to `companies.jsonl` are detected automatically by Next.js.
+**Note:** `npm run sync:biznesinfo` requires `BIZNESINFO_COMPANIES_JSONL_PATH` to be set to the source `companies.jsonl` file to copy from. Changes to the destination file are detected automatically by Next.js.
 
-### Belarusinfo Import
+### External Dataset Import (SQLite)
 
-Additional company data is imported from Belarusinfo crawler.
+Additional company data can be imported from a local SQLite dataset under `/home/mlweb/biznesinfo.lucheestiy.com/data/`.
 
-**Crawler location:** `/home/mlweb/Info/scrape_belarusinfo.py`
-**Systemd timer:** `scrape-belarusinfo.timer` (runs daily at 03:15)
-
-**Importer:** `/home/mlweb/biznesinfo.lucheestiy.com/app/scripts/import_belarusinfo_into_biznes.py`
+**Importer:** `/home/mlweb/biznesinfo.lucheestiy.com/app/scripts/import_info_db_into_biznesinfo.py`
 
 **Import command:**
 ```bash
-python3 /home/mlweb/biznesinfo.lucheestiy.com/app/scripts/import_belarusinfo_into_biznes.py --in-place --backup
+python3 /home/mlweb/biznesinfo.lucheestiy.com/app/scripts/import_info_db_into_biznesinfo.py --in-place --backup
 ```
 
 ### Meilisearch Indexing
@@ -467,21 +466,21 @@ npx tsx scripts/index_meilisearch.ts
 
 | Issue | Status | Workaround |
 |-------|--------|------------|
-| Daily IBIZ sync fails with permission error | **Open** | Sync runs via systemd timer, manual sync may fail due to volume permissions |
-| Logo cache may grow large | Monitor | Clean `./app/.cache/ibiz-logo-cache` periodically |
+| Daily data sync fails with permission error | **Open** | Sync runs via systemd timer, manual sync may fail due to volume permissions |
+| Logo cache may grow large | Monitor | Clean `./app/.cache/biznesinfo-logo-cache` periodically |
 | Meilisearch may have stale data after JSONL update | Auto-detect | API auto-reloads when file mtime changes, or trigger reindex |
 
 ### Resolving Sync Permission Errors
 
-If `npm run sync:ibiz` fails with `EACCES: permission denied`:
+If `npm run sync:biznesinfo` fails with `EACCES: permission denied`:
 
 ```bash
 # Check source file
-ls -la /home/mlweb/Info-ibiz/output/companies.jsonl
+ls -la "$BIZNESINFO_COMPANIES_JSONL_PATH"
 
 # Manually copy with sudo (if needed)
-sudo cp /home/mlweb/Info-ibiz/output/companies.jsonl \
-  /home/mlweb/biznesinfo.lucheestiy.com/app/public/data/ibiz/companies.jsonl
+sudo cp "$BIZNESINFO_COMPANIES_JSONL_PATH" \
+  /home/mlweb/biznesinfo.lucheestiy.com/app/public/data/biznesinfo/companies.jsonl
 
 # Then trigger reindex
 curl -X POST http://127.0.0.1:8116/api/admin/reindex \
@@ -497,10 +496,10 @@ curl -X POST http://127.0.0.1:8116/api/admin/reindex \
 systemctl list-timers --all
 
 # Check specific timer
-systemctl status scrape-belarusinfo.timer
+systemctl status scrape-info-db.timer
 
 # Manual trigger
-systemctl start scrape-belarusinfo.service
+systemctl start scrape-info-db.service
 ```
 
 ---

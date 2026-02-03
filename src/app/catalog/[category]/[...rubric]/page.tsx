@@ -8,8 +8,8 @@ import CompanyCard from "@/components/CompanyCard";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
 import { regions } from "@/data/regions";
-import type { IbizRubricResponse } from "@/lib/ibiz/types";
-import { IBIZ_CATEGORY_ICONS } from "@/lib/ibiz/icons";
+import type { BiznesinfoRubricResponse } from "@/lib/biznesinfo/types";
+import { BIZNESINFO_CATEGORY_ICONS } from "@/lib/biznesinfo/icons";
 import { formatCompanyCount } from "@/lib/utils/plural";
 
 interface PageProps {
@@ -21,7 +21,7 @@ export default function SubcategoryPage({ params }: PageProps) {
   const { t } = useLanguage();
   const { selectedRegion, setSelectedRegion, regionName } = useRegion();
 
-  const [data, setData] = useState<IbizRubricResponse | null>(null);
+  const [data, setData] = useState<BiznesinfoRubricResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const rubricPath = Array.isArray(rubric) ? rubric.join("/") : String(rubric || "");
@@ -33,10 +33,10 @@ export default function SubcategoryPage({ params }: PageProps) {
     const rubricSlug = `${category}/${rubricPath}`;
     const region = selectedRegion || "";
     fetch(
-      `/api/ibiz/rubric?slug=${encodeURIComponent(rubricSlug)}&region=${encodeURIComponent(region)}&offset=0&limit=60`,
+      `/api/biznesinfo/rubric?slug=${encodeURIComponent(rubricSlug)}&region=${encodeURIComponent(region)}&offset=0&limit=60`,
     )
       .then((r) => (r.ok ? r.json() : null))
-      .then((resp: IbizRubricResponse | null) => {
+      .then((resp: BiznesinfoRubricResponse | null) => {
         if (!isMounted) return;
         setData(resp);
         setIsLoading(false);
@@ -52,7 +52,7 @@ export default function SubcategoryPage({ params }: PageProps) {
     };
   }, [category, rubricPath, selectedRegion]);
 
-  const icon = IBIZ_CATEGORY_ICONS[category] || "🏢";
+  const icon = BIZNESINFO_CATEGORY_ICONS[category] || "🏢";
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-gray-100">

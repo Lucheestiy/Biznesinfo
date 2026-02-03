@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
-import type { IbizCatalogCategory, IbizCatalogResponse } from "@/lib/ibiz/types";
+import type { BiznesinfoCatalogCategory, BiznesinfoCatalogResponse } from "@/lib/biznesinfo/types";
 import { formatCompanyCount } from "@/lib/utils/plural";
 
 interface RubricatorProps {
@@ -14,7 +14,7 @@ interface RubricatorProps {
 export default function Rubricator({ floating = true, inline = false }: RubricatorProps) {
   const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
-  const [catalog, setCatalog] = useState<IbizCatalogResponse | null>(null);
+  const [catalog, setCatalog] = useState<BiznesinfoCatalogResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const panelRef = useRef<HTMLDivElement>(null);
@@ -23,7 +23,7 @@ export default function Rubricator({ floating = true, inline = false }: Rubricat
   const prefetchCatalog = () => {
     if (!catalog && !loading) {
       setLoading(true);
-      fetch("/api/ibiz/catalog")
+      fetch("/api/biznesinfo/catalog")
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           setCatalog(data);
@@ -277,7 +277,7 @@ export default function Rubricator({ floating = true, inline = false }: Rubricat
 }
 
 interface CategoryItemProps {
-  category: IbizCatalogCategory;
+  category: BiznesinfoCatalogCategory;
   isExpanded: boolean;
   onToggle: () => void;
   onNavigate: () => void;

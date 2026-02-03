@@ -7,7 +7,7 @@
     "build": "npm --prefix app run build",
     "start": "npm --prefix app run start",
     "lint": "npm --prefix app run lint",
-    "sync:ibiz": "node scripts/sync_ibiz_data.mjs",
+    "sync:biznesinfo": "node scripts/sync_biznesinfo_data.mjs",
     "stats:coords": "node scripts/stats_company_coords.mjs",
     "index:meili": "npx tsx scripts/index_meilisearch.ts"
   },

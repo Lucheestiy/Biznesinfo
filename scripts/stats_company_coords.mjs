@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import readline from "node:readline";
 
-const inputPath = process.argv[2] || "app/public/data/ibiz/companies.jsonl";
+const inputPath = process.argv[2] || "app/public/data/biznesinfo/companies.jsonl";
 
 function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
@@ -59,4 +59,3 @@ main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
-

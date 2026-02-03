@@ -10,15 +10,15 @@ import NewsBlock from "@/components/NewsBlock";
 import AIAssistant from "@/components/AIAssistant";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { regions } from "@/data/regions";
-import type { IbizCatalogResponse } from "@/lib/ibiz/types";
+import type { BiznesinfoCatalogResponse } from "@/lib/biznesinfo/types";
 
 export default function Home() {
   const { t } = useLanguage();
-  const [catalog, setCatalog] = useState<IbizCatalogResponse | null>(null);
+  const [catalog, setCatalog] = useState<BiznesinfoCatalogResponse | null>(null);
 
   useEffect(() => {
     let isMounted = true;
-    fetch("/api/ibiz/catalog")
+    fetch("/api/biznesinfo/catalog")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!isMounted) return;

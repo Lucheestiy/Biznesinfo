@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline";
 
-import { generateCompanyKeywordsString } from "../src/lib/ibiz/keywords";
-import type { IbizCompany } from "../src/lib/ibiz/types";
+import { generateCompanyKeywordsString } from "../src/lib/biznesinfo/keywords";
+import type { BiznesinfoCompany } from "../src/lib/biznesinfo/types";
 
 type VolumeMap = Map<string, number>;
 
@@ -30,8 +30,8 @@ function loadVolumes(filePath: string): VolumeMap {
 
 function parseArgs(argv: string[]): { src: string; out: string; volumes?: string } {
   const args = [...argv];
-  let src = "public/data/ibiz/companies.jsonl";
-  let out = "public/data/ibiz/company_keywords.jsonl";
+  let src = "public/data/biznesinfo/companies.jsonl";
+  let out = "public/data/biznesinfo/company_keywords.jsonl";
   let volumes: string | undefined;
 
   while (args.length > 0) {
@@ -73,7 +73,7 @@ async function main(): Promise<void> {
     total += 1;
 
     try {
-      const company = JSON.parse(raw) as IbizCompany;
+      const company = JSON.parse(raw) as BiznesinfoCompany;
       if (!company?.source_id) continue;
       const keywords = generateCompanyKeywordsString(company, { maxKeywords: 10, now, volumeLookup });
       outStream.write(`${JSON.stringify({ id: company.source_id, keywords })}\n`);
@@ -95,4 +95,3 @@ main().catch((err) => {
   console.error(String(err?.message || err));
   process.exit(1);
 });
-

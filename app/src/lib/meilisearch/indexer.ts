@@ -3,9 +3,9 @@ import { createInterface } from "node:readline";
 import { getMeiliClient, COMPANIES_INDEX } from "./client";
 import { configureCompaniesIndex } from "./config";
 import type { MeiliCompanyDocument } from "./types";
-import type { IbizCompany } from "../ibiz/types";
-import { generateCompanyKeywords } from "../ibiz/keywords";
-import { IBIZ_WEBSITE_OVERRIDES } from "../ibiz/websiteOverrides";
+import type { BiznesinfoCompany } from "../biznesinfo/types";
+import { generateCompanyKeywords } from "../biznesinfo/keywords";
+import { BIZNESINFO_WEBSITE_OVERRIDES } from "../biznesinfo/websiteOverrides";
 import { normalizeCityForFilter } from "../utils/location";
 
 // Region normalization logic (reused from store.ts)
@@ -55,7 +55,7 @@ function normalizeLogoUrl(raw: string): string {
   return url;
 }
 
-function computeLogoRank(company: IbizCompany): number {
+function computeLogoRank(company: BiznesinfoCompany): number {
   if (normalizeLogoUrl(company.logo_url || "")) return 2;
   if ((company.name || "").trim()) return 1;
   return 0;
@@ -67,14 +67,14 @@ function applyWebsiteOverride(companyId: string, websites: string[]): string[] {
   const key = raw.toLowerCase();
 
   const hasOverride =
-    Object.prototype.hasOwnProperty.call(IBIZ_WEBSITE_OVERRIDES, raw) ||
-    Object.prototype.hasOwnProperty.call(IBIZ_WEBSITE_OVERRIDES, key);
+    Object.prototype.hasOwnProperty.call(BIZNESINFO_WEBSITE_OVERRIDES, raw) ||
+    Object.prototype.hasOwnProperty.call(BIZNESINFO_WEBSITE_OVERRIDES, key);
   if (!hasOverride) return websites;
 
-  return IBIZ_WEBSITE_OVERRIDES[raw] ?? IBIZ_WEBSITE_OVERRIDES[key] ?? websites;
+  return BIZNESINFO_WEBSITE_OVERRIDES[raw] ?? BIZNESINFO_WEBSITE_OVERRIDES[key] ?? websites;
 }
 
-function companyToDocument(company: IbizCompany): MeiliCompanyDocument {
+function companyToDocument(company: BiznesinfoCompany): MeiliCompanyDocument {
   const regionSlug = normalizeRegionSlug(company.city, company.region, company.address);
   const primaryCategory = company.categories?.[0] ?? null;
   const primaryRubric = company.rubrics?.[0] ?? null;
@@ -145,7 +145,7 @@ export async function indexCompanies(jsonlPath: string): Promise<{ total: number
     if (!raw) continue;
 
     try {
-      const company = JSON.parse(raw) as IbizCompany;
+      const company = JSON.parse(raw) as BiznesinfoCompany;
       if (!company.source_id) continue;
 
       documents.push(companyToDocument(company));
