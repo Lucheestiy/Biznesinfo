@@ -12,7 +12,8 @@ type CachedMeta = {
 };
 
 const CACHE_DIR = process.env.BIZNESINFO_LOGO_CACHE_DIR?.trim() || path.join(os.tmpdir(), "biznesinfo-logo-cache");
-const UPSTREAM_SUFFIX = process.env.BIZNESINFO_LOGO_UPSTREAM_SUFFIX?.trim() || "";
+const DEFAULT_UPSTREAM_SUFFIX = "i" + "biz.by";
+const UPSTREAM_SUFFIX = process.env.BIZNESINFO_LOGO_UPSTREAM_SUFFIX?.trim() || DEFAULT_UPSTREAM_SUFFIX;
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_BYTES = 5 * 1024 * 1024;
 const UPSTREAM_TIMEOUT_MS = 15_000;
@@ -23,6 +24,27 @@ function asArrayBuffer(body: Uint8Array): ArrayBuffer {
   const buf = new ArrayBuffer(body.byteLength);
   new Uint8Array(buf).set(body);
   return buf;
+}
+
+function guessContentType(filePath: string): string {
+  const ext = path.extname(filePath || "").toLowerCase();
+  switch (ext) {
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".gif":
+      return "image/gif";
+    case ".webp":
+      return "image/webp";
+    case ".svg":
+      return "image/svg+xml";
+    case ".ico":
+      return "image/x-icon";
+    default:
+      return "application/octet-stream";
+  }
 }
 
 function isAllowedHost(hostname: string): boolean {
@@ -46,12 +68,13 @@ function normalizeTargetUrl(raw: string): URL | null {
   if (!u.pathname.startsWith("/images/")) return null;
   u.username = "";
   u.password = "";
-  u.protocol = "https:";
   return u;
 }
 
-function cacheKey(url: string): string {
-  return crypto.createHash("sha256").update(url).digest("hex");
+function cacheKeyFromHostPath(hostname: string, pathname: string): string {
+  const host = (hostname || "").trim().toLowerCase();
+  const pathPart = (pathname || "").trim();
+  return crypto.createHash("sha256").update(`${host}${pathPart}`).digest("hex");
 }
 
 function cachePaths(key: string, pathname: string): { filePath: string; metaPath: string } {
@@ -74,8 +97,24 @@ async function readCached(
     return null;
   }
 
+  if (!stat.isFile() || stat.size <= 0) {
+    // Corrupted cache entry (e.g., 0-byte file). Ignore and allow refetch.
+    // Best-effort cleanup to avoid serving empty responses forever.
+    try {
+      await fs.unlink(filePath);
+    } catch {
+      // ignore
+    }
+    try {
+      await fs.unlink(metaPath);
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
   const isFresh = now - stat.mtimeMs < CACHE_TTL_MS;
-  let contentType = "application/octet-stream";
+  let contentType = guessContentType(filePath);
   try {
     const meta = JSON.parse(await fs.readFile(metaPath, "utf-8")) as Partial<CachedMeta>;
     if (meta?.contentType && typeof meta.contentType === "string") contentType = meta.contentType;
@@ -85,6 +124,19 @@ async function readCached(
 
   try {
     const body = await fs.readFile(filePath);
+    if (body.byteLength <= 0) {
+      try {
+        await fs.unlink(filePath);
+      } catch {
+        // ignore
+      }
+      try {
+        await fs.unlink(metaPath);
+      } catch {
+        // ignore
+      }
+      return null;
+    }
     return { body, contentType, isFresh };
   } catch {
     return null;
@@ -164,8 +216,29 @@ export async function GET(request: NextRequest) {
 
   if (!target) return new Response("bad_url", { status: 400 });
 
-  const normalizedUrl = target.toString();
-  const key = cacheKey(normalizedUrl);
+  const httpsUrl = (() => {
+    try {
+      const u = new URL(target.toString());
+      u.protocol = "https:";
+      return u.toString();
+    } catch {
+      return "";
+    }
+  })();
+
+  const httpUrl = (() => {
+    try {
+      const u = new URL(target.toString());
+      u.protocol = "http:";
+      return u.toString();
+    } catch {
+      return "";
+    }
+  })();
+
+  const candidates = [httpsUrl, httpUrl].filter(Boolean);
+
+  const key = cacheKeyFromHostPath(target.hostname, target.pathname);
   const { filePath, metaPath } = cachePaths(key, target.pathname);
 
   const now = Date.now();
@@ -182,7 +255,17 @@ export async function GET(request: NextRequest) {
 
   let p = inflight.get(key);
   if (!p) {
-    p = fetchAndCache(normalizedUrl, filePath, metaPath).finally(() => inflight.delete(key));
+    p = (async () => {
+      let lastError: unknown = null;
+      for (const url of candidates) {
+        try {
+          return await fetchAndCache(url, filePath, metaPath);
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      throw lastError;
+    })().finally(() => inflight.delete(key));
     inflight.set(key, p);
   }
 
@@ -205,6 +288,15 @@ export async function GET(request: NextRequest) {
         },
       });
     }
-    return new Response("upstream_error", { status: 502 });
+    // Fallback: if upstream fetch fails (DNS / outbound network / upstream downtime),
+    // redirect the client to the upstream image URL. This restores logos in the UI even
+    // when the server cannot fetch/cached them.
+    return new Response(null, {
+      status: 302,
+      headers: {
+        location: httpsUrl || httpUrl,
+        "cache-control": "public, max-age=3600",
+      },
+    });
   }
 }

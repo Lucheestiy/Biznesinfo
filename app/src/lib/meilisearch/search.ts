@@ -10,7 +10,8 @@ import { BIZNESINFO_CATEGORY_ICONS } from "../biznesinfo/icons";
 import { BIZNESINFO_LOGO_OVERRIDES } from "../biznesinfo/logoOverrides";
 import { BIZNESINFO_WEBSITE_OVERRIDES } from "../biznesinfo/websiteOverrides";
 import { companySlugForUrl } from "../biznesinfo/slug";
-import { isAddressLikeLocationQuery, normalizeCityForFilter } from "../utils/location";
+import { buildBiznesinfoExclusionFilters, isExcludedBiznesinfoCompany } from "../biznesinfo/exclusions";
+import { isAddressLikeLocationQuery, normalizeCityForFilter, normalizeLocationQueryForSearch } from "../utils/location";
 
 const LOGO_CACHE_DIR = process.env.BIZNESINFO_LOGO_CACHE_DIR?.trim() || path.join(os.tmpdir(), "biznesinfo-logo-cache");
 const LOGO_UPSTREAM_SUFFIX = process.env.BIZNESINFO_LOGO_UPSTREAM_SUFFIX?.trim() || "";
@@ -18,6 +19,75 @@ const LOGO_SNIFF_BYTES = 4096;
 const LOGO_FETCH_TIMEOUT_MS = 5000;
 
 const logoToneCache = new Map<string, "color" | "bw">();
+
+const SERVICE_QUERY_INTENT_STOP_WORDS = new Set([
+  "купить",
+  "куплю",
+  "покупка",
+  "покупки",
+  "продажа",
+  "продажи",
+  "продаю",
+  "заказать",
+  "закажу",
+  "заказ",
+  "заказы",
+  "опт",
+  "оптом",
+  "розница",
+  "розницу",
+  "цена",
+  "цены",
+  "стоимость",
+]);
+
+const SERVICE_QUERY_DESCRIPTOR_STOP_WORDS = new Set([
+  "компания",
+  "компании",
+  "компаний",
+  "предприятие",
+  "предприятия",
+  "предприятий",
+  "организация",
+  "организации",
+  "организаций",
+  "фирма",
+  "фирмы",
+  "фирм",
+  "завод",
+  "завода",
+  "заводы",
+  "фабрика",
+  "фабрики",
+  "фабрик",
+  "продукция",
+  "продукции",
+  "промышленность",
+  "промышленности",
+  "отрасль",
+  "отрасли",
+  "направление",
+  "направления",
+]);
+
+const SERVICE_QUERY_DESCRIPTOR_PREFIXES = [
+  "компан",
+  "предприят",
+  "организац",
+  "фирм",
+  "завод",
+  "фабрик",
+  "производств",
+  "производител",
+  "продукц",
+  "промышленност",
+  "отрасл",
+  "направлен",
+  "деятельност",
+  "товар",
+  "услуг",
+  "работ",
+];
 
 function tokenizeServiceQuery(raw: string): string[] {
   const cleaned = (raw || "")
@@ -33,9 +103,11 @@ function tokenizeServiceQuery(raw: string): string[] {
   return cleaned.split(" ").filter(Boolean);
 }
 
-function shouldApplyMilkFilter(raw: string): boolean {
-  const tokens = tokenizeServiceQuery(raw);
-  return tokens.some((t) => t.startsWith("молок") || t.startsWith("молоч"));
+function isServiceDescriptorToken(token: string): boolean {
+  const t = (token || "").trim().toLowerCase().replace(/ё/gu, "е");
+  if (!t) return false;
+  if (SERVICE_QUERY_DESCRIPTOR_STOP_WORDS.has(t)) return true;
+  return SERVICE_QUERY_DESCRIPTOR_PREFIXES.some((prefix) => t.startsWith(prefix));
 }
 
 function isCheeseIntentToken(raw: string): boolean {
@@ -48,6 +120,47 @@ function isCheeseIntentToken(raw: string): boolean {
   if (t.startsWith("сырокопч")) return false; // сырокопчёный
   if (t.startsWith("сыровялен") || t.startsWith("сыровял")) return false; // сыровяленый
   return true;
+}
+
+function normalizeServiceQueryToken(token: string): string {
+  const t = (token || "").trim().toLowerCase().replace(/ё/gu, "е");
+  if (!t) return "";
+
+  // Keep core demand terms stable across Russian inflections:
+  // "молоко", "молока", "молоком", "молоку" => "молочная".
+  // Product intent should still find dairy-domain companies.
+  if (t.startsWith("молок")) return "молочная";
+  // "молочная", "молочной", "молочную" => "молочная".
+  if (t.startsWith("молочн")) return "молочная";
+
+  return t;
+}
+
+function normalizeServiceKeywordQuery(raw: string): string {
+  const tokens = tokenizeServiceQuery(raw);
+  if (tokens.length === 0) return "";
+
+  const filtered = tokens.filter((token) => {
+    if (SERVICE_QUERY_INTENT_STOP_WORDS.has(token)) return false;
+    if (isServiceDescriptorToken(token)) return false;
+    return true;
+  });
+  const picked = (filtered.length > 0 ? filtered : tokens)
+    .map((token) => normalizeServiceQueryToken(token))
+    .filter(Boolean);
+
+  // For plain cheese intent ("сыр", "сыры", "сыра") use dairy-domain recall.
+  // Otherwise the query matches mostly "сырье" noise and misses many dairy companies.
+  if (picked.length > 0 && picked.every((token) => isCheeseIntentToken(token))) {
+    return "молочная";
+  }
+
+  return picked.join(" ").trim();
+}
+
+function shouldApplyMilkFilter(raw: string): boolean {
+  const tokens = tokenizeServiceQuery(raw);
+  return tokens.some((t) => t.startsWith("молок"));
 }
 
 function shouldApplyCheeseFilter(raw: string): boolean {
@@ -114,16 +227,73 @@ function hasForestKeyword(keywords: string[]): boolean {
   return false;
 }
 
+function canonicalizeStrictServiceToken(raw: string): string {
+  const t = normalizeServiceQueryToken(raw);
+  if (!t) return "";
+  if (t.startsWith("молок") || t.startsWith("молоч")) return "молоч";
+  if (isCheeseIntentToken(t)) return "сыр";
+  return t;
+}
+
+function tokenizeForStrictServiceMatch(raw: string): string[] {
+  return tokenizeServiceQuery(raw)
+    .map((token) => canonicalizeStrictServiceToken(token))
+    .filter((token) => token.length >= 2);
+}
+
+function strictServiceTokenMatch(fieldToken: string, queryToken: string): boolean {
+  if (!fieldToken || !queryToken) return false;
+  if (fieldToken === queryToken) return true;
+  if (queryToken.length >= 3 && fieldToken.startsWith(queryToken)) return true;
+  if (fieldToken.length >= 5 && queryToken.startsWith(fieldToken)) return true;
+  return false;
+}
+
+function hitMatchesStrictServiceQuery(
+  hit: Partial<MeiliCompanyDocument>,
+  queryTokens: string[],
+): boolean {
+  if (queryTokens.length === 0) return true;
+
+  const searchableSource = [
+    hit.name || "",
+    ...(hit.keywords || []),
+    ...(hit.rubric_names || []),
+    ...(hit.category_names || []),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const fieldTokens = tokenizeForStrictServiceMatch(searchableSource);
+  if (fieldTokens.length === 0) return false;
+
+  const matchedTokens = queryTokens.filter((queryToken) =>
+    fieldTokens.some((fieldToken) => strictServiceTokenMatch(fieldToken, queryToken)),
+  ).length;
+
+  const requiredMatches = queryTokens.length <= 2 ? queryTokens.length : Math.ceil(queryTokens.length * 0.7);
+  return matchedTokens >= requiredMatches;
+}
+
 const KEYWORD_FILTER_TOTAL_SCAN_LIMIT = 5000;
 const KEYWORD_FILTER_TOTAL_SCAN_BATCH = 200;
+const DAIRY_PRIMARY_RUBRIC_SLUG = "promyshlennost-pishchevaya/molochnaya-promyshlennost";
 
-async function countKeywordFilteredTotal(params: {
+function shouldApplyDairyRubricFilter(rawQuery: string, normalizedQuery: string): boolean {
+  const rawTokens = tokenizeServiceQuery(rawQuery);
+  if (rawTokens.some((t) => t.startsWith("молок"))) return true;
+  if (rawTokens.some((t) => isCheeseIntentToken(t))) return true;
+  return normalizedQuery.trim() === "молочная";
+}
+
+async function countPostFilteredTotal(params: {
   index: ReturnType<typeof getCompaniesIndex>;
   searchQuery: string;
   filter: string[];
   attributesToSearchOn?: string[];
   matchingStrategy?: "all" | "last" | "frequency";
-  predicate: (keywords: string[]) => boolean;
+  attributesToRetrieve: Array<keyof MeiliCompanyDocument>;
+  predicate: (hit: Partial<MeiliCompanyDocument>) => boolean;
 }): Promise<number> {
   let offset = 0;
   let counted = 0;
@@ -136,14 +306,15 @@ async function countKeywordFilteredTotal(params: {
       filter: safeFilter,
       attributesToSearchOn: params.attributesToSearchOn,
       matchingStrategy: params.matchingStrategy,
-      attributesToRetrieve: ["keywords"],
+      attributesToRetrieve: params.attributesToRetrieve,
     });
 
     if (!result.hits.length) break;
 
     for (const hit of result.hits) {
-      const keywords = (hit as Partial<MeiliCompanyDocument>).keywords || [];
-      if (params.predicate(keywords)) counted++;
+      const doc = hit as Partial<MeiliCompanyDocument>;
+      if (isExcludedBiznesinfoCompany({ source_id: doc.id || "", unp: doc.unp || "" })) continue;
+      if (params.predicate(doc)) counted++;
     }
 
     offset += result.hits.length;
@@ -497,6 +668,7 @@ function documentToSummary(doc: MeiliCompanyDocument): BiznesinfoCompanySummary 
   return {
     id: doc.id,
     source: doc.source,
+    unp: doc.unp || "",
     name: doc.name,
     address: doc.address,
     city: doc.city,
@@ -536,20 +708,29 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
   if (params.rubricSlug) {
     filter.push(`rubric_slugs = "${params.rubricSlug}"`);
   }
+  filter.push(...buildBiznesinfoExclusionFilters());
 
   // Determine search query and attributes to search on
   const company = (params.query || "").trim();
   const service = (params.service || "").trim();
   const keywords = (params.keywords || "").trim();
   const city = (params.city || "").trim();
+  const citySearchQuery = normalizeLocationQueryForSearch(city);
   const cityNorm = normalizeCityForFilter(city);
   const useCityExactFilter = Boolean(cityNorm) && !isAddressLikeLocationQuery(city);
-  const keywordQuery = `${service} ${keywords}`.trim();
+  const rawServiceKeywordQuery = `${service} ${keywords}`.trim();
+  const keywordQuery = normalizeServiceKeywordQuery(rawServiceKeywordQuery);
+  const strictServiceQueryTokens =
+    Boolean(service || keywords) && keywordQuery ? tokenizeForStrictServiceMatch(keywordQuery) : [];
+  const applyStrictServiceFilter = strictServiceQueryTokens.length > 0;
+  const applyDairyRubricFilter =
+    Boolean(service || keywords) && shouldApplyDairyRubricFilter(rawServiceKeywordQuery, keywordQuery);
   const applyCheeseFilter = Boolean(service || keywords) && shouldApplyCheeseFilter(keywordQuery);
   const applyMilkFilter = Boolean(service || keywords) && shouldApplyMilkFilter(keywordQuery);
   const applyGasFilter = Boolean(service || keywords) && shouldApplyGasFilter(keywordQuery);
   const applyForestFilter = Boolean(service || keywords) && shouldApplyForestFilter(keywordQuery);
   const applyKeywordFilter = applyCheeseFilter || applyMilkFilter || applyGasFilter || applyForestFilter;
+  const applyPostFilter = applyKeywordFilter || applyStrictServiceFilter;
   const matchesKeywordFilter = (hitKeywords: string[]) => {
     if (applyCheeseFilter && !hasCheeseKeyword(hitKeywords)) return false;
     if (applyMilkFilter && !hasMilkKeyword(hitKeywords)) return false;
@@ -557,13 +738,15 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
     if (applyForestFilter && !hasForestKeyword(hitKeywords)) return false;
     return true;
   };
+  if (applyDairyRubricFilter && !params.rubricSlug) {
+    // "молочная/сыр*" intent should stay inside dairy-industry rubric.
+    filter.push(`primary_rubric_slug = "${DAIRY_PRIMARY_RUBRIC_SLUG}"`);
+  }
 
   const terms: string[] = [];
   if (company) terms.push(company);
-  if (service) terms.push(service);
-  if (!service && keywords) terms.push(keywords);
-  if (service && keywords) terms.push(keywords);
-  if (city && !useCityExactFilter) terms.push(city);
+  if (keywordQuery) terms.push(keywordQuery);
+  if (city && !useCityExactFilter) terms.push(citySearchQuery || city);
 
   if (useCityExactFilter) {
     const safe = cityNorm.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -577,10 +760,6 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
   if (company) attrs.add("name");
   if (service || keywords) {
     attrs.add("keywords");
-    // Also search through the descriptive fields so that companies with sparse rubrics
-    // can be found by the keywords in their text.
-    attrs.add("description");
-    attrs.add("about");
     attrs.add("rubric_names");
     attrs.add("category_names");
   }
@@ -593,6 +772,7 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
   const attributesToRetrieve: Array<keyof MeiliCompanyDocument> = [
     "id",
     "source",
+    "unp",
     "name",
     "description",
     "about",
@@ -604,19 +784,19 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
     "emails",
     "websites",
     "logo_url",
+    "logo_rank",
     "primary_category_slug",
     "primary_category_name",
     "primary_rubric_slug",
     "primary_rubric_name",
+    "category_names",
+    "rubric_names",
     "work_hours_status",
     "work_hours_time",
     "keywords",
   ];
 
-  // Ensure companies with an actual logo appear before companies that would render initials.
-  // (Avoids extra network calls by not trying to classify logo tone.)
-  const withLogo: MeiliCompanyDocument[] = [];
-  const withoutLogo: MeiliCompanyDocument[] = [];
+  const collected: MeiliCompanyDocument[] = [];
 
   const batchSize = Math.min(200, Math.max(50, limit * 10));
   let fetched = 0;
@@ -636,37 +816,41 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
     if (!result.hits.length) break;
 
     for (const hit of result.hits) {
+      if (isExcludedBiznesinfoCompany({ source_id: hit.id, unp: hit.unp })) continue;
+      if (applyStrictServiceFilter && !hitMatchesStrictServiceQuery(hit, strictServiceQueryTokens)) continue;
       if (applyKeywordFilter && !matchesKeywordFilter(hit.keywords || [])) continue;
-      const logo = (hit.logo_url || "").trim();
-      if (logo) withLogo.push(hit);
-      else withoutLogo.push(hit);
-      if (withLogo.length >= targetEnd) break;
+      collected.push(hit);
+      if (collected.length >= targetEnd) break;
     }
 
     fetched += result.hits.length;
 
-    if (withLogo.length >= targetEnd) break;
+    if (collected.length >= targetEnd) break;
 
-    // Otherwise, keep fetching until we exhaust the result set.
     if (estimatedTotal && fetched >= estimatedTotal) break;
   }
 
-  const ordered =
-    withLogo.length >= targetEnd ? withLogo : [...withLogo, ...withoutLogo];
-  const page = ordered.slice(offset, targetEnd);
+  const page = collected.slice(offset, targetEnd);
 
   let total = estimatedTotal;
-  if (applyKeywordFilter) {
+  if (applyPostFilter) {
     if (estimatedTotal && fetched >= estimatedTotal) {
-      total = ordered.length;
+      total = collected.length;
     } else if (estimatedTotal && estimatedTotal <= KEYWORD_FILTER_TOTAL_SCAN_LIMIT) {
-      total = await countKeywordFilteredTotal({
+      total = await countPostFilteredTotal({
         index,
         searchQuery,
         filter,
         attributesToSearchOn,
         matchingStrategy,
-        predicate: matchesKeywordFilter,
+        attributesToRetrieve: ["id", "unp", "name", "keywords", "rubric_names", "category_names"],
+        predicate: (hit) => {
+          if (applyStrictServiceFilter && !hitMatchesStrictServiceQuery(hit, strictServiceQueryTokens)) {
+            return false;
+          }
+          if (applyKeywordFilter && !matchesKeywordFilter(hit.keywords || [])) return false;
+          return true;
+        },
       });
     }
   }
@@ -689,6 +873,7 @@ export async function meiliSuggest(params: {
   if (params.region) {
     filter.push(`region = "${params.region}"`);
   }
+  filter.push(...buildBiznesinfoExclusionFilters());
 
   const result = await index.search(params.query, {
     limit: params.limit || 8,
@@ -696,19 +881,21 @@ export async function meiliSuggest(params: {
     attributesToSearchOn: ["name"],
     matchingStrategy: "all",
     attributesToRetrieve: [
-      "id", "name", "address", "city",
+      "id", "unp", "name", "address", "city",
       "primary_category_slug", "primary_category_name",
     ],
   });
 
-  const suggestions: BiznesinfoSuggestResponse["suggestions"] = result.hits.map(hit => ({
-    type: "company" as const,
-    id: hit.id,
-    name: hit.name,
-    url: `/company/${companySlugForUrl(hit.id)}`,
-    icon: hit.primary_category_slug ? BIZNESINFO_CATEGORY_ICONS[hit.primary_category_slug] || null : null,
-    subtitle: hit.address || hit.city || "",
-  }));
+  const suggestions: BiznesinfoSuggestResponse["suggestions"] = result.hits
+    .filter((hit) => !isExcludedBiznesinfoCompany({ source_id: hit.id, unp: hit.unp }))
+    .map(hit => ({
+      type: "company" as const,
+      id: hit.id,
+      name: hit.name,
+      url: `/company/${companySlugForUrl(hit.id)}`,
+      icon: hit.primary_category_slug ? BIZNESINFO_CATEGORY_ICONS[hit.primary_category_slug] || null : null,
+      subtitle: hit.address || hit.city || "",
+    }));
 
   return {
     query: params.query,

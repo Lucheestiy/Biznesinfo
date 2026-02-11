@@ -33,16 +33,23 @@ export async function configureCompaniesIndex(): Promise<void> {
   await index.updateFilterableAttributes([
     "region",
     "city_norm",
+    "unp",
     "category_slugs",
     "rubric_slugs",
     "primary_category_slug",
     "source",
+    "_geo",
   ]);
 
   // Configure sortable attributes
   await index.updateSortableAttributes([
     "name",
+    "logo_rank",
   ]);
+
+  // Configure geo-search settings
+  await index.updateSearchCutoffMs(150);
+  console.log("Geo-search enabled with _geo filter");
 
   // Configure ranking rules
   await index.updateRankingRules([
@@ -52,6 +59,7 @@ export async function configureCompaniesIndex(): Promise<void> {
     "attribute",
     "sort",
     "exactness",
+    "logo_rank:desc",
   ]);
 
   // Configure typo tolerance

@@ -1,11 +1,69 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage, Language } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
+import { useFavorites } from "@/contexts/FavoritesContext";
 import { regions } from "@/data/regions";
+import type { BiznesinfoCompanySummary } from "@/lib/biznesinfo/types";
+import { companySlugForUrl } from "@/lib/biznesinfo/slug";
+
+const NAV_STATE_KEY = "biznesinfo:navigation_state_v1";
+
+type NavigationState = {
+  prev: string;
+  curr: string;
+};
+
+function parseUrlToPath(url: string): string {
+  const raw = (url || "").trim();
+  if (!raw) return "";
+  try {
+    const u = new URL(raw);
+    return `${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return "";
+  }
+}
+
+function readNavigationState(): NavigationState {
+  if (typeof window === "undefined") return { prev: "", curr: "" };
+  try {
+    const raw = window.sessionStorage.getItem(NAV_STATE_KEY);
+    if (!raw) return { prev: "", curr: "" };
+    const parsed = JSON.parse(raw) as Partial<NavigationState> | null;
+    return {
+      prev: typeof parsed?.prev === "string" ? parsed.prev : "",
+      curr: typeof parsed?.curr === "string" ? parsed.curr : "",
+    };
+  } catch {
+    return { prev: "", curr: "" };
+  }
+}
+
+function writeNavigationState(next: NavigationState) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(NAV_STATE_KEY, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+}
+
+function upsertNavigationState(nextUrl: string) {
+  if (typeof window === "undefined") return;
+  const url = (nextUrl || "").trim();
+  if (!url) return;
+  const state = readNavigationState();
+  if (!state.curr) {
+    writeNavigationState({ prev: state.prev, curr: url });
+    return;
+  }
+  if (state.curr === url) return;
+  writeNavigationState({ prev: state.curr, curr: url });
+}
 
 const languages: { code: Language; name: string; flag: string }[] = [
   { code: "ru", name: "Русский", flag: "RU" },
@@ -17,7 +75,10 @@ const languages: { code: Language; name: string; flag: string }[] = [
 export default function Header() {
   const { language, setLanguage, t } = useLanguage();
   const { selectedRegion, setSelectedRegion, regionName } = useRegion();
+  const { favorites } = useFavorites();
   const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const headerRef = useRef<HTMLElement | null>(null);
   const [isIOS, setIsIOS] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -25,8 +86,17 @@ export default function Header() {
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [contactMenuOpen, setContactMenuOpen] = useState(false);
+  const [favoriteCompanies, setFavoriteCompanies] = useState<BiznesinfoCompanySummary[]>([]);
+  const [favoritesLoading, setFavoritesLoading] = useState(false);
+  const favoritesLoadedKeyRef = useRef<string>("");
+  const favoritesRequestIdRef = useRef<number>(0);
 
   const currentLang = languages.find((l) => l.code === language) || languages[0];
+  const favoritesKey = useMemo(() => favorites.join(","), [favorites]);
+  const favoritesToShowInMenu = favoriteCompanies.slice(0, 7);
+  const hiddenFavoritesCount = Math.max(0, favorites.length - favoritesToShowInMenu.length);
+  const isCompanySection = useMemo(() => (pathname || "").startsWith("/company/"), [pathname]);
+  const searchParamsString = searchParams?.toString() || "";
 
   const handleMobileLogoClick = () => {
     setMobileMenuOpen(false);
@@ -38,6 +108,35 @@ export default function Header() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
+
+  const handleMobileBackClick = useCallback(() => {
+    setMobileMenuOpen(false);
+    setLangMenuOpen(false);
+    setRegionMenuOpen(false);
+    setExpandedItem(null);
+    setContactMenuOpen(false);
+
+    const fallbackUrl = "/#catalog";
+    if (typeof window === "undefined") {
+      router.push(fallbackUrl);
+      return;
+    }
+
+    const state = readNavigationState();
+    const hasInternalPrev = Boolean(state.prev && state.prev.startsWith("/") && state.prev !== state.curr);
+    if (!hasInternalPrev) {
+      router.push(fallbackUrl);
+      return;
+    }
+
+    const before = window.location.href;
+    router.back();
+    window.setTimeout(() => {
+      if (window.location.href === before) {
+        router.push(fallbackUrl);
+      }
+    }, 200);
+  }, [router]);
 
   useEffect(() => {
     const el = headerRef.current;
@@ -64,6 +163,40 @@ export default function Header() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+    if (!(window as any).__biznesinfoNavInited) {
+      (window as any).__biznesinfoNavInited = true;
+      const ref = (document.referrer || "").trim();
+      const sameOriginReferrer = (() => {
+        if (!ref) return false;
+        try {
+          return new URL(ref).origin === window.location.origin;
+        } catch {
+          return false;
+        }
+      })();
+
+      const prev = sameOriginReferrer ? parseUrlToPath(ref) : "";
+      writeNavigationState({ prev, curr: current });
+      return;
+    }
+
+    upsertNavigationState(current);
+  }, [pathname, searchParamsString]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleHashChange = () => {
+      upsertNavigationState(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+    };
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
+
+  useEffect(() => {
     if (typeof navigator === "undefined") return;
     const ua = navigator.userAgent || "";
     const isiPhone = /iPhone/i.test(ua);
@@ -72,42 +205,87 @@ export default function Header() {
     setIsIOS(isiPhone || isiPad || isiPod);
   }, []);
 
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    if (!favoritesKey) {
+      setFavoriteCompanies([]);
+      setFavoritesLoading(false);
+      favoritesLoadedKeyRef.current = "";
+      return;
+    }
+
+    if (favoritesLoadedKeyRef.current === favoritesKey) return;
+
+    const requestId = ++favoritesRequestIdRef.current;
+    setFavoritesLoading(true);
+    fetch(`/api/biznesinfo/companies?ids=${encodeURIComponent(favoritesKey)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((resp: { companies?: BiznesinfoCompanySummary[] } | null) => {
+        if (favoritesRequestIdRef.current !== requestId) return;
+        setFavoriteCompanies(resp?.companies || []);
+        setFavoritesLoading(false);
+        favoritesLoadedKeyRef.current = favoritesKey;
+      })
+      .catch(() => {
+        if (favoritesRequestIdRef.current !== requestId) return;
+        setFavoriteCompanies([]);
+        setFavoritesLoading(false);
+        favoritesLoadedKeyRef.current = "";
+      });
+  }, [mobileMenuOpen, favoritesKey]);
+
   return (
     <header ref={headerRef} className="bg-[#a0006d] text-white shadow-lg sticky top-0 z-50">
       <div className="container mx-auto px-3 sm:px-4">
         {/* Mobile Header - Compact single row */}
         <div className="md:hidden flex items-center justify-between py-2 gap-2">
-          {/* Logo Left */}
-          <Link
-            href="/"
-            onClick={handleMobileLogoClick}
-            className="flex items-center gap-2 group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d] active:bg-white/10 rounded-lg transition-colors"
-          >
-            <div className="relative w-10 h-10 flex-shrink-0 animate-[float_4s_ease-in-out_infinite]">
-              <svg
-                viewBox="0 0 80 80"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="w-full h-full transition-transform duration-300 group-active:scale-110 group-active:rotate-6"
+          <div className="flex items-center gap-1.5 min-w-0">
+            {isCompanySection && (
+              <button
+                type="button"
+                onClick={handleMobileBackClick}
+                aria-label="Назад"
+                title="Назад"
+                className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 border border-white/20 text-white shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d]"
               >
-                <defs>
-                  <radialGradient id="globeRadialMobile" cx="30%" cy="30%" r="70%">
-                    <stop offset="0%" stopColor="#FEF3C7" />
-                    <stop offset="40%" stopColor="#FCD34D" />
-                    <stop offset="100%" stopColor="#D97706" />
-                  </radialGradient>
-                </defs>
-                <circle cx="40" cy="40" r="22" fill="url(#globeRadialMobile)" />
-                <ellipse cx="40" cy="40" rx="22" ry="8" stroke="white" strokeWidth="0.8" fill="none" opacity="0.5" />
-                <ellipse cx="40" cy="40" rx="14" ry="22" stroke="white" strokeWidth="0.8" fill="none" opacity="0.5" />
-                <path d="M30 34 Q36 30 44 34 Q48 38 46 42 Q42 44 36 42 Q30 40 30 36Z" fill="#9D174D" opacity="0.7" />
-              </svg>
-            </div>
-            <span className="text-lg font-bold">
-              <span className="text-yellow-400 transition-colors duration-200 group-active:text-yellow-300">Biznesinfo</span>
-              <span className="text-white transition-colors duration-200 group-active:text-yellow-100">.by</span>
-            </span>
-          </Link>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+              </button>
+            )}
+
+            {/* Logo Left */}
+            <Link
+              href="/"
+              onClick={handleMobileLogoClick}
+              className="flex items-center gap-2 group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d] active:bg-white/10 rounded-lg transition-colors min-w-0"
+            >
+              <div className="relative w-10 h-10 flex-shrink-0 animate-[float_4s_ease-in-out_infinite]">
+                <svg
+                  viewBox="0 0 80 80"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="w-full h-full transition-transform duration-300 group-active:scale-110 group-active:rotate-6"
+                >
+                  <defs>
+                    <radialGradient id="globeRadialMobile" cx="30%" cy="30%" r="70%">
+                      <stop offset="0%" stopColor="#FEF3C7" />
+                      <stop offset="40%" stopColor="#FCD34D" />
+                      <stop offset="100%" stopColor="#D97706" />
+                    </radialGradient>
+                  </defs>
+                  <circle cx="40" cy="40" r="22" fill="url(#globeRadialMobile)" />
+                  <ellipse cx="40" cy="40" rx="22" ry="8" stroke="white" strokeWidth="0.8" fill="none" opacity="0.5" />
+                  <ellipse cx="40" cy="40" rx="14" ry="22" stroke="white" strokeWidth="0.8" fill="none" opacity="0.5" />
+                  <path d="M30 34 Q36 30 44 34 Q48 38 46 42 Q42 44 36 42 Q30 40 30 36Z" fill="#9D174D" opacity="0.7" />
+                </svg>
+              </div>
+              <span className="text-lg font-bold truncate">
+                <span className="text-yellow-400 transition-colors duration-200 group-active:text-yellow-300">Biznesinfo</span>
+                <span className="text-white transition-colors duration-200 group-active:text-yellow-100">.by</span>
+              </span>
+            </Link>
+          </div>
 
           {/* Right side - Region, Lang, Menu */}
           <div className="flex items-center gap-0.5 flex-shrink-0">
@@ -424,6 +602,13 @@ export default function Header() {
             >
               Вакансии
             </Link>
+            <span className="text-yellow-400 text-lg">|</span>
+            <Link
+              href="/map"
+              className="px-3 py-2 text-yellow-400 hover:text-white hover:scale-105 hover:underline underline-offset-4 transition-all duration-200 font-semibold cursor-pointer"
+            >
+              🗺️ Карта
+            </Link>
           </div>
 
           {/* Desktop Region/Language selectors */}
@@ -519,6 +704,52 @@ export default function Header() {
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t border-white/30">
             <nav className="flex flex-col gap-2 text-sm">
+              {/* Favorites (quick list) */}
+              <div className="border-b border-white/10">
+                <Link
+                  href="/favorites"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full flex items-center justify-between py-3 px-2 hover:text-yellow-400 transition-colors text-left font-medium"
+                >
+                  <span className="flex items-center gap-2">
+                    <span aria-hidden>❤️</span>
+                    <span>{t("nav.favorites")}</span>
+                  </span>
+                  <span className="text-xs text-white/80">{favorites.length}</span>
+                </Link>
+
+                {favorites.length === 0 ? (
+                  <div className="pl-4 pr-2 pb-3 text-white/80 text-sm">
+                    {t("favorites.empty")}
+                  </div>
+                ) : favoritesLoading ? (
+                  <div className="pl-4 pr-2 pb-3 text-white/80 text-sm">{t("common.loading")}</div>
+                ) : (
+                  <div className="pl-4 pr-2 pb-3 flex flex-col gap-2">
+                    {favoritesToShowInMenu.map((company) => (
+                      <Link
+                        key={company.id}
+                        href={`/company/${encodeURIComponent(companySlugForUrl(company.id))}`}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="text-white/90 hover:text-yellow-400 transition-colors truncate"
+                        title={company.name}
+                      >
+                        {company.name}
+                      </Link>
+                    ))}
+                    {hiddenFavoritesCount > 0 && (
+                      <Link
+                        href="/favorites"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="text-xs text-white/80 hover:text-yellow-400 transition-colors"
+                      >
+                        {t("common.more")} {hiddenFavoritesCount}
+                      </Link>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Contact Information Accordion */}
               <div className="border-b border-white/10">
                 <button

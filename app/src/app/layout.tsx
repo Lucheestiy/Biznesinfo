@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
+import { biznesinfoWarmStore } from "@/lib/biznesinfo/store";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -19,7 +20,13 @@ const playfair = Playfair_Display({
   style: ["normal", "italic"],
 });
 
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+  process.env.SITE_URL?.trim() ||
+  "https://biznesinfo.lucheestiy.com";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "Biznes - Бизнес-справочник Беларуси",
   description: "Каталог предприятий, организаций и фирм Беларуси. Поиск компаний по категориям и регионам. AI-платформа для бизнеса.",
   keywords: "бизнес, компании, каталог, Беларусь, Минск, предприятия, услуги, товары",
@@ -30,6 +37,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Start JSONL store warmup in background so first company navigation doesn't block on cold load.
+  void biznesinfoWarmStore();
+
   return (
     <html lang="ru">
       <body className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} antialiased`}>

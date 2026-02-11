@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useFavorites } from "@/contexts/FavoritesContext";
 import AIAssistant from "./AIAssistant";
@@ -11,7 +12,66 @@ import { BIZNESINFO_CATEGORY_ICONS } from "@/lib/biznesinfo/icons";
 import { companySlugForUrl } from "@/lib/biznesinfo/slug";
 import { buildHighlightRegex, highlightText } from "@/lib/utils/highlight";
 
-const LOGO_PROXY_VERSION = "2";
+const LOGO_PROXY_VERSION = "3";
+const EAGER_PREFETCH_LIMIT = 3;
+const INTERSECTION_PREFETCH_ROOT_MARGIN = "240px 0px";
+
+const prefetchedCompanyRoutes = new Set<string>();
+const prefetchedCompanyApiIds = new Set<string>();
+let eagerPrefetchCount = 0;
+
+function prefetchCompanyApi(companyId: string): void {
+  const id = (companyId || "").trim();
+  if (!id) return;
+  if (prefetchedCompanyApiIds.has(id)) return;
+  prefetchedCompanyApiIds.add(id);
+
+  void fetch(`/api/biznesinfo/company/${encodeURIComponent(id)}`, {
+    method: "GET",
+    cache: "force-cache",
+  }).catch(() => {
+    // allow retry if the prefetch request failed
+    prefetchedCompanyApiIds.delete(id);
+  });
+}
+
+function useViewportPrefetch<T extends Element>(prefetch: () => void) {
+  const targetRef = useRef<T | null>(null);
+
+  useEffect(() => {
+    const node = targetRef.current;
+    if (!node) return;
+
+    let triggered = false;
+    const runPrefetch = () => {
+      if (triggered) return;
+      triggered = true;
+      prefetch();
+    };
+
+    if (typeof IntersectionObserver === "undefined") {
+      runPrefetch();
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          runPrefetch();
+          observer.disconnect();
+          break;
+        }
+      },
+      { rootMargin: INTERSECTION_PREFETCH_ROOT_MARGIN },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [prefetch]);
+
+  return targetRef;
+}
 
 interface CompanyCardProps {
   company: BiznesinfoCompanySummary;
@@ -285,6 +345,7 @@ function SearchCompanyCard({
   highlightLocationTokens = [],
 }: CompanyCardProps) {
   const { t } = useLanguage();
+  const router = useRouter();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
@@ -384,18 +445,44 @@ function SearchCompanyCard({
 
   const email = (company.emails?.[0] || "").trim();
 
+  const prefetchCompany = useCallback(() => {
+    if (!prefetchedCompanyRoutes.has(companyHref)) {
+      prefetchedCompanyRoutes.add(companyHref);
+      router.prefetch(companyHref);
+    }
+    prefetchCompanyApi(company.id);
+  }, [company.id, companyHref, router]);
+  const cardRef = useViewportPrefetch<HTMLDivElement>(prefetchCompany);
+
   useEffect(() => {
     setLogoFailed(false);
     setLogoLoaded(false);
   }, [logoSrc]);
 
+  useEffect(() => {
+    if (eagerPrefetchCount >= EAGER_PREFETCH_LIMIT) return;
+    eagerPrefetchCount += 1;
+    prefetchCompany();
+  }, [prefetchCompany]);
+
+  const companyLinkProps = {
+    href: companyHref,
+    prefetch: true,
+    onMouseEnter: prefetchCompany,
+    onTouchStart: prefetchCompany,
+    onFocus: prefetchCompany,
+  };
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm border-2 border-[#820251] hover:shadow-md transition-shadow overflow-hidden flex flex-col h-full">
+    <div
+      ref={cardRef}
+      className="bg-white rounded-2xl shadow-sm border-2 border-[#820251] hover:shadow-md transition-shadow overflow-hidden flex flex-col h-full"
+    >
       <div className="bg-gradient-to-r from-[#820251] to-[#6a0143] p-3.5">
         <div className="flex items-start gap-4">
           {/* Logo (must stay as implemented) */}
           <Link
-            href={companyHref}
+            {...companyLinkProps}
             aria-label={t("company.details")}
             className="block w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 shadow-md focus:outline-none focus:ring-2 focus:ring-white/70"
           >
@@ -410,8 +497,9 @@ function SearchCompanyCard({
                   src={logoSrc}
                   alt={company.name}
                   className={`absolute inset-0 w-full h-full object-contain p-1 transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
-                  decoding="async"
-                  loading="lazy"
+                  decoding="sync"
+                  loading="eager"
+                  fetchPriority="high"
                   onLoad={() => setLogoLoaded(true)}
                   onError={() => setLogoFailed(true)}
                 />
@@ -426,7 +514,7 @@ function SearchCompanyCard({
           <div className="min-w-0 flex-1">
             <h3 className="text-[18px] font-bold text-white leading-tight">
               <Link
-                href={companyHref}
+                {...companyLinkProps}
                 className="hover:underline focus:outline-none focus:ring-2 focus:ring-white/70 rounded-sm"
               >
                 {highlightText(company.name, highlightNameTokens)}
@@ -508,7 +596,7 @@ function SearchCompanyCard({
 
         <div className="mt-auto pt-2.5 flex justify-end">
           <Link
-            href={companyHref}
+            {...companyLinkProps}
             className="inline-flex items-center justify-center bg-[#820251] text-white px-4 py-1.5 rounded-lg text-[15px] font-bold shadow-sm hover:bg-[#6a0143] active:bg-[#520031] transition-colors"
           >
             {t("company.details")}
@@ -521,6 +609,7 @@ function SearchCompanyCard({
 
 function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
   const { t } = useLanguage();
+  const router = useRouter();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [messageModalOpen, setMessageModalOpen] = useState(false);
   const [phonesExpanded, setPhonesExpanded] = useState(false);
@@ -593,14 +682,40 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
   // Extract products/services info from "about" field
   const servicesInfo = useMemo(() => extractProductsServices(company.about || "", company.name), [company.about, company.name]);
 
+  const prefetchCompany = useCallback(() => {
+    if (!prefetchedCompanyRoutes.has(companyHref)) {
+      prefetchedCompanyRoutes.add(companyHref);
+      router.prefetch(companyHref);
+    }
+    prefetchCompanyApi(company.id);
+  }, [company.id, companyHref, router]);
+  const cardRef = useViewportPrefetch<HTMLDivElement>(prefetchCompany);
+
   useEffect(() => {
     setLogoFailed(false);
     setLogoLoaded(false);
   }, [logoSrc]);
 
+  useEffect(() => {
+    if (eagerPrefetchCount >= EAGER_PREFETCH_LIMIT) return;
+    eagerPrefetchCount += 1;
+    prefetchCompany();
+  }, [prefetchCompany]);
+
+  const companyLinkProps = {
+    href: companyHref,
+    prefetch: true,
+    onMouseEnter: prefetchCompany,
+    onTouchStart: prefetchCompany,
+    onFocus: prefetchCompany,
+  };
+
   return (
     <>
-      <div className="bg-white rounded-lg shadow-sm border border-gray-100 hover:shadow-lg transition-all overflow-hidden relative flex flex-col h-full">
+      <div
+        ref={cardRef}
+        className="bg-white rounded-lg shadow-sm border border-gray-100 hover:shadow-lg transition-all overflow-hidden relative flex flex-col h-full"
+      >
         {/* Favorite button */}
         <button
           onClick={() => toggleFavorite(company.id)}
@@ -797,7 +912,7 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
         <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-2">
           <AIAssistant companyName={company.name} companyId={company.id} isActive={false} />
           <Link
-            href={companyHref}
+            {...companyLinkProps}
             className="bg-[#820251] text-white px-4 py-2 rounded text-sm font-medium hover:bg-[#6a0143] transition-colors"
           >
             {t("company.details")}

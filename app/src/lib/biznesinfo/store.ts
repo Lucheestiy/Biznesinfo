@@ -3,10 +3,13 @@ import path from "node:path";
 import { createInterface } from "node:readline";
 
 import { isAddressLikeLocationQuery, normalizeCityForFilter } from "@/lib/utils/location";
-import { generateCompanyKeywords } from "./keywords";
+import { generateCompanyKeywordPhrases, keywordPhrasesToSearchTokens } from "./keywords";
+import { getServerKeywordGenerationOptions } from "./keywordRuntime";
+import { BIZNESINFO_KEYWORD_OVERRIDES } from "./keywordOverrides";
 import { BIZNESINFO_LOGO_OVERRIDES } from "./logoOverrides";
 import { BIZNESINFO_WEBSITE_OVERRIDES } from "./websiteOverrides";
 import { companySlugForUrl } from "./slug";
+import { isExcludedBiznesinfoCompany } from "./exclusions";
 
 import type {
   BiznesinfoCatalogResponse,
@@ -64,6 +67,8 @@ const POSTAL_PREFIX_TO_REGION_SLUG: Record<string, string> = {
   "270": "minsk",
   "274": "gomel",
 };
+
+const DASH_VARIANTS_RE = /[-‐‑‒–—―]/gu;
 
 function regionSlugFromPostalCode(address: string): string | null {
   const matches = (address || "").match(/\b2\d{5}\b/g);
@@ -151,6 +156,55 @@ function safeLower(s: string): string {
   return (s || "").toLowerCase();
 }
 
+function normalizeCompanyIdForMatch(id: string): string {
+  return safeLower(id).replace(DASH_VARIANTS_RE, "");
+}
+
+function compactAlnum(s: string): string {
+  return safeLower(s)
+    .replace(/ё/gu, "е")
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+const LEGAL_FORM_WORDS = new Set([
+  "ооо",
+  "оао",
+  "зао",
+  "ао",
+  "одо",
+  "сооо",
+  "сп",
+  "ип",
+  "чуп",
+  "уп",
+  "куп",
+  "руп",
+  "птуп",
+  "пуп",
+]);
+
+function buildCompanyNameInitialism(name: string): string {
+  const tokens = safeLower(name)
+    .replace(/ё/gu, "е")
+    .replace(/№/gu, " ")
+    .replace(/[«»"'“”„]/gu, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .split(/\s+/u)
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+  const parts: string[] = [];
+  for (const token of tokens) {
+    if (LEGAL_FORM_WORDS.has(token)) continue;
+    if (/^\d+$/u.test(token)) {
+      parts.push(token);
+      continue;
+    }
+    parts.push(token[0] || "");
+  }
+  return compactAlnum(parts.join(""));
+}
+
 const LOCATION_STOP_WORDS = new Set([
   "г",
   "город",
@@ -199,6 +253,32 @@ function tokenizeLocation(raw: string): string[] {
   });
 }
 
+function isCheeseIntentToken(rawToken: string): boolean {
+  const t = (rawToken || "").trim().toLowerCase().replace(/ё/gu, "е");
+  if (!t) return false;
+  if (!t.startsWith("сыр")) return false;
+  if (t.startsWith("сырь")) return false; // сырьё / сырьевой
+  if (/^сыр(о|ой|ая|ое|ые|ого|ому|ым|ых|ую)$/u.test(t)) return false; // сырой / сырые / сырых ...
+  if (t.startsWith("сырост")) return false; // сырость
+  if (t.startsWith("сырокопч")) return false; // сырокопчёный
+  if (t.startsWith("сыровялен") || t.startsWith("сыровял")) return false; // сыровяленый
+  return true;
+}
+
+function shouldApplyDairyRubricFilter(serviceTokens: string[]): boolean {
+  const tokens = (serviceTokens || []).map((t) => (t || "").trim().toLowerCase().replace(/ё/gu, "е"));
+  if (tokens.some((t) => t.startsWith("молок"))) return true;
+  if (tokens.some((t) => isCheeseIntentToken(t))) return true;
+  return tokens.length === 1 && tokens[0] === "молочная";
+}
+
+function isDairyPrimaryRubric(summary: BiznesinfoCompanySummary | undefined): boolean {
+  const slug = safeLower(summary?.primary_rubric_slug || "");
+  if (slug.includes("molochnaya-promyshlennost")) return true;
+  const rubricName = safeLower(summary?.primary_rubric_name || "").replace(/ё/gu, "е");
+  return rubricName.includes("молочная промышленность");
+}
+
 function tokenizeServiceText(raw: string): string[] {
   // Transactional words should not block matching (e.g., "купить тетради", "заказать сантехнику").
   const QUERY_STOP_WORDS = new Set([
@@ -220,16 +300,96 @@ function tokenizeServiceText(raw: string): string[] {
     "организации",
   ]);
 
+  const DESCRIPTOR_STOP_WORDS = new Set([
+    "компания",
+    "компании",
+    "компаний",
+    "предприятие",
+    "предприятия",
+    "предприятий",
+    "организация",
+    "организации",
+    "организаций",
+    "фирма",
+    "фирмы",
+    "фирм",
+    "завод",
+    "завода",
+    "заводы",
+    "фабрика",
+    "фабрики",
+    "фабрик",
+    "продукция",
+    "продукции",
+    "промышленность",
+    "промышленности",
+    "отрасль",
+    "отрасли",
+    "направление",
+    "направления",
+  ]);
+
+  const DESCRIPTOR_PREFIXES = [
+    "компан",
+    "предприят",
+    "организац",
+    "фирм",
+    "завод",
+    "фабрик",
+    "производств",
+    "производител",
+    "продукц",
+    "промышленност",
+    "отрасл",
+    "направлен",
+    "деятельност",
+    "товар",
+    "услуг",
+    "работ",
+  ];
+
   const cleaned = safeLower(raw)
     .replace(/ё/gu, "е")
     .replace(/[«»"'“”„]/gu, " ")
     .replace(/[^\p{L}\p{N}-]+/gu, " ");
 
-  return cleaned
+  const normalizeQueryToken = (token: string): string => {
+    const t = (token || "").trim().toLowerCase().replace(/ё/gu, "е");
+    if (!t) return "";
+
+    // Keep core demand terms stable across Russian inflections:
+    // "молоко", "молока", "молоком", "молоку" => "молочная".
+    // Product intent should still discover dairy-domain companies.
+    if (t.startsWith("молок")) return "молочная";
+    // "молочная", "молочной", "молочную" => "молочная".
+    if (t.startsWith("молочн")) return "молочная";
+
+    return t;
+  };
+
+  const isDescriptorToken = (token: string): boolean => {
+    const t = (token || "").trim().toLowerCase().replace(/ё/gu, "е");
+    if (!t) return false;
+    if (DESCRIPTOR_STOP_WORDS.has(t)) return true;
+    return DESCRIPTOR_PREFIXES.some((prefix) => t.startsWith(prefix));
+  };
+
+  const picked = cleaned
     .split(/\s+/u)
     .map((t) => t.trim())
     .filter((t) => t.length >= 2)
-    .filter((t) => !QUERY_STOP_WORDS.has(t));
+    .filter((t) => !QUERY_STOP_WORDS.has(t))
+    .filter((t) => !isDescriptorToken(t))
+    .map((t) => normalizeQueryToken(t))
+    .filter(Boolean);
+
+  // Keep fallback behavior aligned with Meili search:
+  // plain "сыр*" query should discover dairy companies, not only literal "сыр" tokens.
+  if (picked.length > 0 && picked.every((token) => isCheeseIntentToken(token))) {
+    return ["молочная"];
+  }
+
+  return picked;
 }
 
 function matchesServiceToken(companyTokens: string[], token: string): boolean {
@@ -270,7 +430,13 @@ function matchesServiceToken(companyTokens: string[], token: string): boolean {
   }
 
   if (token.length <= 2) return companyTokens.includes(token);
-  return companyTokens.some((t) => t === token || t.startsWith(token));
+  return companyTokens.some((t) => {
+    if (t === token) return true;
+    if (t.startsWith(token)) return true;
+    // Allow "кефира" -> "кефир", "ремонта" -> "ремонт" in fallback mode.
+    if (t.length >= 4 && token.startsWith(t)) return true;
+    return false;
+  });
 }
 
 function matchesServiceTokens(companyTokens: string[], queryTokens: string[]): boolean {
@@ -322,7 +488,6 @@ function normalizeWebsites(raw: unknown): string[] {
     const normalized = (() => {
       try {
         // Keep as-is if already absolute.
-        // eslint-disable-next-line no-new
         new URL(trimmed);
         return trimmed;
       } catch {
@@ -385,12 +550,105 @@ function applyWebsiteOverride(companyId: string, websites: string[]): string[] {
   return normalizeWebsites(override);
 }
 
+function sanitizeCompanyRecord(company: BiznesinfoCompany): BiznesinfoCompany {
+  const sourceId = (company.source_id || "").trim();
+  company.logo_url = normalizeLogoUrl(company.logo_url || "");
+  const logoOverride = BIZNESINFO_LOGO_OVERRIDES[sourceId];
+  if (logoOverride) {
+    company.logo_url = logoOverride;
+  }
+  company.websites = applyWebsiteOverride(sourceId, normalizeWebsites(company.websites));
+  return company;
+}
+
+function getKeywordOverride(companyId: string): string[] | null {
+  const raw = (companyId || "").trim();
+  if (!raw) return null;
+  const key = raw.toLowerCase();
+  const override = BIZNESINFO_KEYWORD_OVERRIDES[raw] ?? BIZNESINFO_KEYWORD_OVERRIDES[key];
+  if (!override || override.length === 0) return null;
+
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const phrase of override) {
+    const normalized = String(phrase || "").replace(/\s+/gu, " ").trim();
+    if (!normalized) continue;
+    const dedupKey = normalized.toLowerCase();
+    if (seen.has(dedupKey)) continue;
+    seen.add(dedupKey);
+    out.push(normalized);
+  }
+  return out.length > 0 ? out : null;
+}
+
+function buildCompanyKeywordPhrases(company: BiznesinfoCompany): string[] {
+  const override = getKeywordOverride(company.source_id || "");
+  if (override) return override;
+  return generateCompanyKeywordPhrases(
+    company,
+    getServerKeywordGenerationOptions(),
+  );
+}
+
+async function findCompanyByIdFast(rawId: string): Promise<{ id: string; company: BiznesinfoCompany } | null> {
+  const target = (rawId || "").trim();
+  if (!target) return null;
+
+  const targetLower = safeLower(target);
+  const targetNormalized = normalizeCompanyIdForMatch(target);
+  let normalizedFallback: { id: string; company: BiznesinfoCompany } | null = null;
+  const sourcePath = resolveCompaniesJsonlPath();
+  const input = fs.createReadStream(sourcePath, { encoding: "utf-8" });
+  const rl = createInterface({ input, crlfDelay: Infinity });
+
+  try {
+    for await (const line of rl) {
+      const raw = line.trim();
+      if (!raw) continue;
+
+      let company: BiznesinfoCompany;
+      try {
+        company = JSON.parse(raw) as BiznesinfoCompany;
+      } catch {
+        continue;
+      }
+
+      const sourceId = (company.source_id || "").trim();
+      if (!sourceId) continue;
+      if (isExcludedBiznesinfoCompany(company)) continue;
+
+      const sourceLower = safeLower(sourceId);
+      const sourceNormalized = normalizeCompanyIdForMatch(sourceId);
+      const exactMatch = sourceId === target || sourceLower === targetLower;
+      if (exactMatch) {
+        return {
+          id: sourceId,
+          company: sanitizeCompanyRecord(company),
+        };
+      }
+
+      if (!normalizedFallback && targetNormalized.length > 0 && sourceNormalized === targetNormalized) {
+        normalizedFallback = {
+          id: sourceId,
+          company: sanitizeCompanyRecord(company),
+        };
+      }
+    }
+  } finally {
+    rl.close();
+    input.close();
+  }
+
+  return normalizedFallback;
+}
+
 function buildCompanySummary(company: BiznesinfoCompany, regionSlug: string | null): BiznesinfoCompanySummary {
   const primaryCategory = company.categories?.[0] ?? null;
   const primaryRubric = company.rubrics?.[0] ?? null;
   return {
     id: company.source_id,
     source: company.source,
+    unp: company.unp || "",
     name: company.name || "",
     address: company.address || "",
     city: company.city || "",
@@ -417,7 +675,8 @@ type Store = {
   companySummaryById: Map<string, BiznesinfoCompanySummary>;
   companyRegionById: Map<string, string | null>;
   companySearchById: Map<string, string>;
-  companyKeywordsById: Map<string, string[]>;  // Tokens from categories/rubrics for service search
+  companyKeywordsById: Map<string, string[]>; // Search tokens for service query matching
+  companyKeywordPhrasesById: Map<string, string[]>; // Keyword phrases for company page and exports
 
   categoriesBySlug: Map<string, BiznesinfoCategoryRef>;
   rubricsBySlug: Map<string, BiznesinfoRubricRef>;
@@ -436,6 +695,7 @@ type Store = {
 let storeCache: { sourcePath: string; mtimeMs: number; store: Store } | null = null;
 let storeLoadPromise: Promise<Store> | null = null;
 let storeLoadKey: string | null = null;
+let storeWarmupPromise: Promise<void> | null = null;
 
 function regionAliasKeys(region: string): string[] {
   return Array.from(new Set(REGION_ALIAS[region] || [region]));
@@ -468,7 +728,8 @@ async function loadStoreFrom(sourcePath: string, stat: fs.Stats): Promise<Store>
   const companySummaryById = new Map<string, BiznesinfoCompanySummary>();
   const companyRegionById = new Map<string, string | null>();
   const companySearchById = new Map<string, string>();
-  const companyKeywordsById = new Map<string, string[]>();  // Tokens from categories/rubrics for service search
+  const companyKeywordsById = new Map<string, string[]>(); // Search tokens for service query matching
+  const companyKeywordPhrasesById = new Map<string, string[]>();
 
   const categoriesBySlug = new Map<string, BiznesinfoCategoryRef>();
   const rubricsBySlug = new Map<string, BiznesinfoRubricRef>();
@@ -498,13 +759,9 @@ async function loadStoreFrom(sourcePath: string, stat: fs.Stats): Promise<Store>
 
     const id = (company.source_id || "").trim();
     if (!id) continue;
+    if (isExcludedBiznesinfoCompany(company)) continue;
 
-    company.logo_url = normalizeLogoUrl(company.logo_url || "");
-    const logoOverride = BIZNESINFO_LOGO_OVERRIDES[company.source_id];
-    if (logoOverride) {
-      company.logo_url = logoOverride;
-    }
-    company.websites = applyWebsiteOverride(company.source_id, normalizeWebsites(company.websites));
+    company = sanitizeCompanyRecord(company);
 
     const regionSlug = normalizeRegionSlug(company.city || "", company.region || "", company.address || "");
     companiesById.set(id, company);
@@ -571,7 +828,6 @@ async function loadStoreFrom(sourcePath: string, stat: fs.Stats): Promise<Store>
       companyIdsByRubricSlug.get(rubricSlug)!.push(id);
     }
 
-    companyKeywordsById.set(id, generateCompanyKeywords(company));
   }
 
   for (const [catSlug, rubricSlugs] of rubricsByCategorySlug.entries()) {
@@ -593,6 +849,7 @@ async function loadStoreFrom(sourcePath: string, stat: fs.Stats): Promise<Store>
     companyRegionById,
     companySearchById,
     companyKeywordsById,
+    companyKeywordPhrasesById,
     categoriesBySlug,
     rubricsBySlug,
     rubricsByCategorySlug,
@@ -638,6 +895,48 @@ async function getStore(): Promise<Store> {
       storeLoadKey = null;
     }
   }
+}
+
+export function biznesinfoWarmStore(): Promise<void> {
+  if (storeWarmupPromise) return storeWarmupPromise;
+
+  storeWarmupPromise = getStore()
+    .then(() => undefined)
+    .catch((error) => {
+      // allow retry on next request if warmup failed
+      storeWarmupPromise = null;
+      throw error;
+    });
+
+  return storeWarmupPromise;
+}
+
+function getOrBuildCompanyKeywordPhrases(store: Store, id: string): string[] {
+  const companyId = (id || "").trim();
+  if (!companyId) return [];
+
+  const cached = store.companyKeywordPhrasesById.get(companyId);
+  if (cached) return cached;
+
+  const company = store.companiesById.get(companyId);
+  if (!company) return [];
+
+  const keywordPhrases = buildCompanyKeywordPhrases(company);
+  store.companyKeywordPhrasesById.set(companyId, keywordPhrases);
+  return keywordPhrases;
+}
+
+function getOrBuildCompanyKeywordTokens(store: Store, id: string): string[] {
+  const companyId = (id || "").trim();
+  if (!companyId) return [];
+
+  const cached = store.companyKeywordsById.get(companyId);
+  if (cached) return cached;
+
+  const keywordPhrases = getOrBuildCompanyKeywordPhrases(store, companyId);
+  const tokens = keywordPhrasesToSearchTokens(keywordPhrases);
+  store.companyKeywordsById.set(companyId, tokens);
+  return tokens;
 }
 
 function applyRegionAlias(region: string | null, companyRegionSlug: string | null): boolean {
@@ -713,6 +1012,7 @@ export async function biznesinfoGetRubricCompanies(params: {
   for (const id of ids) {
     const companyRegionSlug = store.companyRegionById.get(id) || null;
     if (!applyRegionAlias(params.region, companyRegionSlug)) continue;
+
     if (q) {
       const search = store.companySearchById.get(id) || "";
       if (!search.includes(q)) continue;
@@ -748,15 +1048,35 @@ export async function biznesinfoGetRubricCompanies(params: {
 }
 
 export async function biznesinfoGetCompany(id: string): Promise<BiznesinfoCompanyResponse> {
-  const store = await getStore();
   const rawId = (id || "").trim();
   if (!rawId) throw new Error("company_not_found:");
+
+  // Fast cold-path: avoid waiting for full in-memory store load on first company request.
+  if (!storeCache) {
+    const fast = await findCompanyByIdFast(rawId);
+    if (fast) {
+      const company = fast.company;
+      const generatedKeywords = buildCompanyKeywordPhrases(company);
+      return {
+        id: fast.id,
+        company,
+        generated_keywords: generatedKeywords,
+        primary: {
+          category_slug: company.categories?.[0]?.slug ?? null,
+          rubric_slug: company.rubrics?.[0]?.slug ?? null,
+        },
+      };
+    }
+  }
+
+  const store = await getStore();
 
   const direct = store.companiesById.get(rawId);
   if (direct) {
     return {
       id: rawId,
       company: direct,
+      generated_keywords: getOrBuildCompanyKeywordPhrases(store, rawId),
       primary: {
         category_slug: direct.categories?.[0]?.slug ?? null,
         rubric_slug: direct.rubrics?.[0]?.slug ?? null,
@@ -764,7 +1084,7 @@ export async function biznesinfoGetCompany(id: string): Promise<BiznesinfoCompan
     };
   }
 
-  const normalized = rawId.replace(/[-‐‑‒–—―]/g, "");
+  const normalized = rawId.replace(DASH_VARIANTS_RE, "");
   const normalizedCompany =
     normalized && normalized !== rawId ? store.companiesById.get(normalized) : undefined;
   if (!normalizedCompany) {
@@ -773,6 +1093,7 @@ export async function biznesinfoGetCompany(id: string): Promise<BiznesinfoCompan
   return {
     id: normalized,
     company: normalizedCompany,
+    generated_keywords: getOrBuildCompanyKeywordPhrases(store, normalized),
     primary: {
       category_slug: normalizedCompany.categories?.[0]?.slug ?? null,
       rubric_slug: normalizedCompany.rubrics?.[0]?.slug ?? null,
@@ -787,6 +1108,8 @@ export async function biznesinfoSuggest(params: {
 }): Promise<BiznesinfoSuggestResponse> {
   const store = await getStore();
   const q = (params.query || "").trim().toLowerCase();
+  const qCompact = compactAlnum(q);
+  const tryInitialism = qCompact.length >= 2 && qCompact.length <= 6;
   const limit = Math.max(1, Math.min(20, params.limit || 8));
   if (q.length < 2) return { query: params.query, suggestions: [] };
 
@@ -828,7 +1151,21 @@ export async function biznesinfoSuggest(params: {
       if (!applyRegionAlias(params.region, companyRegionSlug)) continue;
       // Search ONLY by company name, not by description/keywords
       const name = summary.name || "";
-      if (!safeLower(name).includes(q)) continue;
+      const nameLower = safeLower(name);
+      if (!nameLower.includes(q)) {
+        if (!qCompact) continue;
+        const nameCompact = compactAlnum(name);
+        const idCompact = compactAlnum(id);
+        if (nameCompact.includes(qCompact)) {
+          // ok
+        } else if (idCompact.includes(qCompact)) {
+          // ok (match by company id / slug without separators)
+        } else if (tryInitialism && buildCompanyNameInitialism(name).includes(qCompact)) {
+          // ok
+        } else {
+          continue;
+        }
+      }
       suggestions.push({
         type: "company",
         id,
@@ -853,7 +1190,10 @@ export async function biznesinfoSearch(params: {
 }): Promise<BiznesinfoSearchResponse> {
   const store = await getStore();
   const q = (params.query || "").trim().toLowerCase();
+  const qCompact = q ? compactAlnum(q) : "";
+  const tryInitialism = qCompact.length >= 2 && qCompact.length <= 6;
   const serviceTokens = tokenizeServiceText(params.service || "");
+  const applyDairyFilter = shouldApplyDairyRubricFilter(serviceTokens);
   const rawCity = (params.city || "").trim();
   const cityLower = rawCity.toLowerCase();
   const cityTokens = tokenizeLocation(cityLower);
@@ -863,7 +1203,9 @@ export async function biznesinfoSearch(params: {
   const limit = Math.max(1, Math.min(200, params.limit || 24));
   
   // No filters = no results
-  if (!q && serviceTokens.length === 0 && cityTokens.length === 0 && !cityNorm) return { query: params.query, total: 0, companies: [] };
+  if (!q && serviceTokens.length === 0 && cityTokens.length === 0 && !cityNorm) {
+    return { query: params.query, total: 0, companies: [] };
+  }
 
   const qNorm = q.replace(/ё/gu, "е");
   const matches: Array<{ id: string; logoRank: number; score: number; name: string }> = [];
@@ -872,6 +1214,9 @@ export async function biznesinfoSearch(params: {
     if (!applyRegionAlias(params.region, companyRegionSlug)) continue;
 
     const summary = store.companySummaryById.get(id);
+    if (serviceTokens.length > 0 && applyDairyFilter && !isDairyPrimaryRubric(summary)) {
+      continue;
+    }
     if (useCityExactFilter) {
       if (normalizeCityForFilter(summary?.city || "") !== cityNorm) continue;
     } else if (cityTokens.length > 0) {
@@ -886,7 +1231,9 @@ export async function biznesinfoSearch(params: {
       if (!ok) continue;
     }
     
-    const companyTokens = store.companyKeywordsById.get(id) || [];
+    const companyTokens = serviceTokens.length > 0
+      ? getOrBuildCompanyKeywordTokens(store, id)
+      : [];
 
     const pushMatch = () => {
       const logoRank = computeLogoRank(summary);
@@ -908,7 +1255,7 @@ export async function biznesinfoSearch(params: {
       continue;
     }
 
-    // Service search: match category/rubric tokens (word/prefix match, not substring).
+    // Service search: match generated keyword tokens (word/prefix match, not substring).
     if (serviceTokens.length > 0) {
       if (matchesServiceTokens(companyTokens, serviceTokens)) pushMatch();
       continue;
@@ -916,7 +1263,19 @@ export async function biznesinfoSearch(params: {
 
     // Company name search (fallback uses combined text index)
     if (q) {
-      if (search.includes(q)) pushMatch();
+      if (search.includes(q)) {
+        pushMatch();
+      } else if (qCompact) {
+        const name = summary?.name || "";
+        const nameCompact = compactAlnum(name);
+        if (nameCompact.includes(qCompact)) {
+          pushMatch();
+        } else if (compactAlnum(id).includes(qCompact)) {
+          pushMatch();
+        } else if (tryInitialism && buildCompanyNameInitialism(name).includes(qCompact)) {
+          pushMatch();
+        }
+      }
       continue;
     }
 
@@ -926,8 +1285,8 @@ export async function biznesinfoSearch(params: {
 
   const total = matches.length;
   matches.sort((a, b) => {
-    if (b.logoRank !== a.logoRank) return b.logoRank - a.logoRank;
     if (b.score !== a.score) return b.score - a.score;
+    if (b.logoRank !== a.logoRank) return b.logoRank - a.logoRank;
     return a.name.localeCompare(b.name, "ru", { sensitivity: "base" });
   });
 

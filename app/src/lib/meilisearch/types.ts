@@ -2,6 +2,7 @@
 export interface MeiliCompanyDocument {
   id: string;                    // source_id (primary key)
   source: "biznesinfo";
+  unp: string;
   name: string;
   description: string;
   about: string;
@@ -36,7 +37,7 @@ export interface MeiliCompanyDocument {
   // Phone extensions for display
   phones_ext: Array<{ number: string; labels: string[] }>;
 
-  // Keywords for product/service search (generated from rubrics)
+  // Keywords for product/service search (services/products + filtered text + stats)
   keywords: string[];
 }
 

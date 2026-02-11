@@ -10,6 +10,8 @@ import type { BiznesinfoCompanySummary } from "@/lib/biznesinfo/types";
 import { BIZNESINFO_CATEGORY_ICONS } from "@/lib/biznesinfo/icons";
 import { buildHighlightRegex, highlightText } from "@/lib/utils/highlight";
 
+const LOGO_PROXY_VERSION = "3";
+
 interface CompanyCardProps {
   company: BiznesinfoCompanySummary;
   showCategory?: boolean;
@@ -35,7 +37,7 @@ function logoProxyUrl(companyId: string, rawLogoUrl: string): string {
   })();
 
   if (!pathname.startsWith("/images/")) return "";
-  return `/api/biznesinfo/logo?id=${encodeURIComponent(companyId)}&path=${encodeURIComponent(pathname)}`;
+  return `/api/biznesinfo/logo?id=${encodeURIComponent(companyId)}&path=${encodeURIComponent(pathname)}&v=${LOGO_PROXY_VERSION}`;
 }
 
 function displayUrl(raw: string): string {

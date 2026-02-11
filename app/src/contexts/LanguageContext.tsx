@@ -31,7 +31,7 @@ const translations: Record<Language, Record<string, string>> = {
 	    "common.hide": "Скрыть",
 	    "common.example": "например",
 
-    // Search
+	    // Search
 	    "search.placeholder": "Название компании",
 	    "search.companyPlaceholder": "Название компании",
 	    "search.servicePlaceholder": "Товары или услуги",

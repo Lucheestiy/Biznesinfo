@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { biznesinfoGetCompaniesSummary } from "@/lib/biznesinfo/store";
+import { filterOutLiquidatedByKartoteka } from "@/lib/biznesinfo/kartoteka";
+
+export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -15,5 +18,6 @@ export async function GET(request: Request) {
     .slice(0, 200);
 
   const companies = await biznesinfoGetCompaniesSummary(ids);
-  return NextResponse.json({ companies });
+  const filtered = await filterOutLiquidatedByKartoteka(companies);
+  return NextResponse.json({ companies: filtered.items });
 }

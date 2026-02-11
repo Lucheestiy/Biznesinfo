@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { biznesinfoGetRubricCompanies } from "@/lib/biznesinfo/store";
+import { filterOutLiquidatedByKartoteka } from "@/lib/biznesinfo/kartoteka";
+
+export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -21,7 +24,15 @@ export async function GET(request: Request) {
       offset: Number.isFinite(offset) ? offset : 0,
       limit: Number.isFinite(limit) ? limit : 24,
     });
-    return NextResponse.json(data);
+    const filtered = await filterOutLiquidatedByKartoteka(data.companies || []);
+    return NextResponse.json({
+      ...data,
+      companies: filtered.items,
+      page: {
+        ...data.page,
+        total: Math.max(0, data.page.total - filtered.removed),
+      },
+    });
   } catch (e) {
     const msg = String((e as Error)?.message || "");
     if (msg.startsWith("rubric_not_found:")) {

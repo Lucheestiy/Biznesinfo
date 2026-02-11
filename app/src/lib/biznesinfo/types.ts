@@ -86,6 +86,7 @@ export interface BiznesinfoCompany {
 export interface BiznesinfoCompanySummary {
   id: string;
   source: "biznesinfo";
+  unp: string;
   name: string;
   address: string;
   city: string;
@@ -155,6 +156,7 @@ export interface BiznesinfoRubricResponse {
 export interface BiznesinfoCompanyResponse {
   id: string;
   company: BiznesinfoCompany;
+  generated_keywords?: string[];
   primary: {
     category_slug: string | null;
     rubric_slug: string | null;

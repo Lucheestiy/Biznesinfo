@@ -15,6 +15,46 @@ import Pagination from "@/components/Pagination";
 import Link from "next/link";
 
 const PAGE_SIZE = 10;
+const SEARCH_REQUEST_DEBOUNCE_MS = 120;
+const EMPTY_LOGO_HINTS = [
+  "/images/logo/no-logo",
+  "/images/logo/no_logo",
+  "/images/logo/noimage",
+  "/images/logo/no-image",
+];
+
+function hasCompanyLogo(logoUrl: string): boolean {
+  const normalized = (logoUrl || "").trim().toLowerCase();
+  if (!normalized) return false;
+  return !EMPTY_LOGO_HINTS.some((hint) => normalized.includes(hint));
+}
+
+function textCompletenessScore(value: string, maxPoints: number): number {
+  const length = (value || "").trim().length;
+  if (!length) return 0;
+  return Math.min(maxPoints, Math.round(length / 80));
+}
+
+function companyCompletenessScore(company: BiznesinfoCompanySummary): number {
+  let score = 0;
+
+  if ((company.address || "").trim()) score += 8;
+  if ((company.city || "").trim()) score += 4;
+  if (company.primary_category_slug || company.primary_rubric_slug) score += 6;
+  if ((company.work_hours?.status || "").trim()) score += 4;
+  if ((company.work_hours?.work_time || "").trim()) score += 4;
+
+  if ((company.phones_ext || []).length > 0) score += 14;
+  else if ((company.phones || []).length > 0) score += 10;
+
+  if ((company.emails || []).length > 0) score += 8;
+  if ((company.websites || []).length > 0) score += 8;
+
+  score += textCompletenessScore(company.description || "", 14);
+  score += textCompletenessScore(company.about || "", 20);
+
+  return score;
+}
 
 function SearchResults() {
   const searchParams = useSearchParams();
@@ -31,20 +71,43 @@ function SearchResults() {
   const [companyDraft, setCompanyDraft] = useState(query);
   const [serviceDraft, setServiceDraft] = useState(serviceQuery);
   const [cityDraft, setCityDraft] = useState(city);
+  const [debouncedCompanyDraft, setDebouncedCompanyDraft] = useState(query.trim());
+  const [debouncedServiceDraft, setDebouncedServiceDraft] = useState(serviceQuery.trim());
+  const [debouncedCityDraft, setDebouncedCityDraft] = useState(city.trim());
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
   const cityInputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<number | null>(null);
+  const searchDebounceRef = useRef<number | null>(null);
 
   const inputClassName =
-    "w-full rounded-2xl bg-white text-[#820251] font-medium text-[15px] placeholder:text-gray-500/60 placeholder:font-normal px-4 pr-14 py-3.5 shadow-sm border border-gray-200 focus:outline-none focus:ring-2 focus:ring-yellow-300/70 focus:border-[#820251]/30 focus:placeholder:text-gray-500/60";
+    "w-full rounded-2xl bg-white text-[#820251] font-medium text-[15px] placeholder:text-gray-500/60 placeholder:font-normal px-4 pr-24 py-3.5 shadow-sm border border-gray-200 focus:outline-none focus:ring-2 focus:ring-yellow-300/70 focus:border-[#820251]/30 focus:placeholder:text-gray-500/60";
   const inputButtonClassName =
     "absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl bg-[#820251]/10 text-[#820251] hover:bg-[#820251]/15 active:bg-[#820251]/20 transition-colors flex items-center justify-center";
+  const clearInputButtonClassName =
+    "absolute right-14 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg text-[#820251]/60 hover:text-[#820251] hover:bg-[#820251]/10 active:bg-[#820251]/15 transition-colors flex items-center justify-center";
 
   useEffect(() => {
     setCompanyDraft(query);
     setServiceDraft(serviceQuery);
     setCityDraft(city);
+    setDebouncedCompanyDraft(query.trim());
+    setDebouncedServiceDraft(serviceQuery.trim());
+    setDebouncedCityDraft(city.trim());
   }, [query, serviceQuery, city]);
+
+  // Local debounced search source of truth: keeps results/logos updating without waiting for URL round-trip.
+  useEffect(() => {
+    if (searchDebounceRef.current) window.clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = window.setTimeout(() => {
+      setDebouncedCompanyDraft(companyDraft.trim());
+      setDebouncedServiceDraft(serviceDraft.trim());
+      setDebouncedCityDraft(cityDraft.trim());
+    }, SEARCH_REQUEST_DEBOUNCE_MS);
+
+    return () => {
+      if (searchDebounceRef.current) window.clearTimeout(searchDebounceRef.current);
+    };
+  }, [companyDraft, serviceDraft, cityDraft]);
 
   // If region is present in URL, it becomes the source of truth.
   useEffect(() => {
@@ -81,13 +144,39 @@ function SearchResults() {
 
     const qs = params.toString();
     const url = qs ? `/search?${qs}` : "/search";
-    if (mode === "replace") router.replace(url);
+    if (mode === "replace") router.replace(url, { scroll: false });
     else router.push(url);
+  };
+
+  const handleStickyBackClick = () => {
+    const fallbackUrl = "/#catalog";
+    if (typeof window === "undefined") {
+      router.push(fallbackUrl);
+      return;
+    }
+
+    if (window.history.length <= 1) {
+      router.push(fallbackUrl);
+      return;
+    }
+
+    const before = window.location.href;
+    router.back();
+    window.setTimeout(() => {
+      if (window.location.href === before) {
+        router.push(fallbackUrl);
+      }
+    }, 220);
   };
 
   const [data, setData] = useState<BiznesinfoSearchResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const latestDataRef = useRef<BiznesinfoSearchResponse | null>(null);
+
+  useEffect(() => {
+    latestDataRef.current = data;
+  }, [data]);
 
   // Debounced auto-update on field edits (keeps UX fast and compact on mobile).
   useEffect(() => {
@@ -107,68 +196,80 @@ function SearchResults() {
     };
   }, [companyDraft, serviceDraft, cityDraft, query, serviceQuery, city]);
 
-  // Reset page when query or region changes
+  const effectiveQuery = debouncedCompanyDraft;
+  const effectiveServiceQuery = debouncedServiceDraft;
+  const effectiveCity = debouncedCityDraft;
+
+  // Reset page when effective search params or region change
   useEffect(() => {
     setCurrentPage(1);
-  }, [query, serviceQuery, city, selectedRegion]);
+  }, [effectiveQuery, effectiveServiceQuery, effectiveCity, selectedRegion]);
 
-  const fetchSearch = (page: number) => {
-    const q = query.trim();
-    const svc = serviceQuery.trim();
-    const cityValue = city.trim();
+  useEffect(() => {
+    const q = effectiveQuery;
+    const svc = effectiveServiceQuery;
+    const cityValue = effectiveCity;
     if (!q && !svc && !cityValue) {
       setData(null);
       setIsLoading(false);
       return;
     }
-    let isMounted = true;
-    setIsLoading(true);
+
     const region = cityValue ? "" : selectedRegion || "";
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (svc) params.set("service", svc);
     if (cityValue) params.set("city", cityValue);
     if (region) params.set("region", region);
-    params.set("offset", String((page - 1) * PAGE_SIZE));
+    params.set("offset", String((currentPage - 1) * PAGE_SIZE));
     params.set("limit", String(PAGE_SIZE));
+    const controller = new AbortController();
 
-    fetch(`/api/biznesinfo/search?${params.toString()}`)
+    setIsLoading(true);
+
+    fetch(`/api/biznesinfo/search?${params.toString()}`, {
+      signal: controller.signal,
+    })
       .then((r) => (r.ok ? r.json() : null))
       .then((resp: BiznesinfoSearchResponse | null) => {
-        if (!isMounted) return;
+        if (controller.signal.aborted) return;
         setData(resp);
         setIsLoading(false);
       })
-      .catch(() => {
-        if (!isMounted) return;
-        setData(null);
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        void error;
+        if (!latestDataRef.current) setData(null);
         setIsLoading(false);
       });
-    return () => {
-      isMounted = false;
-    };
-  };
 
-  useEffect(() => {
-    fetchSearch(currentPage);
-  }, [currentPage, query, serviceQuery, city, selectedRegion]);
+    return () => {
+      controller.abort();
+    };
+  }, [currentPage, effectiveQuery, effectiveServiceQuery, effectiveCity, selectedRegion]);
 
   const totalPages = data ? Math.ceil((data.total || 0) / PAGE_SIZE) : 0;
 
   const companies = useMemo(() => {
-    const items = data?.companies || [];
-    const withLogo: BiznesinfoCompanySummary[] = [];
-    const withoutLogo: BiznesinfoCompanySummary[] = [];
-    for (const c of items) {
-      if ((c.logo_url || "").trim()) withLogo.push(c);
-      else withoutLogo.push(c);
-    }
-    return [...withLogo, ...withoutLogo];
+    const items = (data?.companies || []).map((company, index) => ({
+      company,
+      index,
+      hasLogo: hasCompanyLogo(company.logo_url || ""),
+      completeness: companyCompletenessScore(company),
+    }));
+
+    items.sort((a, b) => {
+      if (a.hasLogo !== b.hasLogo) return a.hasLogo ? -1 : 1;
+      if (b.completeness !== a.completeness) return b.completeness - a.completeness;
+      return a.index - b.index;
+    });
+
+    return items.map((item) => item.company);
   }, [data]);
 
-  const highlightCompanyTokens = useMemo(() => tokenizeHighlightQuery(query), [query]);
-  const highlightServiceTokens = useMemo(() => tokenizeHighlightQuery(serviceQuery), [serviceQuery]);
-  const highlightLocationTokens = useMemo(() => tokenizeHighlightQuery(city), [city]);
+  const highlightCompanyTokens = useMemo(() => tokenizeHighlightQuery(effectiveQuery), [effectiveQuery]);
+  const highlightServiceTokens = useMemo(() => tokenizeHighlightQuery(effectiveServiceQuery), [effectiveServiceQuery]);
+  const highlightLocationTokens = useMemo(() => tokenizeHighlightQuery(effectiveCity), [effectiveCity]);
   const highlightNameTokens = useMemo(() => {
     return highlightCompanyTokens.length > 0 ? highlightCompanyTokens : highlightServiceTokens;
   }, [highlightCompanyTokens, highlightServiceTokens]);
@@ -195,14 +296,26 @@ function SearchResults() {
                 <label className="sr-only" htmlFor="search-company">
                   {t("search.companyPlaceholder")}
                 </label>
-                  <input
-                    id="search-company"
-                    value={companyDraft}
-                    onChange={(e) => setCompanyDraft(e.target.value)}
-                    inputMode="search"
-                    placeholder={t("search.companyPlaceholder")}
-                    className={inputClassName}
-                  />
+                <input
+                  id="search-company"
+                  value={companyDraft}
+                  onChange={(e) => setCompanyDraft(e.target.value)}
+                  inputMode="search"
+                  placeholder={t("search.companyPlaceholder")}
+                  className={inputClassName}
+                />
+                {companyDraft.length > 0 && (
+                  <button
+                    type="button"
+                    aria-label="Очистить поле названия компании"
+                    onClick={() => setCompanyDraft("")}
+                    className={clearInputButtonClassName}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  </button>
+                )}
                 <button
                   type="submit"
                   aria-label={t("search.find")}
@@ -219,14 +332,26 @@ function SearchResults() {
                 <label className="sr-only" htmlFor="search-service">
                   {t("search.servicePlaceholder")}
                 </label>
-                  <input
-                    id="search-service"
-                    value={serviceDraft}
-                    onChange={(e) => setServiceDraft(e.target.value)}
-                    inputMode="search"
-                    placeholder={t("search.servicePlaceholder")}
-                    className={inputClassName}
-                  />
+                <input
+                  id="search-service"
+                  value={serviceDraft}
+                  onChange={(e) => setServiceDraft(e.target.value)}
+                  inputMode="search"
+                  placeholder={t("search.servicePlaceholder")}
+                  className={inputClassName}
+                />
+                {serviceDraft.length > 0 && (
+                  <button
+                    type="button"
+                    aria-label="Очистить поле товаров и услуг"
+                    onClick={() => setServiceDraft("")}
+                    className={clearInputButtonClassName}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  </button>
+                )}
                 <button
                   type="submit"
                   aria-label={t("search.find")}
@@ -339,6 +464,21 @@ function SearchResults() {
                 placeholder={t("filter.locationLabel")}
                 className={inputClassName}
               />
+              {cityDraft.length > 0 && (
+                <button
+                  type="button"
+                  aria-label="Очистить поле локации"
+                  onClick={() => {
+                    setCityDraft("");
+                    cityInputRef.current?.focus();
+                  }}
+                  className={clearInputButtonClassName}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              )}
               <button
                 type="button"
                 aria-label={t("search.find")}
@@ -356,29 +496,29 @@ function SearchResults() {
         {/* Results */}
         <div className="container mx-auto py-10 px-4">
           {/* Query info */}
-          {(query || serviceQuery || city || selectedRegion) && (
+          {(effectiveQuery || effectiveServiceQuery || effectiveCity || selectedRegion) && (
             <div className="mb-6">
               <p className="text-gray-600">
-                {query && (
+                {effectiveQuery && (
                   <>
                     {t("search.companyPlaceholder")}:{" "}
-                    <span className="font-bold text-[#820251]">«{query}»</span>
+                    <span className="font-bold text-[#820251]">«{effectiveQuery}»</span>
                   </>
                 )}
-                {query && serviceQuery && <span className="text-gray-400"> · </span>}
-                {serviceQuery && (
+                {effectiveQuery && effectiveServiceQuery && <span className="text-gray-400"> · </span>}
+                {effectiveServiceQuery && (
                   <>
                     {t("search.servicePlaceholder")}:{" "}
-                    <span className="font-bold text-[#820251]">«{serviceQuery}»</span>
+                    <span className="font-bold text-[#820251]">«{effectiveServiceQuery}»</span>
                   </>
                 )}
-                {(query || serviceQuery) && city && <span className="text-gray-400"> · </span>}
-                {city && (
+                {(effectiveQuery || effectiveServiceQuery) && effectiveCity && <span className="text-gray-400"> · </span>}
+                {effectiveCity && (
                   <>
-                    {t("filter.city")}: <span className="font-bold text-[#820251]">{city}</span>
+                    {t("filter.city")}: <span className="font-bold text-[#820251]">{effectiveCity}</span>
                   </>
                 )}
-                {selectedRegion && !city && <span className="font-bold text-[#820251]"> — {regionName}</span>}
+                {selectedRegion && !effectiveCity && <span className="font-bold text-[#820251]"> — {regionName}</span>}
               </p>
               <p className="text-sm text-gray-500 mt-1">
                 {t("search.found")}: {isLoading ? "…" : formatCompanyCount(data?.total ?? 0)}
@@ -386,9 +526,13 @@ function SearchResults() {
             </div>
           )}
 
-          {isLoading ? (
+          {isLoading && (data?.companies || []).length > 0 && (
+            <p className="text-sm text-gray-500 mb-4">{t("common.loading")}…</p>
+          )}
+
+          {isLoading && (data?.companies || []).length === 0 ? (
             <div className="bg-white rounded-lg p-10 text-center text-gray-500">{t("common.loading")}</div>
-          ) : !query && !serviceQuery && !city ? (
+          ) : !effectiveQuery && !effectiveServiceQuery && !effectiveCity ? (
             <div className="bg-white rounded-lg p-10 text-center text-gray-500">
               {t("search.placeholder")}
             </div>
@@ -433,6 +577,18 @@ function SearchResults() {
           )}
         </div>
       </main>
+
+      <button
+        type="button"
+        onClick={handleStickyBackClick}
+        aria-label={t("common.back")}
+        title={t("common.back")}
+        className="md:hidden fixed bottom-6 left-4 z-[70] w-12 h-12 rounded-full bg-[#820251] text-white shadow-lg hover:bg-[#7a0150] active:bg-[#6f0148] transition-colors flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f3f4f6]"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
 
       <Footer />
     </div>

@@ -5,7 +5,9 @@ import { configureCompaniesIndex } from "./config";
 import type { MeiliCompanyDocument } from "./types";
 import type { BiznesinfoCompany } from "../biznesinfo/types";
 import { generateCompanyKeywords } from "../biznesinfo/keywords";
+import { getServerKeywordGenerationOptions } from "../biznesinfo/keywordRuntime";
 import { BIZNESINFO_WEBSITE_OVERRIDES } from "../biznesinfo/websiteOverrides";
+import { isExcludedBiznesinfoCompany, normalizeBiznesinfoUnp } from "../biznesinfo/exclusions";
 import { normalizeCityForFilter } from "../utils/location";
 
 // Region normalization logic (reused from store.ts)
@@ -74,7 +76,10 @@ function applyWebsiteOverride(companyId: string, websites: string[]): string[] {
   return BIZNESINFO_WEBSITE_OVERRIDES[raw] ?? BIZNESINFO_WEBSITE_OVERRIDES[key] ?? websites;
 }
 
-function companyToDocument(company: BiznesinfoCompany): MeiliCompanyDocument {
+function companyToDocument(
+  company: BiznesinfoCompany,
+  keywordOptions = getServerKeywordGenerationOptions(),
+): MeiliCompanyDocument {
   const regionSlug = normalizeRegionSlug(company.city, company.region, company.address);
   const primaryCategory = company.categories?.[0] ?? null;
   const primaryRubric = company.rubrics?.[0] ?? null;
@@ -82,6 +87,7 @@ function companyToDocument(company: BiznesinfoCompany): MeiliCompanyDocument {
   return {
     id: company.source_id,
     source: company.source,
+    unp: normalizeBiznesinfoUnp(company.unp || ""),
     name: company.name || "",
     description: company.description || "",
     about: company.about || "",
@@ -114,12 +120,13 @@ function companyToDocument(company: BiznesinfoCompany): MeiliCompanyDocument {
 
     phones_ext: company.phones_ext || [],
 
-    keywords: generateCompanyKeywords(company),
+    keywords: generateCompanyKeywords(company, keywordOptions),
   };
 }
 
 export async function indexCompanies(jsonlPath: string): Promise<{ total: number; indexed: number }> {
   console.log(`Starting Meilisearch indexing from: ${jsonlPath}`);
+  const keywordOptions = getServerKeywordGenerationOptions();
 
   // Configure index first
   await configureCompaniesIndex();
@@ -147,8 +154,9 @@ export async function indexCompanies(jsonlPath: string): Promise<{ total: number
     try {
       const company = JSON.parse(raw) as BiznesinfoCompany;
       if (!company.source_id) continue;
+      if (isExcludedBiznesinfoCompany(company)) continue;
 
-      documents.push(companyToDocument(company));
+      documents.push(companyToDocument(company, keywordOptions));
       total++;
 
       if (documents.length >= BATCH_SIZE) {

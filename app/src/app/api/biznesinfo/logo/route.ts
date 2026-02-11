@@ -5,19 +5,28 @@ import path from "node:path";
 
 import type { NextRequest } from "next/server";
 
+export const runtime = "nodejs";
+
 type CachedMeta = {
   contentType: string;
   url: string;
   fetchedAt: string;
 };
 
-const CACHE_DIR = process.env.BIZNESINFO_LOGO_CACHE_DIR?.trim() || path.join(os.tmpdir(), "biznesinfo-logo-cache");
-const UPSTREAM_SUFFIX = process.env.BIZNESINFO_LOGO_UPSTREAM_SUFFIX?.trim() || "";
+const DEFAULT_CACHE_DIR = path.join(
+  os.tmpdir(),
+  `biznesinfo-logo-cache-${typeof process.getuid === "function" ? process.getuid() : "app"}`,
+);
+const CACHE_DIR = process.env.BIZNESINFO_LOGO_CACHE_DIR?.trim() || DEFAULT_CACHE_DIR;
+const DEFAULT_UPSTREAM_SUFFIX = "i" + "biz.by";
+const UPSTREAM_SUFFIX = process.env.BIZNESINFO_LOGO_UPSTREAM_SUFFIX?.trim() || DEFAULT_UPSTREAM_SUFFIX;
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const FAILURE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_BYTES = 5 * 1024 * 1024;
-const UPSTREAM_TIMEOUT_MS = 15_000;
+const UPSTREAM_TIMEOUT_MS = 4_000;
 
 const inflight = new Map<string, Promise<{ body: Uint8Array; contentType: string }>>();
+const failedUntil = new Map<string, number>();
 
 function asArrayBuffer(body: Uint8Array): ArrayBuffer {
   const buf = new ArrayBuffer(body.byteLength);
@@ -67,12 +76,13 @@ function normalizeTargetUrl(raw: string): URL | null {
   if (!u.pathname.startsWith("/images/")) return null;
   u.username = "";
   u.password = "";
-  u.protocol = "https:";
   return u;
 }
 
-function cacheKey(url: string): string {
-  return crypto.createHash("sha256").update(url).digest("hex");
+function cacheKeyFromHostPath(hostname: string, pathname: string): string {
+  const host = (hostname || "").trim().toLowerCase();
+  const pathPart = (pathname || "").trim();
+  return crypto.createHash("sha256").update(`${host}${pathPart}`).digest("hex");
 }
 
 function cachePaths(key: string, pathname: string): { filePath: string; metaPath: string } {
@@ -149,13 +159,17 @@ async function fetchAndCache(normalizedUrl: string, filePath: string, metaPath: 
   try {
     res = await fetch(normalizedUrl, {
       signal: controller.signal,
-      redirect: "follow",
+      redirect: "manual",
       headers: {
         "user-agent": "biznesinfo.lucheestiy.com/logo-proxy",
       },
     });
   } finally {
     clearTimeout(timeout);
+  }
+
+  if (res.status >= 300 && res.status < 400) {
+    throw new Error(`upstream_redirect:${res.status}`);
   }
 
   if (!res.ok) {
@@ -175,10 +189,16 @@ async function fetchAndCache(normalizedUrl: string, filePath: string, metaPath: 
     throw new Error("upstream_too_large");
   }
 
-  await fs.mkdir(CACHE_DIR, { recursive: true });
-  await fs.writeFile(filePath, buf);
-  const meta: CachedMeta = { contentType, url: normalizedUrl, fetchedAt: new Date().toISOString() };
-  await fs.writeFile(metaPath, JSON.stringify(meta), "utf-8");
+  // Cache is best-effort only. If filesystem permissions are restricted,
+  // still return the fetched logo bytes instead of failing to a redirect.
+  try {
+    await fs.mkdir(CACHE_DIR, { recursive: true });
+    await fs.writeFile(filePath, buf);
+    const meta: CachedMeta = { contentType, url: normalizedUrl, fetchedAt: new Date().toISOString() };
+    await fs.writeFile(metaPath, JSON.stringify(meta), "utf-8");
+  } catch {
+    // ignore cache write errors
+  }
 
   return { body: buf, contentType };
 }
@@ -215,8 +235,29 @@ export async function GET(request: NextRequest) {
 
   if (!target) return new Response("bad_url", { status: 400 });
 
-  const normalizedUrl = target.toString();
-  const key = cacheKey(normalizedUrl);
+  const httpsUrl = (() => {
+    try {
+      const u = new URL(target.toString());
+      u.protocol = "https:";
+      return u.toString();
+    } catch {
+      return "";
+    }
+  })();
+
+  const httpUrl = (() => {
+    try {
+      const u = new URL(target.toString());
+      u.protocol = "http:";
+      return u.toString();
+    } catch {
+      return "";
+    }
+  })();
+
+  const candidates = (id && logoPath ? [httpsUrl] : [httpsUrl, httpUrl]).filter(Boolean);
+
+  const key = cacheKeyFromHostPath(target.hostname, target.pathname);
   const { filePath, metaPath } = cachePaths(key, target.pathname);
 
   const now = Date.now();
@@ -230,15 +271,36 @@ export async function GET(request: NextRequest) {
       },
     });
   }
+  const failureUntil = failedUntil.get(key) || 0;
+  if (!cached && failureUntil > now) {
+    return new Response(null, {
+      status: 302,
+      headers: {
+        location: httpsUrl || httpUrl,
+        "cache-control": "public, max-age=3600",
+      },
+    });
+  }
 
   let p = inflight.get(key);
   if (!p) {
-    p = fetchAndCache(normalizedUrl, filePath, metaPath).finally(() => inflight.delete(key));
+    p = (async () => {
+      let lastError: unknown = null;
+      for (const url of candidates) {
+        try {
+          return await fetchAndCache(url, filePath, metaPath);
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      throw lastError;
+    })().finally(() => inflight.delete(key));
     inflight.set(key, p);
   }
 
   try {
     const fresh = await p;
+    failedUntil.delete(key);
     return new Response(asArrayBuffer(fresh.body), {
       headers: {
         "content-type": fresh.contentType,
@@ -247,6 +309,9 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch {
+    if (!cached) {
+      failedUntil.set(key, now + FAILURE_CACHE_TTL_MS);
+    }
     if (cached) {
       return new Response(asArrayBuffer(cached.body), {
         headers: {
@@ -256,6 +321,15 @@ export async function GET(request: NextRequest) {
         },
       });
     }
-    return new Response("upstream_error", { status: 502 });
+    // Fallback: if upstream fetch fails (DNS / outbound network / upstream downtime),
+    // redirect the client to the upstream image URL. This restores logos in the UI even
+    // when the server cannot fetch/cached them.
+    return new Response(null, {
+      status: 302,
+      headers: {
+        location: httpsUrl || httpUrl,
+        "cache-control": "public, max-age=3600",
+      },
+    });
   }
 }

@@ -148,6 +148,51 @@ function safeLower(s: string): string {
   return (s || "").toLowerCase();
 }
 
+function compactAlnum(s: string): string {
+  return safeLower(s)
+    .replace(/ё/gu, "е")
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+const LEGAL_FORM_WORDS = new Set([
+  "ооо",
+  "оао",
+  "зао",
+  "ао",
+  "одо",
+  "сооо",
+  "сп",
+  "ип",
+  "чуп",
+  "уп",
+  "куп",
+  "руп",
+  "птуп",
+  "пуп",
+]);
+
+function buildCompanyNameInitialism(name: string): string {
+  const tokens = safeLower(name)
+    .replace(/ё/gu, "е")
+    .replace(/№/gu, " ")
+    .replace(/[«»"'“”„]/gu, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .split(/\s+/u)
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+  const parts: string[] = [];
+  for (const token of tokens) {
+    if (LEGAL_FORM_WORDS.has(token)) continue;
+    if (/^\d+$/u.test(token)) {
+      parts.push(token);
+      continue;
+    }
+    parts.push(token[0] || "");
+  }
+  return compactAlnum(parts.join(""));
+}
+
 const LOCATION_STOP_WORDS = new Set([
   "г",
   "город",
@@ -650,6 +695,7 @@ export async function biznesinfoGetRubricCompanies(params: {
   for (const id of ids) {
     const companyRegionSlug = store.companyRegionById.get(id) || null;
     if (!applyRegionAlias(params.region, companyRegionSlug)) continue;
+
     if (q) {
       const search = store.companySearchById.get(id) || "";
       if (!search.includes(q)) continue;
@@ -706,6 +752,8 @@ export async function biznesinfoSuggest(params: {
 }): Promise<BiznesinfoSuggestResponse> {
   const store = await getStore();
   const q = (params.query || "").trim().toLowerCase();
+  const qCompact = compactAlnum(q);
+  const tryInitialism = qCompact.length >= 2 && qCompact.length <= 6;
   const limit = Math.max(1, Math.min(20, params.limit || 8));
   if (q.length < 2) return { query: params.query, suggestions: [] };
 
@@ -747,7 +795,21 @@ export async function biznesinfoSuggest(params: {
       if (!applyRegionAlias(params.region, companyRegionSlug)) continue;
       // Search ONLY by company name, not by description/keywords
       const name = summary.name || "";
-      if (!safeLower(name).includes(q)) continue;
+      const nameLower = safeLower(name);
+      if (!nameLower.includes(q)) {
+        if (!qCompact) continue;
+        const nameCompact = compactAlnum(name);
+        const idCompact = compactAlnum(id);
+        if (nameCompact.includes(qCompact)) {
+          // ok
+        } else if (idCompact.includes(qCompact)) {
+          // ok (match by company id / slug without separators)
+        } else if (tryInitialism && buildCompanyNameInitialism(name).includes(qCompact)) {
+          // ok
+        } else {
+          continue;
+        }
+      }
       suggestions.push({
         type: "company",
         id,
@@ -772,6 +834,8 @@ export async function biznesinfoSearch(params: {
 }): Promise<BiznesinfoSearchResponse> {
   const store = await getStore();
   const q = (params.query || "").trim().toLowerCase();
+  const qCompact = q ? compactAlnum(q) : "";
+  const tryInitialism = qCompact.length >= 2 && qCompact.length <= 6;
   const serviceTokens = tokenizeServiceText(params.service || "");
   const rawCity = (params.city || "").trim();
   const cityLower = rawCity.toLowerCase();
@@ -782,7 +846,9 @@ export async function biznesinfoSearch(params: {
   const limit = Math.max(1, Math.min(200, params.limit || 24));
   
   // No filters = no results
-  if (!q && serviceTokens.length === 0 && cityTokens.length === 0 && !cityNorm) return { query: params.query, total: 0, companies: [] };
+  if (!q && serviceTokens.length === 0 && cityTokens.length === 0 && !cityNorm) {
+    return { query: params.query, total: 0, companies: [] };
+  }
 
   const matches: string[] = [];
   for (const [id, search] of store.companySearchById.entries()) {
@@ -821,7 +887,19 @@ export async function biznesinfoSearch(params: {
 
     // Company name search (fallback uses combined text index)
     if (q) {
-      if (search.includes(q)) matches.push(id);
+      if (search.includes(q)) {
+        matches.push(id);
+      } else if (qCompact) {
+        const name = store.companySummaryById.get(id)?.name || "";
+        const nameCompact = compactAlnum(name);
+        if (nameCompact.includes(qCompact)) {
+          matches.push(id);
+        } else if (compactAlnum(id).includes(qCompact)) {
+          matches.push(id);
+        } else if (tryInitialism && buildCompanyNameInitialism(name).includes(qCompact)) {
+          matches.push(id);
+        }
+      }
       continue;
     }
 

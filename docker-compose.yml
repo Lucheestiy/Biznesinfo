@@ -15,16 +15,26 @@ services:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-changeme-min-16-chars}
       ADMIN_SECRET: ${ADMIN_SECRET:-dev-secret-change-me}
       YANDEX_MAPS_API_KEY: ${YANDEX_MAPS_API_KEY:-}
+      DATABASE_URL: ${DATABASE_URL:-}
+      KARTOTEKA_API_TOKEN: ${KARTOTEKA_API_TOKEN:-}
+      KARTOTEKA_API_BASE_URL: ${KARTOTEKA_API_BASE_URL:-https://api.kartoteka.by}
+      KARTOTEKA_CACHE_TTL_HOURS: ${KARTOTEKA_CACHE_TTL_HOURS:-168}
+      KARTOTEKA_PUBLIC_SEARCH_BASE_URL: ${KARTOTEKA_PUBLIC_SEARCH_BASE_URL:-https://apiv1.kartoteka.by}
+      KARTOTEKA_NAME_CACHE_TTL_HOURS: ${KARTOTEKA_NAME_CACHE_TTL_HOURS:-24}
+      KARTOTEKA_TIMEOUT_MS: ${KARTOTEKA_TIMEOUT_MS:-5000}
+      BIZNESINFO_LIQUIDATED_BLACKLIST_PATH: ${BIZNESINFO_LIQUIDATED_BLACKLIST_PATH:-/tmp/biznesinfo-liquidated-blacklist/liquidated-blacklist.json}
     networks:
       - biznesinfo-network
     volumes:
       - ./app/public/data/biznesinfo:/app/public/data/biznesinfo:ro
       - ./app/public/companies:/app/public/companies:ro
       - ./app/.cache/biznesinfo-logo-cache:/tmp/biznesinfo-logo-cache
+      - ./app/.cache/biznesinfo-liquidated-blacklist:/tmp/biznesinfo-liquidated-blacklist
     expose:
       - "3000"
     depends_on:
       - meilisearch
+      - postgres
 
   meilisearch:
     image: getmeili/meilisearch:v1.12
@@ -40,6 +50,21 @@ services:
       - biznesinfo-network
     expose:
       - "7700"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: biznesinfo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-biznesinfo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${POSTGRES_DB:-biznesinfo}
+    volumes:
+      - biznesinfo-postgres-data:/var/lib/postgresql/data
+    networks:
+      - biznesinfo-network
+    expose:
+      - "5432"
 
   nginx:
     image: nginx:1.25-alpine
@@ -61,3 +86,4 @@ networks:
 
 volumes:
   biznesinfo-meilisearch-data:
+  biznesinfo-postgres-data:

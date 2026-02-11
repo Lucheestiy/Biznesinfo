@@ -19,7 +19,13 @@ const playfair = Playfair_Display({
   style: ["normal", "italic"],
 });
 
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+  process.env.SITE_URL?.trim() ||
+  "https://biznesinfo.lucheestiy.com";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "Biznes - Бизнес-справочник Беларуси",
   description: "Каталог предприятий, организаций и фирм Беларуси. Поиск компаний по категориям и регионам. AI-платформа для бизнеса.",
   keywords: "бизнес, компании, каталог, Беларусь, Минск, предприятия, услуги, товары",

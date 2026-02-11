@@ -52,6 +52,7 @@ export default function AIAssistant({
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [errors, setErrors] = useState<{
     senderCompanyName?: string;
     contactPerson?: string;
@@ -65,6 +66,7 @@ export default function AIAssistant({
     if (!floating || typeof window === "undefined") return;
     const handleEvent = () => {
       setErrors({});
+      setSubmitError(null);
       setIsOpen(true);
     };
     window.addEventListener("aiassistant:open", handleEvent);
@@ -213,36 +215,73 @@ export default function AIAssistant({
     e.preventDefault();
     if (!validate()) return;
 
-    // Here would be the API call to send the request to AI
-    console.log("AI Request:", {
-      senderCompanyName,
-      contactPerson,
-      position,
-      phone,
-      message,
-      companyName,
-      companyId,
-      files: attachedFiles.map((f) => ({
-        name: f.file.name,
-        size: f.file.size,
-        type: f.file.type,
-      })),
-    });
-    setSubmitted(true);
-    setMessage("");
-    // Cleanup file previews
-    attachedFiles.forEach((file) => {
-      if (file.preview) {
-        URL.revokeObjectURL(file.preview);
-      }
-    });
-    setAttachedFiles([]);
-    setErrors({});
+    setSubmitError(null);
 
-    setTimeout(() => {
-      setSubmitted(false);
-      setIsOpen(false);
-    }, 3000);
+    fetch("/api/ai/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        companyId: companyId || null,
+        message,
+        payload: {
+          senderCompanyName,
+          contactPerson,
+          position,
+          phone,
+          companyName,
+          companyId,
+          files: attachedFiles.map((f) => ({
+            name: f.file.name,
+            size: f.file.size,
+            type: f.file.type,
+          })),
+        },
+      }),
+    })
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (r.ok) return { ok: true, data };
+        return { ok: false, data, status: r.status };
+      })
+      .then((resp) => {
+        if (!resp.ok) {
+          if (resp.status === 401) {
+            setSubmitError(t("auth.loginRequired") || "Нужно войти в кабинет.");
+            return;
+          }
+          if (resp.status === 429 && resp.data?.error === "QuotaExceeded") {
+            const used = resp.data?.used;
+            const limit = resp.data?.limit;
+            setSubmitError(
+              typeof used === "number" && typeof limit === "number"
+                ? `Лимит AI на сегодня: ${used}/${limit}`
+                : (t("ai.limitExceeded") || "Лимит AI на сегодня исчерпан"),
+            );
+            return;
+          }
+          setSubmitError(resp.data?.message || resp.data?.error || (t("ai.sendError") || "Не удалось отправить заявку"));
+          return;
+        }
+
+        setSubmitted(true);
+        setMessage("");
+        // Cleanup file previews
+        attachedFiles.forEach((file) => {
+          if (file.preview) {
+            URL.revokeObjectURL(file.preview);
+          }
+        });
+        setAttachedFiles([]);
+        setErrors({});
+
+        setTimeout(() => {
+          setSubmitted(false);
+          setIsOpen(false);
+        }, 2500);
+      })
+      .catch(() => {
+        setSubmitError(t("common.networkError") || "Ошибка сети");
+      });
   };
 
   // Floating button on main page
@@ -254,6 +293,7 @@ export default function AIAssistant({
         <button
           onClick={() => {
             setErrors({});
+            setSubmitError(null);
             setIsOpen(true);
           }}
           className="fixed bottom-6 right-6 bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white px-6 py-4 rounded-full shadow-2xl hover:shadow-3xl transition-all hover:scale-105 flex items-center gap-3 z-40"
@@ -518,6 +558,9 @@ export default function AIAssistant({
                     >
                       {t("ai.sendRequest")}
                     </button>
+                    {submitError && (
+                      <p className="mt-3 text-sm text-red-600">{submitError}</p>
+                    )}
                   </form>
                 </>
               )}
@@ -550,6 +593,7 @@ export default function AIAssistant({
       <button
         onClick={() => {
           setErrors({});
+          setSubmitError(null);
           setIsOpen(true);
         }}
         className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white rounded-lg hover:opacity-90 transition-opacity"
@@ -804,6 +848,9 @@ export default function AIAssistant({
                   >
                     {t("ai.sendRequest")}
                   </button>
+                  {submitError && (
+                    <p className="mt-3 text-sm text-red-600">{submitError}</p>
+                  )}
                 </form>
               )}
             </div>

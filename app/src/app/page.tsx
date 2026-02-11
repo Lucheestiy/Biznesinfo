@@ -130,6 +130,23 @@ export default function Home() {
                 </div>
               </div>
             </div>
+
+            {/* Map Search Button */}
+            <div className="flex justify-center mt-6">
+              <Link
+                href="/map"
+                className="inline-flex items-center gap-3 bg-white/10 hover:bg-white/20 text-white border-2 border-yellow-400/50 hover:border-yellow-400 px-6 py-3 rounded-xl font-semibold transition-all duration-300 hover:scale-105 group"
+              >
+                <svg className="w-6 h-6 text-yellow-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="9" strokeWidth={2} />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h18M12 3c2.4 2.3 4 5.5 4 9s-1.6 6.7-4 9m0-18c-2.4 2.3-4 5.5-4 9s1.6 6.7 4 9" />
+                </svg>
+                <span className="group-hover:text-yellow-100">Искать на карте рядом со мной</span>
+                <svg className="w-5 h-5 text-yellow-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </Link>
+            </div>
           </div>
         </div>
 

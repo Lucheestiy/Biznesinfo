@@ -190,6 +190,55 @@ select.search-elegant option {
   scroll-margin-top: calc(var(--site-header-height) + var(--company-nav-height) + 16px);
 }
 
+/* Company page text styling - dark green (#14532d) like headers */
+/* All screen sizes */
+.company-page-content .text-gray-700,
+.company-page-content .text-gray-600 {
+  color: #14532d !important;
+}
+
+/* Phone numbers - burgundy and bold */
+.company-page-content a[href^="tel:"] {
+  color: #820251 !important;
+  font-weight: 600;
+}
+
+/* Email links - burgundy */
+.company-page-content a[href^="mailto:"],
+.company-page-content a[href*="mail.yandex"] {
+  color: #820251 !important;
+  font-weight: 600;
+}
+
+/* About company section text */
+.company-page-content #about p,
+.company-page-content #about .text-gray-700 {
+  color: #14532d !important;
+}
+
+/* Contact labels - dark green */
+.company-page-content .text-gray-500.text-sm {
+  color: #14532d !important;
+}
+
+/* Address text */
+.company-page-content #contacts span.text-gray-700 {
+  color: #14532d !important;
+}
+
+/* Phone labels (Приемная, Снабжение, etc) */
+.company-page-content .text-gray-500 {
+  color: #14532d !important;
+}
+
+/* Mobile-specific adjustments */
+@media (max-width: 767px) {
+  .company-page-content .text-gray-500,
+  .company-page-content .text-gray-500.text-sm {
+    color: #14532d !important;
+  }
+}
+
 /* Mobile: magnifier for both inputs submits the form (CSS-only, reuses the existing submit button) */
 form.w-full.max-w-4xl .md\:hidden.flex-col.gap-3 > div:nth-child(1) > div.bg-white {
   overflow: visible;

@@ -37,10 +37,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
   const keywordsInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
-  // For backwards compatibility
-  const inputRef = companyInputRef;
-  const query = activeInput === "company" ? companyQuery : serviceQuery;
-  const setQuery = activeInput === "company" ? setCompanyQuery : setServiceQuery;
+  const activeInputRef = activeInput === "company" ? companyInputRef : keywordsInputRef;
 
   // Initialize query from URL parameter
   useEffect(() => {
@@ -59,7 +56,11 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
 
   // Update suggestions when query/region changes
   useEffect(() => {
-    const q = query.trim();
+    const q = (
+      activeInput === "company"
+        ? companyQuery
+        : (keywordsQuery.trim() ? keywordsQuery : serviceQuery)
+    ).trim();
     if (q.length < 2) {
       setSuggestions([]);
       setSelectedIndex(-1);
@@ -106,7 +107,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
       });
 
     return () => abort.abort();
-  }, [query, selectedRegion, activeInput]);
+  }, [activeInput, companyQuery, keywordsQuery, selectedRegion, serviceQuery]);
 
   // Handle click outside to close suggestions
   useEffect(() => {
@@ -114,8 +115,8 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
       if (
         suggestionsRef.current &&
         !suggestionsRef.current.contains(e.target as Node) &&
-        inputRef.current &&
-        !inputRef.current.contains(e.target as Node)
+        activeInputRef.current &&
+        !activeInputRef.current.contains(e.target as Node)
       ) {
         setShowSuggestions(false);
       }
@@ -123,7 +124,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
 
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
-  }, []);
+  }, [activeInputRef]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,12 +137,13 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
     }
     // Service/products search (separate from keywords)
     const service = serviceQuery.trim();
-    if (service) {
-      params.set("service", service);
+    const keywords = keywordsQuery.trim();
+    const effectiveService = keywords || service;
+    if (effectiveService) {
+      params.set("service", effectiveService);
     }
     // Keywords (additional filter)
-    const keywords = keywordsQuery.trim();
-    if (keywords) {
+    if (keywords && service && keywords !== service) {
       params.set("keywords", keywords);
     }
     if (selectedRegion) {
@@ -180,8 +182,8 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
           <input
             type="text"
             placeholder={t("search.placeholder")}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={companyQuery}
+            onChange={(e) => setCompanyQuery(e.target.value)}
             className="portal-dialog-typography search-input search-input-on-dark w-full p-2 pr-10 bg-white/10 text-white border border-white/30 rounded-lg focus:outline-none focus:border-white/60 focus:ring-1 focus:ring-white/40"
           />
         </div>
@@ -252,15 +254,19 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
                 </svg>
               </div>
               <input
-                ref={inputRef}
+                ref={companyInputRef}
                 type="text"
                 placeholder={t("search.placeholder")}
-                value={query}
+                value={companyQuery}
                 onChange={(e) => {
-                  setQuery(e.target.value);
+                  setCompanyQuery(e.target.value);
+                  setActiveInput("company");
                   setShowSuggestions(true);
                 }}
-                onFocus={() => setShowSuggestions(true)}
+                onFocus={() => {
+                  setActiveInput("company");
+                  setShowSuggestions(true);
+                }}
                 onKeyDown={handleKeyDown}
                 autoComplete="off"
                 className="portal-dialog-typography search-input-mobile flex-grow py-3.5 px-3 text-gray-600 focus:outline-none text-base bg-transparent"
@@ -281,10 +287,10 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
           </div>
 
           {/* Autocomplete suggestions for mobile */}
-          {showSuggestions && suggestions.length > 0 && (
+          {showSuggestions && activeInput === "company" && suggestions.length > 0 && (
             <div
               ref={suggestionsRef}
-              className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-2xl shadow-2xl mt-2 z-50 overflow-hidden"
+              className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-2xl shadow-2xl mt-2 z-50 max-h-[50vh] overflow-y-auto overscroll-contain"
             >
               {suggestions.map((suggestion, idx) => (
                 <button
@@ -303,7 +309,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
                     )}
                   </div>
                   <span className="text-xs px-2 py-1 rounded-full flex-shrink-0 bg-green-100 text-green-700">
-                    {t("search.company")}
+                    {suggestion.type === "company" ? t("search.company") : t("search.category")}
                   </span>
                 </button>
               ))}
@@ -326,11 +332,50 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
               type="text"
               placeholder={t("search.keywordsPlaceholder")}
               value={keywordsQuery}
-              onChange={(e) => setKeywordsQuery(e.target.value)}
+              onChange={(e) => {
+                setKeywordsQuery(e.target.value);
+                setActiveInput("service");
+                setShowSuggestions(true);
+              }}
+              onFocus={() => {
+                setActiveInput("service");
+                setShowSuggestions(true);
+              }}
+              onKeyDown={handleKeyDown}
               autoComplete="off"
               className="portal-dialog-typography flex-grow py-3.5 px-3 text-gray-600 focus:outline-none text-base bg-transparent"
             />
           </div>
+
+          {/* Autocomplete suggestions for mobile service input */}
+          {showSuggestions && activeInput === "service" && suggestions.length > 0 && (
+            <div
+              ref={suggestionsRef}
+              className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-2xl shadow-2xl mt-2 z-50 max-h-[50vh] overflow-y-auto overscroll-contain"
+            >
+              {suggestions.map((suggestion, idx) => (
+                <button
+                  key={`${suggestion.type}-${suggestion.url}`}
+                  type="button"
+                  onClick={() => handleSuggestionClick(suggestion.url)}
+                  className={`w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-gray-50 transition-colors ${
+                    idx === selectedIndex ? "bg-gray-100" : ""
+                  } ${idx > 0 ? "border-t border-gray-100" : ""}`}
+                >
+                  <span className="text-xl flex-shrink-0">{suggestion.icon}</span>
+                  <div className="flex-grow min-w-0">
+                    <div className="font-medium text-gray-800 truncate">{suggestion.text}</div>
+                    {suggestion.subtitle && (
+                      <div className="text-sm text-gray-500 truncate">{suggestion.subtitle}</div>
+                    )}
+                  </div>
+                  <span className="text-xs px-2 py-1 rounded-full flex-shrink-0 bg-amber-100 text-amber-700">
+                    {suggestion.type === "company" ? t("search.company") : t("search.category")}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -372,7 +417,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
           {showSuggestions && activeInput === "company" && suggestions.length > 0 && (
             <div
               ref={suggestionsRef}
-              className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-2xl shadow-2xl mt-2 z-50 overflow-hidden"
+              className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-2xl shadow-2xl mt-2 z-50 max-h-[28rem] overflow-y-auto overscroll-contain"
             >
               {suggestions.map((suggestion, idx) => (
                 <button
@@ -419,12 +464,57 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
                 type="text"
                 placeholder={t("search.keywordsPlaceholder")}
                 value={keywordsQuery}
-                onChange={(e) => setKeywordsQuery(e.target.value)}
+                onChange={(e) => {
+                  setKeywordsQuery(e.target.value);
+                  setActiveInput("service");
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => {
+                  setActiveInput("service");
+                  setShowSuggestions(true);
+                }}
+                onKeyDown={handleKeyDown}
                 autoComplete="off"
                 className="portal-dialog-typography search-input-hero flex-grow py-5 px-4 text-[#4b5563] focus:outline-none text-lg bg-transparent"
               />
             </div>
           </div>
+
+          {/* Autocomplete suggestions for service search */}
+          {showSuggestions && activeInput === "service" && suggestions.length > 0 && (
+            <div
+              ref={suggestionsRef}
+              className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-2xl shadow-2xl mt-2 z-50 max-h-[28rem] overflow-y-auto overscroll-contain"
+            >
+              {suggestions.map((suggestion, idx) => (
+                <button
+                  key={`${suggestion.type}-${suggestion.url}`}
+                  type="button"
+                  onClick={() => handleSuggestionClick(suggestion.url)}
+                  className={`w-full px-5 py-4 text-left flex items-center gap-4 hover:bg-gray-50 transition-colors ${
+                    idx === selectedIndex ? "bg-gray-100" : ""
+                  } ${idx > 0 ? "border-t border-gray-100" : ""}`}
+                >
+                  <span className="text-2xl flex-shrink-0">{suggestion.icon}</span>
+                  <div className="flex-grow min-w-0">
+                    <div className="font-medium text-gray-800 truncate text-lg">{suggestion.text}</div>
+                    {suggestion.subtitle && (
+                      <div className="text-sm text-gray-500 truncate">{suggestion.subtitle}</div>
+                    )}
+                  </div>
+                  <span
+                    className={`text-xs px-3 py-1.5 rounded-full flex-shrink-0 font-medium ${
+                      suggestion.type === "company"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-amber-100 text-amber-700"
+                    }`}
+                  >
+                    {suggestion.type === "company" ? t("search.company") : t("search.category")}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Search button */}
