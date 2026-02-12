@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -231,12 +232,26 @@ export default function AdminClient() {
         <div className="container mx-auto px-4 py-10">
           <div className="flex items-center justify-between gap-3 flex-wrap mb-6">
             <h1 className="text-3xl font-bold text-gray-800">{t("admin.title") || "Админка"}</h1>
-            <button
-              onClick={loadAll}
-              className="bg-gray-900 text-white px-4 py-2 rounded-lg font-semibold hover:bg-black"
-            >
-              {t("admin.refresh") || "Обновить"}
-            </button>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/admin/ai-requests"
+                className="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-gray-200"
+              >
+                AI
+              </Link>
+              <Link
+                href="/admin/ai-chats"
+                className="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-gray-200"
+              >
+                AI чаты
+              </Link>
+              <button
+                onClick={loadAll}
+                className="bg-gray-900 text-white px-4 py-2 rounded-lg font-semibold hover:bg-black"
+              >
+                {t("admin.refresh") || "Обновить"}
+              </button>
+            </div>
           </div>
 
           {error && (

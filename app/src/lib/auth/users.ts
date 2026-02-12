@@ -53,6 +53,34 @@ export async function createUser(input: {
   return res.rows[0];
 }
 
+export async function upsertUserFromTrustedLogin(input: {
+  email: string;
+  passwordHash: string;
+  name?: string | null;
+  role: UserRole;
+  plan: UserPlan;
+}): Promise<UserRow> {
+  const pool = getDbPool();
+  const id = randomUUID();
+  const email = normalizeEmail(input.email);
+  const passwordHash = input.passwordHash;
+  const name = input.name ?? null;
+
+  const res = await pool.query<UserRow>(
+    `INSERT INTO users (id, email, password_hash, name, role, plan)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (email) DO UPDATE SET
+       password_hash = EXCLUDED.password_hash,
+       name = EXCLUDED.name,
+       role = EXCLUDED.role,
+       plan = EXCLUDED.plan,
+       updated_at = now()
+     RETURNING *`,
+    [id, email, passwordHash, name, input.role, input.plan],
+  );
+  return res.rows[0];
+}
+
 export async function updateUserName(userId: string, name: string | null): Promise<UserRow> {
   const pool = getDbPool();
   const res = await pool.query<UserRow>(

@@ -67,3 +67,26 @@ export async function consumeAiRequest(params: {
   }
 }
 
+export async function getAiUsage(params: { userId: string; day?: string }): Promise<{ day: string; used: number }> {
+  const pool = getDbPool();
+  const day = (params.day || "").trim() || utcDayString();
+
+  const res = await pool.query<{ requests_count: number }>(
+    "SELECT requests_count FROM ai_usage_daily WHERE user_id = $1 AND day = $2",
+    [params.userId, day],
+  );
+
+  return { day, used: res.rows[0]?.requests_count ?? 0 };
+}
+
+export async function resetAiUsage(params: { userId: string; day?: string }): Promise<{ day: string; used: number }> {
+  const pool = getDbPool();
+  const day = (params.day || "").trim() || utcDayString();
+
+  await pool.query(
+    "DELETE FROM ai_usage_daily WHERE user_id = $1 AND day = $2",
+    [params.userId, day],
+  );
+
+  return { day, used: 0 };
+}

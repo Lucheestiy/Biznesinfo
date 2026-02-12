@@ -43,6 +43,36 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <body className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} antialiased`}>
+        <div
+          id="app-loading-fallback"
+          style={{
+            position: "fixed",
+            inset: "0",
+            zIndex: "2147483647",
+            background: "#f3f4f6",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px",
+            textAlign: "center",
+            color: "#1f2937",
+          }}
+        >
+          <div>
+            <div style={{ fontSize: "30px", fontWeight: 700, color: "#a0006d", marginBottom: "10px" }}>
+              Biznesinfo.by
+            </div>
+            <div style={{ fontSize: "16px", marginBottom: "6px" }}>Загрузка портала...</div>
+            <div id="app-loading-hint" style={{ fontSize: "13px", color: "#6b7280" }}>
+              Пожалуйста, подождите
+            </div>
+          </div>
+        </div>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var root=document.documentElement;var box=document.getElementById('app-loading-fallback');var hint=document.getElementById('app-loading-hint');if(!box){return;}var done=false;var hide=function(){if(done){return;}if(root.getAttribute('data-app-hydrated')!=='1'){return;}done=true;box.style.display='none';box.setAttribute('aria-hidden','true');};hide();var observer=new MutationObserver(hide);observer.observe(root,{attributes:true,attributeFilter:['data-app-hydrated']});setTimeout(function(){if(done){return;}if(hint){hint.textContent='Если экран не меняется более 10 секунд, обновите страницу.';}},10000);})();`,
+          }}
+        />
         <Providers>{children}</Providers>
       </body>
     </html>

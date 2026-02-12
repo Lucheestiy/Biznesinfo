@@ -59,6 +59,12 @@ export default function FavoritesClient() {
     return Array.from(set);
   }, [filteredCompanies]);
 
+  const assistantShortlistHref = useMemo(() => {
+    const ids = filteredCompanies.map((c) => c.id).slice(0, 8);
+    if (ids.length === 0) return "/assistant";
+    return `/assistant?companyIds=${encodeURIComponent(ids.join(","))}`;
+  }, [filteredCompanies]);
+
   return (
     <div className="min-h-screen flex flex-col font-sans bg-gray-100">
       <Header />
@@ -151,15 +157,26 @@ export default function FavoritesClient() {
             </div>
           ) : (
             <>
-              <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-                <span className="w-1 h-6 bg-[#820251] rounded"></span>
-                {t("favorites.title")} ({filteredCompanies.length})
-                {selectedRegion && (
-                  <span className="text-sm font-normal text-gray-500">
-                    — {regionName}
-                  </span>
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <span className="w-1 h-6 bg-[#820251] rounded"></span>
+                  {t("favorites.title")} ({filteredCompanies.length})
+                  {selectedRegion && (
+                    <span className="text-sm font-normal text-gray-500">
+                      — {regionName}
+                    </span>
+                  )}
+                </h2>
+                {filteredCompanies.length > 0 && (
+                  <Link
+                    href={assistantShortlistHref}
+                    className="inline-flex items-center justify-center rounded-xl bg-[#820251] text-white px-4 py-2 text-sm font-semibold hover:bg-[#6a0143]"
+                    title={filteredCompanies.length > 8 ? "Uses first 8 companies from the current filter" : undefined}
+                  >
+                    {t("favorites.askAi") || "Спросить AI"}
+                  </Link>
                 )}
-              </h2>
+              </div>
 
               {/* Categories chips */}
               {categoriesInFavorites.length > 1 && (
@@ -195,4 +212,3 @@ export default function FavoritesClient() {
     </div>
   );
 }
-

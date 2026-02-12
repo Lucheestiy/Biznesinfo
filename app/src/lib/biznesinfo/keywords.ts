@@ -714,6 +714,20 @@ function expandSynonyms(phrase: string): string[] {
     .slice(0, 3);
 }
 
+export function suggestSourcingSynonyms(raw: string): string[] {
+  const normalized = normalizeKeywordPhrase(raw);
+  if (!normalized) return [];
+
+  const out = new Set<string>();
+  for (const synonym of expandSynonyms(normalized)) {
+    const phrase = normalizePhraseCandidate(synonym);
+    if (!phrase || phrase === normalized) continue;
+    out.add(phrase);
+    if (out.size >= 5) break;
+  }
+  return Array.from(out);
+}
+
 function shouldAddCallPhrase(servicePhrase: string): boolean {
   const tokens = tokenize(servicePhrase);
   return tokens.some((token) => CALLBACK_SERVICE_STEMS.some((stem) => token.startsWith(stem)));

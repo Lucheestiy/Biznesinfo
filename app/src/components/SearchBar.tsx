@@ -555,9 +555,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
         <button
           type="button"
           onClick={() => {
-            if (typeof window !== "undefined") {
-              window.dispatchEvent(new Event("aiassistant:open"));
-            }
+            router.push("/assistant");
           }}
           className="relative w-full bg-gradient-to-r from-[#820251] via-[#a80368] to-[#820251] bg-[length:200%_100%] animate-gradient rounded-2xl p-5 md:p-6 text-white
             shadow-[0_10px_40px_rgba(130,2,81,0.4)] group-hover/consult:shadow-[0_20px_60px_rgba(130,2,81,0.5)]

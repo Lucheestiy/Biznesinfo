@@ -2,18 +2,19 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SearchBar from "@/components/SearchBar";
 import ServicesBlock from "@/components/ServicesBlock";
 import NewsBlock from "@/components/NewsBlock";
-import AIAssistant from "@/components/AIAssistant";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { regions } from "@/data/regions";
 import type { BiznesinfoCatalogResponse } from "@/lib/biznesinfo/types";
 
 export default function Home() {
   const { t } = useLanguage();
+  const router = useRouter();
   const [catalog, setCatalog] = useState<BiznesinfoCatalogResponse | null>(null);
 
   useEffect(() => {
@@ -164,9 +165,7 @@ export default function Home() {
             {/* AI Assistant explanation - full width, beautiful module */}
             <div className="w-full relative group/ai cursor-pointer"
               onClick={() => {
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(new Event("aiassistant:open"));
-                }
+                router.push("/assistant");
               }}>
               {/* Outer glow effect */}
               <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-yellow-400/20 via-pink-500/20 to-yellow-400/20 blur-2xl opacity-0 group-hover/ai:opacity-100 transition-opacity duration-500" />
@@ -263,9 +262,6 @@ export default function Home() {
       </main>
 
       <Footer />
-
-      {/* Floating AI Assistant - only on main page */}
-      <AIAssistant floating hideFloatingButton />
     </div>
   );
 }

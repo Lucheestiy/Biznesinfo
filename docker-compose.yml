@@ -1,6 +1,22 @@
 name: biznesinfolucheestiycom
 
 services:
+  codex-auth-sync:
+    image: node:20-alpine
+    container_name: biznesinfo-codex-auth-sync
+    restart: unless-stopped
+    command: ["node", "/sync/codex-auth-sync-loop.mjs"]
+    environment:
+      CODEX_AUTH_SYNC_INTERVAL_SEC: ${CODEX_AUTH_SYNC_INTERVAL_SEC:-60}
+      CODEX_AUTH_SYNC_SOURCE_DIR: /host-codex
+      CODEX_AUTH_SYNC_OUT_FILE: /repo-secrets/codex-auth.json
+    volumes:
+      - /root/.codex:/host-codex:ro
+      - ./app/scripts:/sync:ro
+      - ./secrets:/repo-secrets
+    networks:
+      - biznesinfo-network
+
   app:
     build:
       context: ./app
@@ -16,6 +32,27 @@ services:
       ADMIN_SECRET: ${ADMIN_SECRET:-dev-secret-change-me}
       YANDEX_MAPS_API_KEY: ${YANDEX_MAPS_API_KEY:-}
       DATABASE_URL: ${DATABASE_URL:-}
+      AUTH_ENABLED: ${AUTH_ENABLED:-0}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-1}
+      AUTH_SESSION_DAYS: ${AUTH_SESSION_DAYS:-30}
+      AUTH_RESET_TOKEN_TTL_MIN: ${AUTH_RESET_TOKEN_TTL_MIN:-30}
+      AUTH_DEBUG_RESET_TOKENS: ${AUTH_DEBUG_RESET_TOKENS:-0}
+      AI_USAGE_RESET_ENABLED: ${AI_USAGE_RESET_ENABLED:-0}
+      AUTH_FEDERATION_UPSTREAM_LOGIN_URL: ${AUTH_FEDERATION_UPSTREAM_LOGIN_URL:-}
+      SMTP_URL: ${SMTP_URL:-}
+      EMAIL_FROM: ${EMAIL_FROM:-no-reply@biznesinfo.lucheestiy.com}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://biznesinfo.lucheestiy.com}
+      AI_INSTANCE_ID: ${AI_INSTANCE_ID:-biznesinfo.lucheestiy.com}
+      AI_CHATS_DATABASE_URL: ${AI_CHATS_DATABASE_URL:-}
+      AI_ASSISTANT_PROVIDER: ${AI_ASSISTANT_PROVIDER:-stub}
+      CODEX_AUTH_JSON_PATH: ${CODEX_AUTH_JSON_PATH:-/run/secrets/codex_auth_json}
+      CODEX_BASE_URL: ${CODEX_BASE_URL:-https://chatgpt.com/backend-api/codex}
+      CODEX_MODEL: ${CODEX_MODEL:-gpt-5.2-codex}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_TIMEOUT_SEC: ${OPENAI_TIMEOUT_SEC:-20}
+      OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS:-800}
       KARTOTEKA_API_TOKEN: ${KARTOTEKA_API_TOKEN:-}
       KARTOTEKA_API_BASE_URL: ${KARTOTEKA_API_BASE_URL:-https://api.kartoteka.by}
       KARTOTEKA_CACHE_TTL_HOURS: ${KARTOTEKA_CACHE_TTL_HOURS:-168}
@@ -25,14 +62,19 @@ services:
       BIZNESINFO_LIQUIDATED_BLACKLIST_PATH: ${BIZNESINFO_LIQUIDATED_BLACKLIST_PATH:-/tmp/biznesinfo-liquidated-blacklist/liquidated-blacklist.json}
     networks:
       - biznesinfo-network
+      - federation-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./app/public/data/biznesinfo:/app/public/data/biznesinfo:ro
       - ./app/public/companies:/app/public/companies:ro
       - ./app/.cache/biznesinfo-logo-cache:/tmp/biznesinfo-logo-cache
       - ./app/.cache/biznesinfo-liquidated-blacklist:/tmp/biznesinfo-liquidated-blacklist
+      - ./secrets/codex-auth.json:/run/secrets/codex_auth_json:ro
     expose:
       - "3000"
     depends_on:
+      - codex-auth-sync
       - meilisearch
       - postgres
 
@@ -83,6 +125,9 @@ services:
 networks:
   biznesinfo-network:
     driver: bridge
+  federation-network:
+    external: true
+    name: biznesinfo-auth-federation
 
 volumes:
   biznesinfo-meilisearch-data:

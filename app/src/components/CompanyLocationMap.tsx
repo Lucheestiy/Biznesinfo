@@ -67,6 +67,15 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function escapeHtml(value: string): string {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export default function CompanyLocationMap(props: {
   companyName: string;
   address?: string | null;
@@ -171,23 +180,31 @@ export default function CompanyLocationMap(props: {
 
       map.controls.add(new ymaps.control.ZoomControl({ options: { position: { right: 10, top: 50 } } }));
       map.controls.add(new ymaps.control.GeolocationControl({ options: { position: { right: 10, top: 10 } } }));
-      map.controls.add(
-        new ymaps.control.SearchControl({
-          options: {
-            provider: "yandex#search",
-            size: "large",
-            noPlacemark: false,
-            placeholderContent: t("map.searchPlaceholder"),
-          },
-        }),
-      );
 
       if (coords) {
+        const companyName = (props.companyName || "").trim() || "Компания";
+        const companyAddress = (props.address || "").trim();
+        const safeName = escapeHtml(companyName);
+        const safeAddress = escapeHtml(companyAddress || "Адрес не указан");
+
         const placemark = new ymaps.Placemark(
           [coords.lat, coords.lng],
-          { iconCaption: props.companyName },
-          { preset: "islands#redIcon" },
+          {
+            iconCaption: companyName,
+            hintContent: companyAddress ? `${companyName}: ${companyAddress}` : companyName,
+            balloonContentHeader: `<div style="font-weight:700;">${safeName}</div>`,
+            balloonContentBody: `<div style="font-size:13px;line-height:1.45;">${safeAddress}</div>`,
+            balloonContentFooter: `<div style="font-size:11px;color:#6b7280;">Нажмите "Построить маршрут" для навигации</div>`,
+          },
+          { preset: "islands#redIcon", openEmptyBalloon: true },
         );
+        placemark.events.add("click", () => {
+          try {
+            placemark.balloon.open();
+          } catch {
+            // ignore
+          }
+        });
         map.geoObjects.add(placemark);
       }
 

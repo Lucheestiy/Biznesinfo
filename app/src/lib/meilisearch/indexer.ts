@@ -6,6 +6,7 @@ import type { MeiliCompanyDocument } from "./types";
 import type { BiznesinfoCompany } from "../biznesinfo/types";
 import { generateCompanyKeywords } from "../biznesinfo/keywords";
 import { getServerKeywordGenerationOptions } from "../biznesinfo/keywordRuntime";
+import { BIZNESINFO_MAP_OVERRIDES } from "../biznesinfo/mapOverrides";
 import { BIZNESINFO_WEBSITE_OVERRIDES } from "../biznesinfo/websiteOverrides";
 import { isExcludedBiznesinfoCompany, normalizeBiznesinfoUnp } from "../biznesinfo/exclusions";
 import { normalizeCityForFilter } from "../utils/location";
@@ -76,51 +77,76 @@ function applyWebsiteOverride(companyId: string, websites: string[]): string[] {
   return BIZNESINFO_WEBSITE_OVERRIDES[raw] ?? BIZNESINFO_WEBSITE_OVERRIDES[key] ?? websites;
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function applyMapOverride(company: BiznesinfoCompany): BiznesinfoCompany {
+  const raw = (company.source_id || "").trim();
+  if (!raw) return company;
+  const key = raw.toLowerCase();
+  const override = BIZNESINFO_MAP_OVERRIDES[raw] ?? BIZNESINFO_MAP_OVERRIDES[key];
+  if (!override) return company;
+
+  const address = String(override.address || "").trim();
+  const nextAddress = address || company.address || "";
+  const currentExtra = company.extra || { lat: null, lng: null };
+  const nextLat = isFiniteNumber(override.lat) ? override.lat : currentExtra.lat;
+  const nextLng = isFiniteNumber(override.lng) ? override.lng : currentExtra.lng;
+
+  return {
+    ...company,
+    address: nextAddress,
+    extra: { lat: nextLat, lng: nextLng },
+  };
+}
+
 function companyToDocument(
   company: BiznesinfoCompany,
   keywordOptions = getServerKeywordGenerationOptions(),
 ): MeiliCompanyDocument {
-  const regionSlug = normalizeRegionSlug(company.city, company.region, company.address);
-  const primaryCategory = company.categories?.[0] ?? null;
-  const primaryRubric = company.rubrics?.[0] ?? null;
+  const normalizedCompany = applyMapOverride(company);
+  const regionSlug = normalizeRegionSlug(normalizedCompany.city, normalizedCompany.region, normalizedCompany.address);
+  const primaryCategory = normalizedCompany.categories?.[0] ?? null;
+  const primaryRubric = normalizedCompany.rubrics?.[0] ?? null;
 
   return {
-    id: company.source_id,
-    source: company.source,
-    unp: normalizeBiznesinfoUnp(company.unp || ""),
-    name: company.name || "",
-    description: company.description || "",
-    about: company.about || "",
-    address: company.address || "",
-    city: company.city || "",
-    city_norm: normalizeCityForFilter(company.city || ""),
+    id: normalizedCompany.source_id,
+    source: normalizedCompany.source,
+    unp: normalizeBiznesinfoUnp(normalizedCompany.unp || ""),
+    name: normalizedCompany.name || "",
+    description: normalizedCompany.description || "",
+    about: normalizedCompany.about || "",
+    address: normalizedCompany.address || "",
+    city: normalizedCompany.city || "",
+    city_norm: normalizeCityForFilter(normalizedCompany.city || ""),
     region: regionSlug || "",
-    phones: company.phones || [],
-    emails: company.emails || [],
-    websites: applyWebsiteOverride(company.source_id, company.websites || []),
-    logo_url: normalizeLogoUrl(company.logo_url || ""),
-    logo_rank: computeLogoRank(company),
-    contact_person: company.contact_person || "",
+    phones: normalizedCompany.phones || [],
+    emails: normalizedCompany.emails || [],
+    websites: applyWebsiteOverride(normalizedCompany.source_id, normalizedCompany.websites || []),
+    logo_url: normalizeLogoUrl(normalizedCompany.logo_url || ""),
+    logo_rank: computeLogoRank(normalizedCompany),
+    contact_person: normalizedCompany.contact_person || "",
 
-    category_slugs: (company.categories || []).map(c => c.slug),
-    category_names: (company.categories || []).map(c => c.name),
-    rubric_slugs: (company.rubrics || []).map(r => r.slug),
-    rubric_names: (company.rubrics || []).map(r => r.name),
+    category_slugs: (normalizedCompany.categories || []).map(c => c.slug),
+    category_names: (normalizedCompany.categories || []).map(c => c.name),
+    rubric_slugs: (normalizedCompany.rubrics || []).map(r => r.slug),
+    rubric_names: (normalizedCompany.rubrics || []).map(r => r.name),
     primary_category_slug: primaryCategory?.slug ?? null,
     primary_category_name: primaryCategory?.name ?? null,
     primary_rubric_slug: primaryRubric?.slug ?? null,
     primary_rubric_name: primaryRubric?.name ?? null,
 
-    _geo: (company.extra?.lat && company.extra?.lng)
-      ? { lat: company.extra.lat, lng: company.extra.lng }
+    _geo: (normalizedCompany.extra?.lat && normalizedCompany.extra?.lng)
+      ? { lat: normalizedCompany.extra.lat, lng: normalizedCompany.extra.lng }
       : null,
 
-    work_hours_status: company.work_hours?.status ?? null,
-    work_hours_time: company.work_hours?.work_time ?? null,
+    work_hours_status: normalizedCompany.work_hours?.status ?? null,
+    work_hours_time: normalizedCompany.work_hours?.work_time ?? null,
 
-    phones_ext: company.phones_ext || [],
+    phones_ext: normalizedCompany.phones_ext || [],
 
-    keywords: generateCompanyKeywords(company, keywordOptions),
+    keywords: generateCompanyKeywords(normalizedCompany, keywordOptions),
   };
 }
 
