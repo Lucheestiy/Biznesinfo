@@ -176,4 +176,68 @@ export interface BiznesinfoSearchResponse {
   query: string;
   total: number;
   companies: BiznesinfoCompanySummary[];
+  ab_test?: {
+    enabled: boolean;
+    variant: "control" | "treatment";
+    split_percent: number;
+    bucket: number;
+    forced: boolean;
+    seed_hash: string;
+  };
+  ranking_explain?: Array<{
+    id: string;
+    name: string;
+    rank: number;
+    score: number;
+    reasons: string[];
+    signals?: {
+      business: number;
+      quality: number;
+      freshness: number;
+      geo: number;
+      rank_prior: number;
+      penalty: number;
+      structured_overlap: number;
+      description_score: number;
+    };
+  }>;
+  facets?: {
+    regions: Array<{
+      value: string;
+      label: string;
+      count: number;
+    }>;
+    supply_types: Array<{
+      value: "delivery" | "pickup";
+      label: string;
+      count: number;
+    }>;
+    business_formats: Array<{
+      value: "b2b" | "b2c";
+      label: string;
+      count: number;
+    }>;
+  };
+  applied_filters?: {
+    region: string | null;
+    city: string | null;
+    supply_type: "any" | "delivery" | "pickup";
+    business_format: "any" | "b2b" | "b2c";
+  };
+  zero_results?: {
+    reason: "no_matches" | "filters_too_strict";
+    message: string;
+    close_variants: Array<{
+      label: string;
+      params: {
+        q?: string;
+        service?: string;
+        city?: string;
+        region?: string;
+        supply_type?: "any" | "delivery" | "pickup";
+        business_format?: "any" | "b2b" | "b2c";
+      };
+    }>;
+    sample_companies: BiznesinfoCompanySummary[];
+  };
 }

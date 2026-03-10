@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getCompaniesIndex, isMeiliHealthy } from "@/lib/meilisearch";
-import { buildBiznesinfoExclusionFilters, isExcludedBiznesinfoCompany } from "@/lib/biznesinfo/exclusions";
+import { isExcludedBiznesinfoCompany } from "@/lib/biznesinfo/exclusions";
 import { isLiquidatedByKartoteka } from "@/lib/biznesinfo/kartoteka";
+import { biznesinfoGetCompanyCardsByIds } from "@/lib/biznesinfo/postgres";
 
 export const runtime = "nodejs";
 
@@ -79,6 +80,36 @@ const SERVICE_QUERY_DESCRIPTOR_PREFIXES = [
   "работ",
 ];
 
+const FOOD_VENUE_TOKEN_PREFIXES = [
+  "ресторан",
+  "кафе",
+  "бар",
+  "пиццер",
+  "пицц",
+  "суши",
+  "кофейн",
+  "столов",
+];
+
+const CUISINE_QUALIFIER_PREFIXES = [
+  "итальян",
+  "япон",
+  "китай",
+  "грузин",
+  "белорус",
+  "француз",
+  "европ",
+  "азиат",
+  "турец",
+  "индий",
+  "кавказ",
+  "узбек",
+  "армян",
+  "корей",
+  "тайск",
+  "мексикан",
+];
+
 function tokenizeServiceQuery(raw: string): string[] {
   const cleaned = (raw || "")
     .trim()
@@ -118,6 +149,16 @@ function normalizeServiceQueryToken(token: string): string {
   return t;
 }
 
+function hasFoodVenueToken(tokens: string[]): boolean {
+  return tokens.some((token) => FOOD_VENUE_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix)));
+}
+
+function isCuisineQualifierToken(token: string): boolean {
+  const t = normalizeServiceQueryToken(token);
+  if (!t) return false;
+  return CUISINE_QUALIFIER_PREFIXES.some((prefix) => t.startsWith(prefix));
+}
+
 function normalizeNearbyQuery(raw: string): string {
   const tokens = tokenizeServiceQuery(raw);
   if (tokens.length === 0) return "";
@@ -127,9 +168,16 @@ function normalizeNearbyQuery(raw: string): string {
     if (isServiceDescriptorToken(token)) return false;
     return true;
   });
-  const picked = (filtered.length > 0 ? filtered : tokens)
+  let picked = (filtered.length > 0 ? filtered : tokens)
     .map((token) => normalizeServiceQueryToken(token))
     .filter(Boolean);
+
+  if (picked.length > 1 && hasFoodVenueToken(picked)) {
+    const withoutCuisine = picked.filter((token) => !isCuisineQualifierToken(token));
+    if (withoutCuisine.length > 0) {
+      picked = withoutCuisine;
+    }
+  }
 
   if (picked.length > 0 && picked.every((token) => isCheeseIntentToken(token))) {
     return "молочная";
@@ -205,7 +253,10 @@ function hitMatchesStrictQuery(hit: any, queryTokens: string[]): boolean {
     fieldTokens.some((fieldToken) => strictTokenMatch(fieldToken, queryToken)),
   ).length;
 
-  const requiredMatches = queryTokens.length <= 2 ? queryTokens.length : Math.ceil(queryTokens.length * 0.7);
+  const requiredMatches =
+    queryTokens.length <= 2
+      ? 1
+      : Math.max(2, Math.ceil(queryTokens.length * 0.6));
   return matchedTokens >= requiredMatches;
 }
 
@@ -232,6 +283,31 @@ interface NearbySearchResponse {
   query: string;
   center: { lat: number; lng: number };
   radius: number;
+}
+
+function toRadians(value: number): number {
+  return (value * Math.PI) / 180;
+}
+
+function distanceMetersBetweenPoints(
+  fromLat: number,
+  fromLng: number,
+  toLat: number | null | undefined,
+  toLng: number | null | undefined,
+): number | null {
+  if (!Number.isFinite(toLat) || !Number.isFinite(toLng)) return null;
+
+  const earthRadiusMeters = 6_371_000;
+  const dLat = toRadians((toLat as number) - fromLat);
+  const dLng = toRadians((toLng as number) - fromLng);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(fromLat)) *
+      Math.cos(toRadians(toLat as number)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(earthRadiusMeters * c);
 }
 
 export async function GET(request: Request) {
@@ -275,6 +351,8 @@ export async function GET(request: Request) {
     const applyCheeseFilter = shouldApplyCheeseFilter(searchQuery);
     const applyKeywordFilter = applyMilkFilter || applyCheeseFilter;
     const strictQueryTokens = tokenizeForStrictMatch(searchQuery);
+    const queryTokenCount = tokenizeServiceQuery(searchQuery).length;
+    const queryMatchingStrategy = searchQuery ? (queryTokenCount > 1 ? "last" : "all") : undefined;
 
     // Build search options
     const searchOptions: any = {
@@ -282,27 +360,15 @@ export async function GET(request: Request) {
       offset: safeOffset,
       filter: [
         `_geoRadius(${lat}, ${lng}, ${safeRadius})`,
-        ...buildBiznesinfoExclusionFilters(),
       ],
-      sort: [`_geoPoint(${lat}, ${lng}):asc`],
-      matchingStrategy: searchQuery ? "all" : undefined,
+      matchingStrategy: queryMatchingStrategy,
       attributesToSearchOn: searchQuery ? ["keywords", "rubric_names", "category_names", "name"] : undefined,
       attributesToRetrieve: [
         "id",
         "unp",
         "name",
-        "description",
-        "address",
-        "city",
-        "phones",
-        "emails",
-        "logo_url",
-        "category_slugs",
         "category_names",
-        "rubric_slugs",
         "rubric_names",
-        "primary_category_slug",
-        "primary_category_name",
         "_geoDistance",
         "_geo",
         "keywords",
@@ -319,43 +385,55 @@ export async function GET(request: Request) {
         if (applyMilkFilter && !hasMilkKeyword(keywords)) continue;
         if (applyCheeseFilter && !hasCheeseKeyword(keywords)) continue;
       }
+      filteredHits.push(hit);
+    }
+
+    const hitIds = filteredHits
+      .map((hit) => String(hit?.id || "").trim())
+      .filter(Boolean);
+    const hitGeoById = new Map<string, { lat: number; lng: number } | null>();
+    for (const hit of filteredHits) {
+      const id = String(hit?.id || "").trim();
+      if (!id) continue;
+      const geo = hit?._geo;
+      if (Number.isFinite(geo?.lat) && Number.isFinite(geo?.lng)) {
+        hitGeoById.set(id, { lat: geo.lat as number, lng: geo.lng as number });
+      } else {
+        hitGeoById.set(id, null);
+      }
+    }
+
+    const cards = await biznesinfoGetCompanyCardsByIds(hitIds);
+    const companies: NearbyCompany[] = [];
+    for (const card of cards) {
       if (
         await isLiquidatedByKartoteka({
-          id: hit?.id || "",
-          unp: hit?.unp || "",
-          name: hit?.name || "",
-          city: hit?.city || "",
-          address: hit?.address || "",
+          source_id: card.id,
+          unp: card.unp || "",
+          name: card.name || "",
+          city: card.city || "",
+          address: card.address || "",
         })
       ) {
         continue;
       }
-      filteredHits.push(hit);
-    }
 
-    // Transform to response format
-    const companies: NearbyCompany[] = filteredHits.map((hit: any) => ({
-      id: hit.id,
-      name: hit.name,
-      description: hit.description,
-      address: hit.address,
-      city: hit.city,
-      phones: hit.phones || [],
-      emails: hit.emails || [],
-      logo_url: hit.logo_url,
-      categories: (hit.category_slugs || []).map((slug: string, i: number) => ({
-        slug,
-        name: hit.category_names?.[i] || slug,
-      })),
-      rubrics: (hit.rubric_slugs || []).map((slug: string, i: number) => ({
-        slug,
-        name: hit.rubric_names?.[i] || slug,
-        category_slug: hit.primary_category_slug,
-        category_name: hit.primary_category_name,
-      })),
-      distance: hit._geoDistance || null,
-      _geo: hit._geo || null,
-    }));
+      const geo = hitGeoById.get(card.id) ?? card.geo ?? null;
+      companies.push({
+        id: card.id,
+        name: card.name,
+        description: card.description,
+        address: card.address,
+        city: card.city,
+        phones: card.phones || [],
+        emails: card.emails || [],
+        logo_url: card.logo_url,
+        categories: card.categories || [],
+        rubrics: card.rubrics || [],
+        distance: distanceMetersBetweenPoints(lat, lng, geo?.lat, geo?.lng),
+        _geo: geo,
+      });
+    }
 
     // Deduplicate by ID
     const seen = new Set<string>();

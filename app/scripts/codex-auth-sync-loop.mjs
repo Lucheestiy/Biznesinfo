@@ -29,10 +29,11 @@ async function ensureOutDir(targetFile) {
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
 }
 
-async function writeAtomicJson(targetFile, payload) {
-  const tmp = `${targetFile}.tmp.${process.pid}`;
-  await fs.writeFile(tmp, `${payload}\n`, { mode: 0o644 });
-  await fs.rename(tmp, targetFile);
+async function writeInPlaceJson(targetFile, payload) {
+  // Important: keep inode stable for Docker file bind-mounts.
+  // If we rename() a temp file over target, containers with file-level bind mounts
+  // may continue reading the old inode and never see token updates.
+  await fs.writeFile(targetFile, `${payload}\n`, { mode: 0o644 });
 }
 
 async function syncOnce() {
@@ -57,7 +58,7 @@ async function syncOnce() {
   if (payload === lastPayload) return false;
 
   await ensureOutDir(outFile);
-  await writeAtomicJson(outFile, payload);
+  await writeInPlaceJson(outFile, payload);
   lastPayload = payload;
   log(`Synced token from account '${currentAccount}' to ${outFile}`);
   return true;

@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 import { biznesinfoGetCatalog } from "@/lib/biznesinfo/store";
+import {
+  canonicalizeSemanticToken,
+  expandSemanticTokens,
+  semanticOverlapScore,
+  tokenizeSemanticText,
+} from "@/lib/search/semantic";
 
 export const runtime = "nodejs";
 
@@ -69,7 +75,7 @@ function normalizeToken(token: string): string {
   if (!t) return "";
   if (t.startsWith("молок")) return "молочная";
   if (t.startsWith("молочн")) return "молочная";
-  return t;
+  return canonicalizeSemanticToken(t);
 }
 
 function isDescriptorToken(token: string): boolean {
@@ -80,11 +86,7 @@ function isDescriptorToken(token: string): boolean {
 }
 
 function tokenize(raw: string): string[] {
-  return safeLower(raw)
-    .replace(/ё/gu, "е")
-    .replace(/[«»"'“”„]/gu, " ")
-    .replace(/[^\p{L}\p{N}-]+/gu, " ")
-    .split(/\s+/u)
+  return tokenizeSemanticText(raw)
     .map((token) => normalizeToken(token))
     .filter(Boolean);
 }
@@ -101,7 +103,12 @@ function tokenMatch(a: string, b: string): boolean {
   return a === b || a.startsWith(b) || b.startsWith(a);
 }
 
-function scoreNameMatch(name: string, queryTokens: string[], queryCore: string): number {
+function scoreNameMatch(
+  name: string,
+  queryTokens: string[],
+  semanticQueryTokens: string[],
+  queryCore: string,
+): number {
   const nameTokens = tokenize(name);
   const nameNorm = nameTokens.join(" ");
   if (!nameNorm) return 0;
@@ -117,8 +124,11 @@ function scoreNameMatch(name: string, queryTokens: string[], queryCore: string):
     }
   }
 
-  if (matched === 0) return 0;
-  if (queryTokens.length > 1 && matched < Math.ceil(queryTokens.length / 2)) return 0;
+  const semanticScore = semanticOverlapScore(name, semanticQueryTokens);
+  if (semanticScore > 0) score += semanticScore * 4;
+
+  if (matched === 0 && semanticScore === 0) return 0;
+  if (queryTokens.length > 1 && matched < Math.ceil(queryTokens.length / 2) && semanticScore < 2) return 0;
   return score;
 }
 
@@ -135,6 +145,10 @@ export async function GET(request: Request) {
   if (queryTokens.length === 0) {
     return NextResponse.json({ query, suggestions: [] });
   }
+  const semanticQueryTokens = expandSemanticTokens(queryTokens, {
+    includeOriginal: true,
+    maxPerToken: 6,
+  });
   const queryCore = queryTokens.join(" ");
 
   const catalog = await biznesinfoGetCatalog(region);
@@ -154,7 +168,12 @@ export async function GET(request: Request) {
   // Search categories and their nested rubrics
   for (const cat of categories) {
     // Check if category name matches
-    const categoryScore = scoreNameMatch(cat.name || "", queryTokens, queryCore);
+    const categoryScore = scoreNameMatch(
+      cat.name || "",
+      queryTokens,
+      semanticQueryTokens,
+      queryCore,
+    );
     if (categoryScore > 0) {
       suggestions.push({
         type: "category",
@@ -170,7 +189,12 @@ export async function GET(request: Request) {
     // Check nested rubrics within this category
     const rubrics = cat.rubrics || [];
     for (const rubric of rubrics) {
-      const rubricScore = scoreNameMatch(rubric.name || "", queryTokens, queryCore);
+      const rubricScore = scoreNameMatch(
+        rubric.name || "",
+        queryTokens,
+        semanticQueryTokens,
+        queryCore,
+      );
       if (rubricScore > 0) {
         suggestions.push({
           type: "rubric",

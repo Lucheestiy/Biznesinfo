@@ -30,14 +30,16 @@ export default function LoginPageShell({
     <div className="min-h-screen bg-gray-100 text-gray-800">
       <header className="bg-[#a0006d] text-white">
         <div className="max-w-xl mx-auto px-4 py-4">
-          <span className="text-2xl font-semibold tracking-tight">Biznesinfo.by</span>
+          <span className="text-2xl font-semibold tracking-tight">biznesinfo.by</span>
         </div>
       </header>
 
       <main className="max-w-xl mx-auto px-4 py-8">
         <section className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-8">
           <h1 className="text-3xl font-bold mb-2">Вход</h1>
-          <p className="text-gray-600 mb-6">Войдите, чтобы открыть личный кабинет и лимиты AI.</p>
+          <p className="text-gray-600 mb-6">
+            Войдите, чтобы открыть личный кабинет и лимиты AI. AI-ассистентом могут пользоваться только авторизованные пользователи.
+          </p>
 
           {error && (
             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 text-red-700 px-4 py-3 text-sm">
@@ -76,6 +78,12 @@ export default function LoginPageShell({
               />
             </div>
 
+            <div className="flex justify-end">
+              <Link href="/reset" className="text-sm text-[#820251] hover:underline">
+                Забыли пароль?
+              </Link>
+            </div>
+
             <button
               type="submit"
               className="w-full bg-[#820251] text-white px-4 py-3 rounded-lg font-semibold hover:bg-[#6a0143] transition-colors"
@@ -84,12 +92,9 @@ export default function LoginPageShell({
             </button>
           </form>
 
-          <div className="mt-6 flex items-center justify-between gap-4 text-sm">
+          <div className="mt-6 text-sm">
             <Link href={registerHref} className="text-[#820251] hover:underline">
               Создать аккаунт
-            </Link>
-            <Link href="/reset" className="text-gray-600 hover:text-gray-800 hover:underline">
-              Забыли пароль?
             </Link>
           </div>
         </section>

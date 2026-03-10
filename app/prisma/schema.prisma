@@ -1,0 +1,46 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id             String    @id @db.Text
+  name           String    @default("") @db.Text
+  normalizedName String    @map("normalized_name") @default("") @db.Text
+  description    String    @default("") @db.Text
+  region         String    @default("") @db.Text
+  city           String    @default("") @db.Text
+  postalCode     String    @map("postal_code") @default("") @db.Text
+  lat            Float?    @db.DoublePrecision
+  lng            Float?    @db.DoublePrecision
+  logoUrl        String    @map("logo_url") @default("") @db.Text
+  status         String    @default("active") @db.Text
+  createdAt      DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @map("updated_at") @default(now()) @db.Timestamptz(6)
+  services       Service[]
+
+  @@index([region], map: "companies_region_idx")
+  @@index([city], map: "companies_city_idx")
+  @@index([normalizedName], map: "companies_normalized_name_idx")
+  @@index([status], map: "companies_status_idx")
+  @@map("companies")
+}
+
+model Service {
+  id          String   @id @db.Text
+  companyId   String   @map("company_id") @db.Text
+  title       String   @default("") @db.Text
+  description String   @default("") @db.Text
+  category    String   @default("") @db.Text
+  createdAt   DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade, map: "services_company_id_fkey")
+
+  @@index([companyId], map: "services_company_id_idx")
+  @@index([title], map: "services_title_idx")
+  @@map("services")
+}

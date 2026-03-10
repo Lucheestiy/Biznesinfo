@@ -191,6 +191,7 @@ function CompanyMap({
   const [companies, setCompanies] = useState<Company[]>([]);
   const [totalCompanies, setTotalCompanies] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [visibleCompanyCount, setVisibleCompanyCount] = useState(INITIAL_VISIBLE_COMPANIES);
   const [userAddress, setUserAddress] = useState<string | null>(null);
   const [loadingUserAddress, setLoadingUserAddress] = useState(false);
@@ -209,6 +210,7 @@ function CompanyMap({
     const controller = new AbortController();
     abortRef.current = controller;
     setLoading(true);
+    setSearchError(null);
 
     try {
       const url = `/api/biznesinfo/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=${radius}&q=${encodeURIComponent(searchQuery)}&limit=${MAP_FETCH_LIMIT}`;
@@ -229,6 +231,7 @@ function CompanyMap({
       setCompanies(nextCompanies);
       setTotalCompanies(typeof data.total === "number" ? data.total : nextCompanies.length);
       setVisibleCompanyCount(INITIAL_VISIBLE_COMPANIES);
+      setSearchError(null);
     } catch (error) {
       if ((error as Error)?.name === "AbortError") return;
       console.error("Failed to fetch nearby companies:", error);
@@ -236,6 +239,7 @@ function CompanyMap({
         setCompanies([]);
         setTotalCompanies(0);
         setVisibleCompanyCount(INITIAL_VISIBLE_COMPANIES);
+        setSearchError("Не удалось выполнить поиск. Попробуйте обновить.");
       }
     } finally {
       if (requestSeq === requestSeqRef.current) {
@@ -466,6 +470,11 @@ function CompanyMap({
           🔄 Обновить
         </button>
       </div>
+      {searchError && (
+        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {searchError}
+        </div>
+      )}
 
       {/* Map */}
       <div className="relative rounded-xl overflow-hidden border border-gray-200 shadow-sm">

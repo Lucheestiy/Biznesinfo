@@ -43,7 +43,7 @@ function normalizeTel(raw: string): string | null {
 function normalizeInternalPath(raw: string): string | null {
   const s = (raw || "").trim();
   if (!s.startsWith("/")) return null;
-  if (!/^\/(?:company|catalog)\//u.test(s)) return null;
+  if (!/^\/(?:company\/|catalog\/|search(?:$|[/?#]))/u.test(s)) return null;
   if (s.includes("..")) return null;
   if (/[\\\u0000-\u001F]/u.test(s)) return null;
 
@@ -65,6 +65,11 @@ function normalizeInternalPath(raw: string): string | null {
     cleaned = cleaned.replace(/[^\p{L}\p{N}-]/gu, "");
     if (!cleaned) return null;
     return `/company/${encodeURIComponent(cleaned)}`;
+  }
+
+  if (pathOnly === "/search") {
+    if (s.length > 500) return s.slice(0, 500);
+    return s;
   }
 
   if (s.length > 300) return s.slice(0, 300);
@@ -129,7 +134,7 @@ function tokenizeUrlsAndEmails(text: string): LinkToken[] {
 
 function linkifyInternalPaths(tokens: LinkToken[]): LinkToken[] {
   const out: LinkToken[] = [];
-  const internalRe = /\/(?:company|catalog)\/[^\s<>()]+/giu;
+  const internalRe = /\/(?:company|catalog)\/[^\s<>()]+|\/search(?:\?[^\s<>()]+)?/giu;
 
   for (const token of tokens) {
     if (token.type !== "text") {

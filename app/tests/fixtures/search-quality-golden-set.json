@@ -1,0 +1,231 @@
+{
+  "version": 1,
+  "top_k": 10,
+  "thresholds": {
+    "min_precision_at_10": 0.86,
+    "min_ndcg_at_10": 0.9,
+    "max_irrelevant_share_top10": 0.16,
+    "max_zero_result_rate": 0.1
+  },
+  "relevance_scale": {
+    "0": "irrelevant",
+    "1": "weakly-relevant",
+    "2": "relevant",
+    "3": "highly-relevant"
+  },
+  "queries": [
+    {
+      "id": "milk_basic",
+      "label": "молоко",
+      "params": {
+        "service": "молоко"
+      },
+      "expect_results": true,
+      "labels": {
+        "smol-milk": 3,
+        "milk": 3,
+        "mmp": 3,
+        "molzavod": 3,
+        "milkhills": 3,
+        "belmilk": 3,
+        "molochny-mir": 3,
+        "prjmilk": 3,
+        "moloko": 3,
+        "lncmilk": 3
+      }
+    },
+    {
+      "id": "sugar_basic",
+      "label": "сахар",
+      "params": {
+        "service": "сахар"
+      },
+      "expect_results": true,
+      "labels": {
+        "sahar": 3,
+        "cukar": 3,
+        "sugar": 3,
+        "gsr": 3
+      }
+    },
+    {
+      "id": "bread_basic",
+      "label": "хлеб",
+      "params": {
+        "service": "хлеб"
+      },
+      "expect_results": true,
+      "labels": {
+        "drazhin": 3,
+        "avtomathleb": 3,
+        "zhodinohleb": 3,
+        "dobr-hleb": 3,
+        "lephleb": 3,
+        "minskhleb2": 3,
+        "minskhleb3": 3,
+        "minskhleb4": 3,
+        "minskhleb6": 3,
+        "solhleb": 3
+      }
+    },
+    {
+      "id": "forest_basic",
+      "label": "лес",
+      "params": {
+        "service": "лес"
+      },
+      "expect_results": true,
+      "labels": {
+        "ldra-lesnoi": 3,
+        "sch-lh": 3,
+        "shumilles": 3,
+        "cherikovleshoz": 3,
+        "leshoz": 3,
+        "teterinskoe": 3,
+        "leshoz-surazh": 3,
+        "lgan-lesnoi": 3,
+        "lsto-lesnoi": 3,
+        "starobinleshoz": 3
+      }
+    },
+    {
+      "id": "hair_basic",
+      "label": "парикмахерская",
+      "params": {
+        "service": "парикмахерская"
+      },
+      "expect_results": true,
+      "labels": {
+        "vashparikmaher": 3,
+        "biznesinfo-99556": 3,
+        "linea": 3,
+        "biznesinfo-100564": 3,
+        "biznesinfo-100705": 3,
+        "biznesinfo-96080": 3,
+        "biznesinfo-85336": 3,
+        "biznesinfo-78956": 3,
+        "biznesinfo-78142": 3,
+        "biznesinfo-55539": 3
+      }
+    },
+    {
+      "id": "milk_wholesale_minsk",
+      "label": "молоко оптом 200 кг в Минске",
+      "params": {
+        "service": "молоко оптом 200 кг",
+        "city": "Минск"
+      },
+      "expect_results": true,
+      "forbidden_ids": [
+        "alarismet"
+      ],
+      "labels": {
+        "belmilk": 3,
+        "endokrin": 2,
+        "moloch-syrye": 3,
+        "kumys": 2,
+        "postpromprest": 2,
+        "mob-na-zapadnoj": 2,
+        "ulianaprod": 2,
+        "oloksan": 2,
+        "smp-germet": 1,
+        "konamor": 1
+      }
+    },
+    {
+      "id": "milk_wholesale",
+      "label": "молоко оптом",
+      "params": {
+        "service": "молоко оптом"
+      },
+      "expect_results": true,
+      "forbidden_ids": [
+        "alarismet"
+      ],
+      "labels": {
+        "smol-milk": 3,
+        "milk": 3,
+        "mmp": 3,
+        "milkhills": 3,
+        "molzavod": 3,
+        "prjmilk": 3,
+        "moloko": 3,
+        "lncmilk": 3,
+        "belmilk": 3,
+        "molochny-mir": 3
+      }
+    },
+    {
+      "id": "fish_basic",
+      "label": "рыба",
+      "params": {
+        "service": "рыба"
+      },
+      "expect_results": true,
+      "labels": {
+        "rybolovshop": 0,
+        "kamchatskayaryba": 3,
+        "dneprobugski": 3,
+        "luban-fish": 3,
+        "fishtaste": 3,
+        "rybhoz-novinki": 3,
+        "selec": 2,
+        "fishbeloe": 3,
+        "fishlahva": 3,
+        "karpych": 2
+      }
+    },
+    {
+      "id": "cheese_basic",
+      "label": "сыр",
+      "params": {
+        "service": "сыр"
+      },
+      "expect_results": true,
+      "labels": {
+        "tolsyr": 3,
+        "belcheese": 3,
+        "complimilk": 3,
+        "syrray": 3,
+        "kopyl-msz": 3,
+        "moloch-syrye": 1,
+        "kobrincheese": 3,
+        "prjmilk": 2,
+        "novdar": 2,
+        "cheeseland": 2
+      }
+    },
+    {
+      "id": "beauty_salon",
+      "label": "салон красоты",
+      "params": {
+        "service": "салон красоты"
+      },
+      "expect_results": true,
+      "labels": {
+        "ladygadiva": 3,
+        "biznesinfo-101923": 3
+      }
+    },
+    {
+      "id": "pear_minsk",
+      "label": "груша в Минске",
+      "params": {
+        "service": "груша",
+        "city": "Минск"
+      },
+      "expect_results": true,
+      "labels": {
+        "agrofresh": 3
+      }
+    },
+    {
+      "id": "nonsense_zero",
+      "label": "кварклюква",
+      "params": {
+        "service": "кварклюква"
+      },
+      "expect_results": false
+    }
+  ]
+}

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { shouldApplyFinalAssistantText } from "@/lib/ai/streamFinalization";
 import { renderLinkifiedText } from "@/lib/utils/linkify";
 import type { BiznesinfoCompanySummary } from "@/lib/biznesinfo/types";
 
@@ -27,17 +28,12 @@ type AssistantCopyKind = "answer" | "email" | "whatsapp" | "subject" | "body" | 
 type AssistantFeedback = { rating: "up" | "down"; reason: string | null; createdAt: string };
 
 type AssistantRfqForm = {
+  companyTarget: string;
   what: string;
   qty: string;
   location: string;
   deadline: string;
   notes: string;
-};
-
-type AssistantSuggestionChip = {
-  id: string;
-  label: string;
-  prompt: string;
 };
 
 const ASSISTANT_CHAT_STATE_KEY_PREFIX = "biznesinfo:assistant:chat:v1";
@@ -54,6 +50,47 @@ type PersistedAssistantChatState = {
   messages: AssistantMessage[];
   savedAt: string;
 };
+
+function normalizeInternalPath(raw: string | null | undefined): string | null {
+  const value = String(raw || "").trim();
+  if (!value) return null;
+  if (!value.startsWith("/")) return null;
+  if (value.startsWith("//")) return null;
+  return value;
+}
+
+function extractCompanyIdFromInput(raw: string | null | undefined): string | null {
+  const value = String(raw || "").trim();
+  if (!value) return null;
+
+  const valueWithoutHash = value.replace(/^#/, "");
+  const directIdMatch = valueWithoutHash.match(/^[A-Za-z0-9_-]{1,128}$/u);
+  if (directIdMatch) return valueWithoutHash;
+
+  const pathMatch = value.match(/\/company\/([^/?#\s]+)/iu);
+  if (pathMatch && pathMatch[1]) {
+    const decoded = decodeURIComponent(pathMatch[1]).trim();
+    if (decoded) return decoded;
+  }
+
+  try {
+    const url = new URL(value);
+    const urlPathMatch = url.pathname.match(/^\/company\/([^/?#\s]+)/iu);
+    if (urlPathMatch && urlPathMatch[1]) {
+      const decoded = decodeURIComponent(urlPathMatch[1]).trim();
+      if (decoded) return decoded;
+    }
+  } catch {
+    // ignore invalid URL
+  }
+
+  return null;
+}
+
+function looksLikeOutreachIntent(text: string): boolean {
+  return /(?:заявк|коммерческ|предложен|состав(?:ь|ьте)\s+обращен|запрос\s+поставщик|письм[оа]\s+поставщик|rfq|request\s+for\s+quote|supplier\s+request)/iu
+    .test(String(text || ""));
+}
 
 function normalizeAssistantMessageForCompare(text: string): string {
   return String(text || "").toLowerCase().replace(/\s+/gu, " ").trim();
@@ -162,6 +199,8 @@ export default function AssistantClient({
   const companyIdFromUrl = (searchParams.get("companyId") || "").trim();
   const companyNameFromUrl = (searchParams.get("companyName") || "").trim();
   const companyIdsFromUrl = (searchParams.get("companyIds") || "").trim();
+  const returnToFromUrl = (searchParams.get("returnTo") || "").trim();
+  const [referrerCompanyPath, setReferrerCompanyPath] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [streamingReplyId, setStreamingReplyId] = useState<string | null>(null);
@@ -175,6 +214,7 @@ export default function AssistantClient({
   const [feedbackSendingId, setFeedbackSendingId] = useState<string | null>(null);
   const [rfqOpen, setRfqOpen] = useState(false);
   const [rfqForm, setRfqForm] = useState<AssistantRfqForm>({
+    companyTarget: companyIdFromUrl || "",
     what: "",
     qty: "",
     location: "",
@@ -185,11 +225,12 @@ export default function AssistantClient({
   const [shortlistCompanies, setShortlistCompanies] = useState<BiznesinfoCompanySummary[]>([]);
   const [shortlistCompaniesLoading, setShortlistCompaniesLoading] = useState(false);
   const [chatStateReady, setChatStateReady] = useState(false);
+  const [newDialogModalOpen, setNewDialogModalOpen] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const draftRef = useRef<HTMLTextAreaElement | null>(null);
-  const prefillAppliedRef = useRef(false);
   const copiedTimeoutRef = useRef<number | null>(null);
+  const sendingRef = useRef(false);
 
   const canChat = user.plan === "paid" || user.plan === "partner";
   const planLabel = useMemo(() => formatPlanLabel(user.plan), [user.plan]);
@@ -205,6 +246,41 @@ export default function AssistantClient({
     if (!companyId && !companyName) return null;
     return { companyId, companyName };
   }, [companyIdFromUrl, companyNameFromUrl]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const ref = document.referrer;
+    if (!ref) return;
+
+    try {
+      const refUrl = new URL(ref);
+      if (refUrl.origin !== window.location.origin) return;
+      if (!refUrl.pathname.startsWith("/company/")) return;
+      const path = normalizeInternalPath(`${refUrl.pathname}${refUrl.search}${refUrl.hash}`);
+      if (!path || path.startsWith("/assistant")) return;
+      setReferrerCompanyPath(path);
+    } catch {
+      // ignore malformed referrer
+    }
+  }, []);
+
+  const backToCompanyHref = useMemo(() => {
+    const returnToPath = normalizeInternalPath(returnToFromUrl);
+    if (returnToPath && !returnToPath.startsWith("/assistant")) {
+      return returnToPath;
+    }
+
+    if (companyContext?.companyId) {
+      return `/company/${encodeURIComponent(companyContext.companyId)}`;
+    }
+
+    const referrerPath = normalizeInternalPath(referrerCompanyPath);
+    if (referrerPath && referrerPath.startsWith("/company/")) {
+      return referrerPath;
+    }
+
+    return null;
+  }, [companyContext?.companyId, returnToFromUrl, referrerCompanyPath]);
 
   const shortlistCompanyIds = useMemo(() => {
     if (!companyIdsFromUrl) return [];
@@ -232,12 +308,21 @@ export default function AssistantClient({
     return map;
   }, [shortlistCompanies]);
 
+  const manualTargetCompanyId = useMemo(() => extractCompanyIdFromInput(rfqForm.companyTarget), [rfqForm.companyTarget]);
+
+  const resolvedSendCompanyId = useMemo(() => {
+    if (companyContext?.companyId) return companyContext.companyId;
+    if (manualTargetCompanyId) return manualTargetCompanyId;
+    if (shortlistCompanyIds.length === 1) return shortlistCompanyIds[0];
+    return null;
+  }, [companyContext?.companyId, manualTargetCompanyId, shortlistCompanyIds]);
+
   const buildIntroMessage = (): AssistantMessage => ({
     id: "intro",
     role: "assistant",
     content:
       t("ai.chatIntro") ||
-      "Здравствуйте! Я ваш личный помощник Лориэн. Помогу сформулировать запрос поставщикам, находить нужные компании по заданным критериям, подбирать релевантные ключевые слова и писать уникальный текст.",
+      "Здравствуйте! Я ваш личный помощник Лориэн. Подберу релевантные рубрики на портале, которые соответствуют вашему запросу, а также помогу составить и отправить коммерческое предложение/заявку по вопросам сотрудничества.",
   });
 
   const [messages, setMessages] = useState<AssistantMessage[]>(() => [buildIntroMessage()]);
@@ -251,13 +336,10 @@ export default function AssistantClient({
         const restoredMessages = sanitizeStoredAssistantMessages(parsed?.messages);
         const restoredConversationId =
           typeof parsed?.conversationId === "string" && parsed.conversationId.trim() ? parsed.conversationId.trim() : null;
-        const restoredDraft = typeof parsed?.draft === "string" ? parsed.draft : "";
-
-        if (restoredMessages.length > 0 || restoredConversationId || restoredDraft.trim()) {
+        if (restoredMessages.length > 0 || restoredConversationId) {
           setMessages([buildIntroMessage(), ...restoredMessages]);
           setConversationId(restoredConversationId);
-          setDraft(restoredDraft);
-          prefillAppliedRef.current = Boolean(restoredDraft.trim());
+          setDraft("");
           setChatStateReady(true);
           return;
         }
@@ -268,13 +350,7 @@ export default function AssistantClient({
 
     setMessages([buildIntroMessage()]);
     setConversationId(null);
-    if (companyPrefillPrompt) {
-      setDraft(companyPrefillPrompt);
-      prefillAppliedRef.current = true;
-    } else {
-      setDraft("");
-      prefillAppliedRef.current = false;
-    }
+    setDraft("");
     setChatStateReady(true);
   }, [chatStorageKey]);
 
@@ -284,11 +360,11 @@ export default function AssistantClient({
       const persistedMessages = messages.filter((m) => m.id !== "intro").slice(-ASSISTANT_STORED_MESSAGES_LIMIT);
       const payload: PersistedAssistantChatState = {
         conversationId: conversationId || null,
-        draft: draft || "",
+        draft: "",
         messages: persistedMessages,
         savedAt: new Date().toISOString(),
       };
-      if (persistedMessages.length === 0 && !payload.conversationId && !payload.draft.trim()) {
+      if (persistedMessages.length === 0 && !payload.conversationId) {
         window.sessionStorage.removeItem(chatStorageKey);
         return;
       }
@@ -296,101 +372,7 @@ export default function AssistantClient({
     } catch {
       // ignore storage write errors
     }
-  }, [chatStateReady, chatStorageKey, messages, conversationId, draft]);
-
-  const suggestionChips = useMemo<AssistantSuggestionChip[]>(() => {
-    const promptOr = (key: string, fallback: string): string => {
-      const v = t(key);
-      if (!v || v === key) return fallback;
-      return v;
-    };
-
-    if (companyContext) {
-      const draftLabel = t("ai.quick.draftToThisCompany");
-      const questionsLabel = t("ai.quick.questionsToThisCompany");
-      const followUpLabel = t("ai.quick.followUpToThisCompany");
-      const alternativesLabel = t("ai.quick.findAlternatives");
-      return [
-        {
-          id: "draftToThisCompany",
-          label: draftLabel,
-          prompt: promptOr("ai.prompt.draftToThisCompany", draftLabel),
-        },
-        {
-          id: "questionsToThisCompany",
-          label: questionsLabel,
-          prompt: promptOr("ai.prompt.questionsToThisCompany", questionsLabel),
-        },
-        {
-          id: "followUpToThisCompany",
-          label: followUpLabel,
-          prompt: promptOr("ai.prompt.followUpToThisCompany", followUpLabel),
-        },
-        {
-          id: "findAlternatives",
-          label: alternativesLabel,
-          prompt: promptOr("ai.prompt.findAlternatives", alternativesLabel),
-        },
-      ];
-    }
-    if (shortlistCompanyIds.length > 0) {
-      const outreachLabel = t("ai.quick.shortlistOutreachPlan");
-      const compareLabel = t("ai.quick.shortlistCompare");
-      const gapsLabel = t("ai.quick.shortlistFindGaps");
-      return [
-        {
-          id: "shortlistOutreachPlan",
-          label: outreachLabel,
-          prompt: promptOr("ai.prompt.shortlistOutreachPlan", outreachLabel),
-        },
-        {
-          id: "shortlistCompare",
-          label: compareLabel,
-          prompt: promptOr("ai.prompt.shortlistCompare", compareLabel),
-        },
-        {
-          id: "shortlistFindGaps",
-          label: gapsLabel,
-          prompt: promptOr("ai.prompt.shortlistFindGaps", gapsLabel),
-        },
-      ];
-    }
-    const findLabel = t("ai.quick.findSuppliers");
-    const draftOutreachLabel = t("ai.quick.draftOutreach");
-    const rubricsLabel = t("ai.quick.explainRubrics");
-    const checkLabel = t("ai.quick.checkCompany");
-    return [
-      { id: "findSuppliers", label: findLabel, prompt: promptOr("ai.prompt.findSuppliers", findLabel) },
-      { id: "draftOutreach", label: draftOutreachLabel, prompt: promptOr("ai.prompt.draftOutreach", draftOutreachLabel) },
-      { id: "explainRubrics", label: rubricsLabel, prompt: promptOr("ai.prompt.explainRubrics", rubricsLabel) },
-      { id: "checkCompany", label: checkLabel, prompt: promptOr("ai.prompt.checkCompany", checkLabel) },
-    ];
-  }, [t, companyContext, shortlistCompanyIds.length]);
-
-  const companyPrefillPrompt = useMemo(() => {
-    if (!companyContext) return null;
-    const label = companyContext.companyName
-      ? `«${companyContext.companyName}»`
-      : (companyContext.companyId ? `#${companyContext.companyId}` : "");
-    return label
-      ? `Составь краткую справку о компании ${label}: чем занимается и какие товары/услуги предлагает.`
-      : "Составь краткую справку об этой компании: чем занимается и какие товары/услуги предлагает.";
-  }, [companyContext]);
-
-  const showSuggestionChips = canChat && messages.length <= 1 && (!draft.trim() || draft.trim() === (companyPrefillPrompt || "").trim());
-
-  useEffect(() => {
-    if (!chatStateReady) return;
-    if (prefillAppliedRef.current) return;
-    if (!companyPrefillPrompt) return;
-
-    setDraft((prev) => {
-      if (prev.trim()) return prev;
-      return companyPrefillPrompt;
-    });
-
-    prefillAppliedRef.current = true;
-  }, [chatStateReady, companyPrefillPrompt]);
+  }, [chatStateReady, chatStorageKey, messages, conversationId]);
 
   useEffect(() => {
     if (shortlistCompanyIds.length === 0) {
@@ -449,6 +431,7 @@ export default function AssistantClient({
     chatVersionRef.current += 1;
     abortRef.current?.abort();
     abortRef.current = null;
+    sendingRef.current = false;
     setSending(false);
     setStreamingReplyId(null);
     setError(null);
@@ -458,6 +441,7 @@ export default function AssistantClient({
     setFeedbackSendingId(null);
     setQuotaResetMessage(null);
     setRfqOpen(false);
+    setNewDialogModalOpen(false);
     setConversationId(null);
     try {
       window.sessionStorage.removeItem(chatStorageKey);
@@ -466,14 +450,7 @@ export default function AssistantClient({
     }
     if (copiedTimeoutRef.current) window.clearTimeout(copiedTimeoutRef.current);
     setMessages([buildIntroMessage()]);
-
-    if (companyPrefillPrompt) {
-      setDraft(companyPrefillPrompt);
-      prefillAppliedRef.current = true;
-    } else {
-      setDraft("");
-      prefillAppliedRef.current = false;
-    }
+    setDraft("");
 
     setTimeout(() => draftRef.current?.focus(), 0);
   };
@@ -535,7 +512,9 @@ export default function AssistantClient({
         if (m) bodyIdx = i;
       }
       if (whatsappIdx === null) {
-        const m = line.match(/^\s*(whatsapp)\s*[:\-—]\s*(.*)\s*$/iu);
+        const m = line.match(
+          /^\s*(whatsapp|whats\s*app|сообщение\s+для\s+мессенджера|мессенджер(?:\s+сообщение)?)\s*[:\-—]\s*(.*)\s*$/iu,
+        );
         if (m) whatsappIdx = i;
       }
     }
@@ -558,7 +537,10 @@ export default function AssistantClient({
 
       if (whatsappIdx !== null) {
         const waFirstLine = lines[whatsappIdx] || "";
-        const waFirst = waFirstLine.replace(/^\s*(whatsapp)\s*[:\-—]\s*/iu, "");
+        const waFirst = waFirstLine.replace(
+          /^\s*(whatsapp|whats\s*app|сообщение\s+для\s+мессенджера|мессенджер(?:\s+сообщение)?)\s*[:\-—]\s*/iu,
+          "",
+        );
         const waRest = lines.slice(whatsappIdx + 1);
         const whatsapp = [waFirst, ...waRest].join("\n").trim() || null;
         return {
@@ -588,7 +570,10 @@ export default function AssistantClient({
 
     if (whatsappIdx !== null) {
       const waFirstLine = lines[whatsappIdx] || "";
-      const waFirst = waFirstLine.replace(/^\s*(whatsapp)\s*[:\-—]\s*/iu, "");
+      const waFirst = waFirstLine.replace(
+        /^\s*(whatsapp|whats\s*app|сообщение\s+для\s+мессенджера|мессенджер(?:\s+сообщение)?)\s*[:\-—]\s*/iu,
+        "",
+      );
       const waRest = lines.slice(whatsappIdx + 1);
       const whatsapp = [waFirst, ...waRest].join("\n").trim() || null;
       return {
@@ -633,8 +618,8 @@ export default function AssistantClient({
   };
 
   const buildChatCopyText = (): string => {
-    const userLabel = tr("ai.copyChatUserLabel", "User");
-    const assistantLabel = tr("ai.copyChatAssistantLabel", "AI Assistant");
+    const userLabel = tr("ai.copyChatUserLabel", "Пользователь");
+    const assistantLabel = tr("ai.copyChatAssistantLabel", "AI-ассистент");
 
     return messages
       .map((message) => {
@@ -713,10 +698,10 @@ export default function AssistantClient({
     if (!hasTemplateMarkers) return renderLinkifiedText(message.content);
 
     const subjectValue = parts.subject || (t("ai.export.defaultSubject") || "Запрос через Biznesinfo");
-    const subjectLabel = t("ai.export.subjectLabel") || "Subject";
-    const bodyLabel = t("ai.export.bodyLabel") || "Body";
-    const whatsappLabel = "WhatsApp";
-    const copyLabel = tr("ai.copy", "Copy");
+    const subjectLabel = tr("ai.export.subjectLabel", "Тема");
+    const bodyLabel = tr("ai.export.bodyLabel", "Текст");
+    const whatsappLabel = tr("ai.export.messengerLabel", "Сообщение для мессенджера");
+    const copyLabel = tr("ai.copy", "Копировать");
 
     return (
       <div className="space-y-3">
@@ -820,14 +805,15 @@ export default function AssistantClient({
   };
 
   const buildRfqDraft = (form: AssistantRfqForm): string => {
+    const targetCompanyId = resolvedSendCompanyId;
     const target =
-      companyContext?.companyName || (companyContext?.companyId ? `#${companyContext.companyId}` : null);
+      companyContext?.companyName || (targetCompanyId ? `#${targetCompanyId}` : null);
 
     const lines: string[] = [];
     if (target) {
-      lines.push(`Draft an outreach/RFQ message to this company: ${target}.`);
+      lines.push(`Составь обращение/запрос к этой компании: ${target}.`);
     } else {
-      lines.push("Draft an RFQ/outreach message to potential suppliers from the Biznesinfo directory.");
+      lines.push("Составь обращение/запрос к конкретной компании из каталога Biznesinfo.");
     }
 
     const what = form.what.trim();
@@ -836,29 +822,48 @@ export default function AssistantClient({
     const deadline = form.deadline.trim();
     const notes = form.notes.trim();
 
-    if (what) lines.push(`Need: ${what}`);
-    if (qty) lines.push(`Quantity/scope: ${qty}`);
-    if (location) lines.push(`Location: ${location}`);
-    if (deadline) lines.push(`Deadline: ${deadline}`);
-    if (notes) lines.push(`Notes: ${notes}`);
+    if (what) lines.push(`Что нужно: ${what}`);
+    if (qty) lines.push(`Количество/объём: ${qty}`);
+    if (location) lines.push(`Город/регион: ${location}`);
+    if (deadline) lines.push(`Срок: ${deadline}`);
+    if (notes) lines.push(`Требования: ${notes}`);
 
     lines.push("");
-    lines.push("If key info is missing, ask up to 3 clarifying questions first.");
-    lines.push("Return using exactly these blocks:");
-    lines.push("Subject: <one line>");
-    lines.push("Body:");
-    lines.push("<email body>");
-    lines.push("WhatsApp:");
-    lines.push("<short WhatsApp message>");
+    lines.push("Если данных не хватает, сначала задай до 3 уточняющих вопросов.");
+    lines.push("Верни ответ строго в этих блоках:");
+    lines.push("Тема: <одна строка>");
+    lines.push("Текст:");
+    lines.push("<текст письма>");
+    lines.push("Сообщение для мессенджера:");
+    lines.push("<короткое сообщение>");
 
     return lines.join("\n");
   };
 
   const resetRfqForm = () => {
-    setRfqForm({ what: "", qty: "", location: "", deadline: "", notes: "" });
+    setRfqForm({
+      companyTarget: companyContext?.companyId || "",
+      what: "",
+      qty: "",
+      location: "",
+      deadline: "",
+      notes: "",
+    });
   };
 
   const fillRfqIntoDraft = () => {
+    const hasExplicitTarget = Boolean(companyContext?.companyName || resolvedSendCompanyId);
+    if (!hasExplicitTarget) {
+      setError("Чтобы избежать спама, выберите конкретную компанию (ID карточки или ссылка /company/...).");
+      setTimeout(() => draftRef.current?.focus(), 0);
+      return;
+    }
+    if (!companyContext?.companyId && !manualTargetCompanyId && shortlistCompanyIds.length > 1) {
+      setError("Чтобы избежать спама, выберите одну конкретную компанию, а не список.");
+      setTimeout(() => draftRef.current?.focus(), 0);
+      return;
+    }
+    setError(null);
     setDraft(buildRfqDraft(rfqForm));
     setRfqOpen(false);
     setTimeout(() => draftRef.current?.focus(), 0);
@@ -868,8 +873,21 @@ export default function AssistantClient({
     const text = draft.trim();
     if (!text) return;
     if (!canChat) return;
+    if (sendingRef.current) return;
+
+    const outreachIntent = looksLikeOutreachIntent(text);
+    const hasExplicitTarget = Boolean(companyContext?.companyName || resolvedSendCompanyId);
+    if (outreachIntent && !hasExplicitTarget) {
+      setError("Чтобы избежать спама, выберите конкретную компанию перед отправкой запроса.");
+      return;
+    }
+    if (outreachIntent && !companyContext?.companyId && !manualTargetCompanyId && shortlistCompanyIds.length > 1) {
+      setError("Чтобы избежать спама, отправка запроса доступна только в одну выбранную компанию.");
+      return;
+    }
 
     const startChatVersion = chatVersionRef.current;
+    sendingRef.current = true;
 
     const abortController = new AbortController();
     abortRef.current?.abort();
@@ -903,8 +921,8 @@ export default function AssistantClient({
         payload,
       };
       if (conversationId) requestBody.conversationId = conversationId;
-      if (companyContext?.companyId) requestBody.companyId = companyContext.companyId;
-      if (shortlistCompanyIds.length > 0) requestBody.companyIds = shortlistCompanyIds;
+      if (resolvedSendCompanyId) requestBody.companyId = resolvedSendCompanyId;
+      if (!resolvedSendCompanyId && shortlistCompanyIds.length > 0) requestBody.companyIds = shortlistCompanyIds;
 
       const res = await fetch("/api/ai/request?stream=1", {
         method: "POST",
@@ -1065,7 +1083,19 @@ export default function AssistantClient({
             if (typeof data?.requestId === "string") requestId = data.requestId;
             if (typeof data?.conversationId === "string" && data.conversationId) setConversationId(data.conversationId);
             const finalText = typeof data?.reply?.text === "string" ? data.reply.text : "";
-            if (finalText) assistantText = finalText;
+            const reasonCodes = Array.isArray(data?.reply?.reasonCodes)
+              ? data.reply.reasonCodes.filter((value: unknown): value is string => typeof value === "string")
+              : [];
+            if (
+              finalText &&
+              shouldApplyFinalAssistantText({
+                streamedText: assistantText,
+                finalText,
+                reasonCodes,
+              })
+            ) {
+              assistantText = finalText;
+            }
             localFallbackUsed = Boolean(data?.reply?.localFallbackUsed);
             fallbackNotice = typeof data?.reply?.fallbackNotice === "string" ? data.reply.fallbackNotice : null;
             provider = typeof data?.reply?.provider === "string" ? data.reply.provider : null;
@@ -1098,6 +1128,7 @@ export default function AssistantClient({
       }
       setError(t("common.networkError") || "Ошибка сети");
     } finally {
+      sendingRef.current = false;
       setSending(false);
       setStreamingReplyId(null);
       if (abortRef.current === abortController) abortRef.current = null;
@@ -1129,48 +1160,24 @@ export default function AssistantClient({
         <div className="container mx-auto px-1.5 py-4 sm:px-4 sm:py-10">
           <div className="max-w-3xl mx-auto">
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-2.5 sm:p-8">
+              {backToCompanyHref && (
+                <div className="mb-2 sm:mb-3">
+                  <Link
+                    href={backToCompanyHref}
+                    className="inline-flex items-center gap-2 rounded-xl border border-[#820251]/25 bg-[#820251]/10 px-3 py-2 text-sm font-semibold text-[#820251] shadow-sm hover:bg-[#820251]/15 hover:text-[#6a0143] transition-colors"
+                  >
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#820251]/30 bg-white">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </span>
+                    <span>{t("common.back") || "Назад"}</span>
+                  </Link>
+                </div>
+              )}
+
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{t("ai.title")}</h1>
               <p className="mt-2 text-gray-600">{t("ai.personalAssistant")}</p>
-
-              <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4 sm:p-5">
-                <div className="text-sm text-gray-600">
-                  <div>
-                    <span className="text-gray-500">Email:</span> {user.email}
-                  </div>
-                  <div className="mt-1">
-                    <span className="text-gray-500">План:</span> {planLabel}
-                  </div>
-                  <div className="mt-1">
-                    <span className="text-gray-500">Лимит:</span> {user.aiRequestsPerDay} запросов/день
-                  </div>
-                  {quota && (
-                    <div className="mt-1">
-                      <span className="text-gray-500">Сегодня ({quota.day}):</span> {quota.used}/{quota.limit}
-                      {quota.limit > 0 && (
-                        <span className="text-gray-500"> • Осталось:</span>
-                      )}
-                      {quota.limit > 0 && (
-                        <span> {Math.max(0, quota.limit - quota.used)}</span>
-                      )}
-                    </div>
-                  )}
-                  {canChat && (
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => void resetPromptCounter()}
-                        disabled={quotaResetting}
-                        className="inline-flex items-center justify-center rounded-lg border border-[#820251]/30 bg-[#820251]/5 px-3 py-1.5 text-xs font-medium text-[#820251] hover:bg-[#820251]/10 disabled:opacity-60 disabled:cursor-not-allowed"
-                      >
-                        {quotaResetting ? "Сброс..." : "Сбросить счётчик (тест)"}
-                      </button>
-                      {quotaResetMessage && (
-                        <span className="text-xs text-emerald-700">{quotaResetMessage}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
 
               {!canChat ? (
                 <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
@@ -1193,7 +1200,7 @@ export default function AssistantClient({
                 </div>
               ) : (
 	                <div className="mt-4 sm:mt-6 -mx-1 sm:mx-0 rounded-2xl border border-gray-200 bg-white overflow-hidden">
-	                  <div className="px-2 sm:px-5 py-3 border-b border-gray-200 bg-gray-50 flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-3">
+	                  <div className="px-2 sm:px-5 py-3 border-b border-gray-200 bg-gray-50 flex flex-col items-start sm:flex-row sm:items-start sm:justify-between gap-3">
 	                    <div className="min-w-0">
 	                      {companyContext && (
 	                        <div className="text-xs text-gray-600 break-words sm:truncate">
@@ -1206,7 +1213,7 @@ export default function AssistantClient({
 
 	                      {shortlistCompanyIds.length > 0 && (
 	                        <div className={`text-xs text-gray-600 break-words sm:truncate ${companyContext ? "mt-1" : ""}`}>
-	                          <span className="text-gray-500">{t("ai.shortlistLabel") || "Шортлист"}:</span>{" "}
+	                          <span className="text-gray-500">{t("ai.shortlistLabel") || "Подбор компаний"}:</span>{" "}
 	                          <span className="font-semibold text-[#820251]">{shortlistCompanyIds.length}</span>
 	                          {shortlistCompaniesLoading && (
 	                            <span className="ml-2 text-gray-400">{t("common.loading") || "Загрузка..."}</span>
@@ -1230,7 +1237,7 @@ export default function AssistantClient({
 		                            if (company?.region) metaParts.push(company.region);
 		                            const meta = metaParts.join(" • ");
 		                            const title = company ? [company.name, meta].filter(Boolean).join(" — ") : id;
-		                            const removeTitle = tr("ai.shortlistRemove", "Убрать из шортлиста");
+		                            const removeTitle = tr("ai.shortlistRemove", "Убрать из подбора");
 		                            return (
 		                              <div key={id} className="relative group">
 		                                <Link
@@ -1266,44 +1273,17 @@ export default function AssistantClient({
 		                            );
 		                          })}
 		                        </div>
-		                      )}
+			                      )}
 	                    </div>
-                    <div className="w-full sm:w-auto flex flex-wrap items-center gap-x-3 gap-y-2 sm:flex-shrink-0">
-                      {(companyContext || shortlistCompanyIds.length > 0) && (
-                        <Link
-                          href="/assistant"
-                          className="text-xs text-[#820251] hover:underline underline-offset-2 whitespace-nowrap"
-                        >
-                          Сбросить
-                        </Link>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => void copyChatConversation()}
-                        disabled={messages.length === 0}
-                        className="text-xs text-gray-600 hover:text-[#820251] hover:underline underline-offset-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:no-underline whitespace-nowrap"
-                      >
-                        {copied?.id === chatCopyMarkerId
-                          ? (t("ai.copied") || "Скопировано!")
-                          : (t("ai.copyChat") || "Скопировать чат")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={resetChat}
-                        disabled={sending}
-                        className="text-xs text-gray-600 hover:text-[#820251] hover:underline underline-offset-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:no-underline whitespace-nowrap"
-                      >
-                        {t("ai.newChat") || "Новый чат"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void resetPromptCounter()}
-                        disabled={sending || quotaResetting}
-                        className="text-xs text-gray-600 hover:text-[#820251] hover:underline underline-offset-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:no-underline whitespace-nowrap"
-                      >
-                        {quotaResetting ? "Сброс..." : "Сбросить счётчик (тест)"}
-                      </button>
-                    </div>
+	                    <div className="w-full sm:w-auto">
+	                      <button
+	                        type="button"
+	                        onClick={() => setNewDialogModalOpen(true)}
+	                        className="inline-flex w-full sm:w-auto items-center justify-center rounded-xl border border-[#820251]/25 bg-white px-3 py-2 text-xs font-semibold text-[#820251] hover:bg-[#820251]/5 transition-colors"
+	                      >
+	                        {t("ai.openNewDialog") || "Открыть новый диалог"}
+	                      </button>
+	                    </div>
                   </div>
                   <div
                     ref={scrollRef}
@@ -1364,14 +1344,14 @@ export default function AssistantClient({
                                     onClick={() => void copyAssistantMessage(m, "email")}
                                     className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
                                   >
-                                    {t("ai.copyAsEmail") || "Скопировать как Email"}
+                                    {t("ai.copyAsEmail") || "Скопировать как письмо"}
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => void copyAssistantMessage(m, "whatsapp")}
                                     className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
                                   >
-                                    {t("ai.copyAsWhatsApp") || "Скопировать как WhatsApp"}
+                                    {t("ai.copyAsWhatsApp") || "Скопировать как сообщение"}
                                   </button>
                                 </div>
                               )}
@@ -1488,38 +1468,86 @@ export default function AssistantClient({
 
                   <div className="border-t border-gray-200 p-2 sm:p-4 bg-white">
                     {error && <div className="mb-3 text-sm text-red-700">{error}</div>}
-                    {showSuggestionChips && (
-                      <div className="mb-3 flex flex-wrap gap-2">
-                        {suggestionChips.map((chip) => (
-                          <button
-                            key={chip.id}
-                            type="button"
-                            onClick={() => {
-                              setDraft(chip.prompt || chip.label);
-                              draftRef.current?.focus();
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex-1">
+                        <label
+                          htmlFor="assistant-request-input"
+                          className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[#820251]"
+                        >
+                          {tr("ai.requestInputLabel", "Что нужно найти или заказать")}
+                        </label>
+                        <div className="rounded-2xl border-2 border-[#c73d8f] bg-gradient-to-b from-[#fff2fa] to-white shadow-[0_8px_22px_rgba(160,0,109,0.12)] transition-colors focus-within:border-[#820251] focus-within:shadow-[0_10px_26px_rgba(130,2,81,0.18)]">
+                          <textarea
+                            id="assistant-request-input"
+                            ref={draftRef}
+                            value={draft}
+                            onChange={(e) => setDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (sending) return;
+                              if (e.key !== "Enter") return;
+                              if (e.shiftKey) return;
+                              if (e.nativeEvent.isComposing) return;
+                              e.preventDefault();
+                              void send();
                             }}
-                            className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full transition-colors border border-gray-200"
-                          >
-                            {chip.label}
-                          </button>
-                        ))}
+                            placeholder={t("ai.placeholder") || "Опишите, что вам нужно найти или заказать..."}
+                            rows={3}
+                            className="w-full min-h-[112px] max-h-[260px] resize-y overflow-y-auto rounded-2xl border-0 bg-transparent px-3 sm:px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-0"
+                            disabled={sending}
+                          />
+                        </div>
                       </div>
-                    )}
-                    <div className="mb-3">
+                      <button
+                        type="button"
+                        onClick={send}
+                        disabled={sending || !draft.trim()}
+                        className="w-full sm:w-auto sm:self-end inline-flex items-center justify-center rounded-xl bg-[#820251] text-white px-6 py-3 font-semibold hover:bg-[#6a0143] disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {sending ? (t("common.loading") || "Загрузка...") : (t("ai.sendRequest") || "Отправить")}
+                      </button>
+                      {sending && (
+                        <button
+                          type="button"
+                          onClick={stopGenerating}
+                          className="w-full sm:w-auto sm:self-end inline-flex items-center justify-center rounded-xl bg-gray-200 text-gray-900 px-5 py-3 font-semibold hover:bg-gray-300"
+                        >
+                          {t("ai.stopGenerating") || "Стоп"}
+                        </button>
+                      )}
+                    </div>
+                    <div className="mt-3 rounded-xl border border-[#820251]/20 bg-[#820251]/5 px-3 py-2 text-xs text-[#6a0143]">
+                      <div className="whitespace-pre-line">
+                        {t("ai.oneClickHelp") ||
+                          "Как отправить заявку быстро:\n1) Выберите конкретную компанию в конструкторе и опишите задачу.\n2) Нажмите «Отправить запрос».\n3) В ответе нажмите «Скопировать как письмо» или «Скопировать как сообщение» и отправьте контакту компании."}
+                      </div>
                       <button
                         type="button"
                         onClick={() => setRfqOpen((prev) => !prev)}
-                        className="text-xs text-gray-600 hover:text-[#820251] hover:underline underline-offset-2"
+                        className="mt-2 inline-flex items-center justify-center rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-[#820251] border border-[#820251]/30 hover:bg-[#820251]/10"
                       >
-                        {rfqOpen ? `${t("common.hide") || "Скрыть"} RFQ` : (t("ai.rfq.open") || "RFQ-конструктор")}
+                        {rfqOpen ? `${t("common.hide") || "Скрыть"} конструктор` : (t("ai.rfq.open") || "Конструктор запроса")}
                       </button>
+                    </div>
 
-                      {rfqOpen && (
-                        <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    {rfqOpen && (
+                      <div className="mt-3">
+                        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                           <div className="text-xs font-semibold text-gray-800">
-                            {t("ai.rfq.title") || "RFQ-конструктор"}
+                            {t("ai.rfq.title") || "Конструктор запроса"}
                           </div>
                           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">
+                                {t("ai.rfq.company") || "Компания (ID карточки)"}
+                              </label>
+                              <input
+                                type="text"
+                                value={rfqForm.companyTarget}
+                                onChange={(e) => setRfqForm((prev) => ({ ...prev, companyTarget: e.target.value }))}
+                                placeholder={t("ai.rfq.companyPlaceholder") || "Например: 12345 или /company/12345"}
+                                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a0006d]/20"
+                              />
+                            </div>
                             <div>
                               <label className="block text-xs text-gray-600 mb-1">{t("ai.rfq.what") || "Что нужно"}</label>
                               <input
@@ -1595,55 +1623,98 @@ export default function AssistantClient({
                             </button>
                           </div>
                         </div>
-                      )}
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <textarea
-                        ref={draftRef}
-                        value={draft}
-                        onChange={(e) => setDraft(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (sending) return;
-                          if (e.key !== "Enter") return;
-                          if (e.shiftKey) return;
-                          if (e.nativeEvent.isComposing) return;
-                          e.preventDefault();
-                          void send();
-                        }}
-                        placeholder={t("ai.placeholder") || "Опишите, что вам нужно найти или заказать..."}
-                        rows={2}
-                        className="flex-1 resize-none rounded-xl border border-gray-300 px-3 sm:px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#a0006d]/30"
-                        disabled={sending}
-                      />
-                      <button
-                        type="button"
-                        onClick={send}
-                        disabled={sending || !draft.trim()}
-                        className="w-full sm:w-auto inline-flex items-center justify-center rounded-xl bg-[#820251] text-white px-6 py-3 font-semibold hover:bg-[#6a0143] disabled:opacity-60 disabled:cursor-not-allowed"
-                      >
-                        {sending ? (t("common.loading") || "Загрузка...") : (t("ai.sendRequest") || "Отправить")}
-                      </button>
-                      {sending && (
-                        <button
-                          type="button"
-                          onClick={stopGenerating}
-                          className="w-full sm:w-auto inline-flex items-center justify-center rounded-xl bg-gray-200 text-gray-900 px-5 py-3 font-semibold hover:bg-gray-300"
-                        >
-                          {t("ai.stopGenerating") || "Стоп"}
-                        </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                     <div className="mt-2 text-xs text-gray-500">
                       {t("ai.disclaimer") ||
                         "Ответы генерируются AI и могут быть неточными. Не передавайте чувствительные данные и проверяйте важную информацию."}
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </main>
+	              )}
+
+              <div className="mt-4 sm:mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4 sm:p-5">
+                <div className="text-sm text-gray-600">
+                  <div>
+                    <span className="text-gray-500">Email:</span> {user.email}
+                  </div>
+                  <div className="mt-1">
+                    <span className="text-gray-500">План:</span> {planLabel}
+                  </div>
+                  <div className="mt-1">
+                    <span className="text-gray-500">Лимит:</span> {user.aiRequestsPerDay} запросов/день
+                  </div>
+                  {quota && (
+                    <div className="mt-1">
+                      <span className="text-gray-500">Сегодня ({quota.day}):</span> {quota.used}/{quota.limit}
+                      {quota.limit > 0 && (
+                        <span className="text-gray-500"> • Осталось:</span>
+                      )}
+                      {quota.limit > 0 && (
+                        <span> {Math.max(0, quota.limit - quota.used)}</span>
+                      )}
+                    </div>
+                  )}
+                  {canChat && (
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => void resetPromptCounter()}
+                        disabled={quotaResetting}
+                        className="inline-flex items-center justify-center rounded-lg border border-[#820251]/30 bg-[#820251]/5 px-3 py-1.5 text-xs font-medium text-[#820251] hover:bg-[#820251]/10 disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {quotaResetting ? "Сброс..." : "Сбросить счётчик (тест)"}
+                      </button>
+                      {quotaResetMessage && (
+                        <span className="text-xs text-emerald-700">{quotaResetMessage}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+	            </div>
+	          </div>
+	        </div>
+	        {newDialogModalOpen && (
+	          <div
+	            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4"
+	            onClick={() => setNewDialogModalOpen(false)}
+	          >
+	            <div
+	              role="dialog"
+	              aria-modal="true"
+	              className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl"
+	              onClick={(e) => e.stopPropagation()}
+	            >
+	              <div className="text-base font-semibold text-gray-900">
+	                {t("ai.newDialogModalTitle") || "Открыть новый диалог?"}
+	              </div>
+	              <p className="mt-2 text-sm text-gray-600">
+	                {t("ai.newDialogModalText") ||
+	                  "Текущий контекст чата будет очищен. Если нужно сохранить ответ, сначала скопируйте его."}
+	              </p>
+	              <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+	                <button
+	                  type="button"
+	                  onClick={() => setNewDialogModalOpen(false)}
+	                  className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+	                >
+	                  {t("ai.newDialogCancel") || "Отмена"}
+	                </button>
+	                <button
+	                  type="button"
+	                  onClick={resetChat}
+	                  className="inline-flex items-center justify-center rounded-xl bg-[#820251] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6a0143]"
+	                >
+	                  {sending
+	                    ? (t("ai.newDialogConfirmWhileSending") || "Остановить и открыть")
+	                    : (t("ai.newDialogConfirm") || "Открыть")}
+	                </button>
+	              </div>
+	            </div>
+	          </div>
+	        )}
+	      </main>
 
       <Footer />
     </div>

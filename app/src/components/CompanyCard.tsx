@@ -349,6 +349,7 @@ function SearchCompanyCard({
   const { isFavorite, toggleFavorite } = useFavorites();
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
+  const logoImgRef = useRef<HTMLImageElement | null>(null);
 
   const companySlug = companySlugForUrl(company.id);
   const companyHref = `/company/${encodeURIComponent(companySlug)}`;
@@ -460,6 +461,15 @@ function SearchCompanyCard({
   }, [logoSrc]);
 
   useEffect(() => {
+    if (!showLogo) return;
+    const img = logoImgRef.current;
+    if (!img) return;
+    if (img.complete && img.naturalWidth > 0) {
+      setLogoLoaded(true);
+    }
+  }, [logoSrc, showLogo]);
+
+  useEffect(() => {
     if (eagerPrefetchCount >= EAGER_PREFETCH_LIMIT) return;
     eagerPrefetchCount += 1;
     prefetchCompany();
@@ -494,6 +504,7 @@ function SearchCompanyCard({
                   {icon}
                 </span>
                 <img
+                  ref={logoImgRef}
                   src={logoSrc}
                   alt={company.name}
                   className={`absolute inset-0 w-full h-full object-contain p-1 transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
@@ -615,6 +626,7 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
   const [phonesExpanded, setPhonesExpanded] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
+  const logoImgRef = useRef<HTMLImageElement | null>(null);
 
   const companySlug = companySlugForUrl(company.id);
   const companyHref = `/company/${encodeURIComponent(companySlug)}`;
@@ -697,6 +709,15 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
   }, [logoSrc]);
 
   useEffect(() => {
+    if (!showLogo) return;
+    const img = logoImgRef.current;
+    if (!img) return;
+    if (img.complete && img.naturalWidth > 0) {
+      setLogoLoaded(true);
+    }
+  }, [logoSrc, showLogo]);
+
+  useEffect(() => {
     if (eagerPrefetchCount >= EAGER_PREFETCH_LIMIT) return;
     eagerPrefetchCount += 1;
     prefetchCompany();
@@ -749,6 +770,7 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
                     {icon}
                   </span>
                   <img
+                    ref={logoImgRef}
                     src={logoSrc}
                     alt={company.name}
                     className={`absolute inset-0 w-full h-full object-contain p-1 transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}

@@ -37,7 +37,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Start JSONL store warmup in background so first company navigation doesn't block on cold load.
+  // Warm up PostgreSQL schema/init in background to avoid first-request cold start.
   void biznesinfoWarmStore();
 
   return (
@@ -60,7 +60,7 @@ export default function RootLayout({
         >
           <div>
             <div style={{ fontSize: "30px", fontWeight: 700, color: "#a0006d", marginBottom: "10px" }}>
-              Biznesinfo.by
+              biznesinfo.by
             </div>
             <div style={{ fontSize: "16px", marginBottom: "6px" }}>Загрузка портала...</div>
             <div id="app-loading-hint" style={{ fontSize: "13px", color: "#6b7280" }}>

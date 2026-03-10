@@ -7,15 +7,24 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:assistant": "npx tsx --test tests/assistant-regressions.test.ts",
     "sync:biznesinfo": "node scripts/sync_biznesinfo_data.mjs",
     "keywords:gen": "npx tsx scripts/generate_company_keywords.ts",
-    "index:meili": "npx tsx scripts/index_meilisearch.ts"
+    "index:meili": "npx tsx scripts/index_meilisearch.ts",
+    "verify:search-quality": "npx tsx scripts/verify_search_quality.ts",
+    "report:search-ab": "BIZNESINFO_SEARCH_AB_VARIANT=control npx tsx scripts/verify_search_quality.ts && BIZNESINFO_SEARCH_AB_VARIANT=treatment npx tsx scripts/verify_search_quality.ts",
+    "import:biznesinfo:pg": "npx tsx scripts/import_biznesinfo_jsonl_to_postgres.ts",
+    "seed:biznesinfo:catalog:pg": "npx tsx scripts/seed_biznesinfo_catalog_from_jsonl.ts",
+    "verify:part4": "npx tsx scripts/verify_biznesinfo_part4_acceptance.ts",
+    "prisma:migrate:deploy": "sh scripts/prisma_migrate_deploy_safe.sh"
   },
   "dependencies": {
     "@pbe/react-yandex-maps": "^1.2.5",
+    "mammoth": "^1.11.0",
     "meilisearch": "^0.48.2",
     "next": "16.1.1",
     "nodemailer": "^6.9.15",
+    "pdf-parse": "^2.4.5",
     "pg": "^8.13.1",
     "react": "19.2.3",
     "react-dom": "19.2.3"

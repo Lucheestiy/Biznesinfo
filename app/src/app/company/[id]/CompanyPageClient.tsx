@@ -562,6 +562,37 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
   const categoryLink = primaryCategory ? `/catalog/${primaryCategory.slug}` : "/#catalog";
   const rubricSubSlug = primaryRubric ? primaryRubric.slug.split("/").slice(1).join("/") : "";
   const rubricLink = primaryCategory && rubricSubSlug ? `/catalog/${primaryCategory.slug}/${rubricSubSlug}` : categoryLink;
+  const rubricPlacements = useMemo(() => {
+    const entries = company.rubrics || [];
+    const seen = new Set<string>();
+    const list: Array<{
+      key: string;
+      href: string;
+      name: string;
+      categoryName: string;
+    }> = [];
+
+    for (const rubric of entries) {
+      const name = String(rubric?.name || "").trim();
+      if (!name) continue;
+      const slug = String(rubric?.slug || "").trim();
+      const categorySlug = String(rubric?.category_slug || primaryCategory?.slug || "").trim();
+      const categoryName = String(rubric?.category_name || "").trim();
+      const key = `${slug || name}|${categorySlug}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const rawUrl = String(rubric?.url || "").trim();
+      const subSlug = slug.includes("/") ? slug.split("/").slice(1).join("/") : slug;
+      const href = rawUrl.startsWith("/catalog/")
+        ? rawUrl
+        : (categorySlug && subSlug ? `/catalog/${categorySlug}/${subSlug}` : categoryLink);
+
+      list.push({ key, href, name, categoryName });
+    }
+
+    return list;
+  }, [categoryLink, company.rubrics, primaryCategory?.slug]);
 
   const hasGeo = company.extra?.lat != null && company.extra?.lng != null;
   const lat = company.extra?.lat ?? null;
@@ -628,6 +659,30 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
             </div>
           </div>
         </div>
+
+        {rubricPlacements.length > 0 && (
+          <div className="bg-white border-b border-gray-200">
+            <div className="container mx-auto px-4 py-3">
+              <div className="rounded-xl border border-[#820251]/15 bg-[#820251]/[0.04] p-3 md:p-4">
+                <h2 className="text-sm font-semibold text-[#820251] mb-2">Рубрики размещения</h2>
+                <div className="flex flex-wrap gap-2">
+                  {rubricPlacements.map((rubric) => (
+                    <Link
+                      key={rubric.key}
+                      href={rubric.href}
+                      className="inline-flex flex-col rounded-lg border border-[#820251]/20 bg-white px-3 py-2 text-left hover:border-[#820251]/50 hover:bg-[#820251]/[0.06] transition-colors"
+                    >
+                      <span className="text-sm font-semibold text-[#820251] leading-tight">{rubric.name}</span>
+                      {rubric.categoryName && (
+                        <span className="text-xs text-gray-500 leading-tight">{rubric.categoryName}</span>
+                      )}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Header */}
         <div className={`relative overflow-hidden ${isMsu23 ? "min-h-[260px] md:min-h-[340px]" : ""}`}>
@@ -990,7 +1045,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                     aria-hidden
                   >
                     <svg
-                      className="w-5 h-5 text-[#14532d]"
+                      className="w-5 h-5 text-[#074c48]"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -1029,7 +1084,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                                   className="flex items-start gap-2 text-[#820251] font-semibold text-base md:text-lg hover:underline whitespace-nowrap"
                                 >
                                   <svg
-                                    className="w-4 h-4 text-[#14532d] mt-1"
+                                    className="w-4 h-4 text-[#074c48] mt-1"
                                     viewBox="0 0 24 24"
                                     fill="none"
                                     stroke="currentColor"
@@ -1103,7 +1158,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                               className="flex items-center gap-2 min-w-0 text-[#820251] hover:underline"
                             >
                               <svg
-                                className="w-4 h-4 text-[#14532d] flex-shrink-0"
+                                className="w-4 h-4 text-[#074c48] flex-shrink-0"
                                 viewBox="0 0 24 24"
                                 fill="none"
                                 stroke="currentColor"
@@ -1207,7 +1262,11 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                   <Link
                     href={{
                       pathname: "/assistant",
-                      query: { companyId: company.source_id, companyName: company.name },
+                      query: {
+                        companyId: company.source_id,
+                        companyName: company.name,
+                        returnTo: `/company/${company.source_id}`,
+                      },
                     }}
                     className="flex-1 min-w-[140px] inline-flex items-center justify-center gap-2 bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity"
                     aria-label={`${t("ai.title")}: ${company.name}`}
@@ -1363,7 +1422,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
 
               {/* Keywords / SEO Tags */}
               <div id="keywords" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#14532d]">
-                <h2 className="text-xl font-bold text-[#14532d] mb-4 flex items-center gap-2">
+                <h2 className="text-xl font-bold text-[#074c48] mb-4 flex items-center gap-2">
                   <span className="text-2xl">🏷️</span>
                   Ключевые слова
                 </h2>
@@ -1372,7 +1431,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                     <Link
                       key={idx}
                       href={`/search?service=${encodeURIComponent(keyword)}`}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-[#14532d]/10 to-[#14532d]/5 text-[#14532d] rounded-full text-sm font-medium hover:from-[#14532d]/20 hover:to-[#14532d]/10 transition-all hover:shadow-sm"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-[#14532d]/10 to-[#14532d]/5 text-[#074c48] rounded-full text-sm font-medium hover:from-[#14532d]/20 hover:to-[#14532d]/10 transition-all hover:shadow-sm"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />

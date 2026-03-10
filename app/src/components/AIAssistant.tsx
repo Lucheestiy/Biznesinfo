@@ -32,6 +32,18 @@ const ALLOWED_TYPES = [
   "application/vnd.ms-excel",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "text/plain",
+  "audio/ogg",
+  "application/ogg",
+  "audio/opus",
+  "audio/webm",
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/mp4",
+  "audio/x-m4a",
+  "audio/aac",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/wave",
 ];
 
 export default function AIAssistant({
@@ -188,6 +200,7 @@ export default function AIAssistant({
   const getFileIcon = (file: AttachedFile) => {
     if (file.type === "image") return null;
     const ext = file.file.name.split(".").pop()?.toLowerCase();
+    if (["ogg", "oga", "opus", "webm", "mp3", "m4a", "wav", "aac", "mp4"].includes(ext || "")) return "🎤";
     if (ext === "pdf") return "📄";
     if (["doc", "docx"].includes(ext || "")) return "📝";
     if (["xls", "xlsx"].includes(ext || "")) return "📊";
@@ -217,26 +230,30 @@ export default function AIAssistant({
 
     setSubmitError(null);
 
+    const payload = {
+      senderCompanyName,
+      contactPerson,
+      position,
+      phone,
+      companyName,
+      companyId,
+      files: attachedFiles.map((f) => ({
+        name: f.file.name,
+        size: f.file.size,
+        type: f.file.type,
+      })),
+    };
+    const formData = new FormData();
+    if (companyId) formData.set("companyId", companyId);
+    formData.set("message", message);
+    formData.set("payload", JSON.stringify(payload));
+    attachedFiles.forEach((item) => {
+      formData.append("files", item.file, item.file.name);
+    });
+
     fetch("/api/ai/request", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        companyId: companyId || null,
-        message,
-        payload: {
-          senderCompanyName,
-          contactPerson,
-          position,
-          phone,
-          companyName,
-          companyId,
-          files: attachedFiles.map((f) => ({
-            name: f.file.name,
-            size: f.file.size,
-            type: f.file.type,
-          })),
-        },
-      }),
+      body: formData,
     })
       .then(async (r) => {
         const data = await r.json().catch(() => ({}));
@@ -497,7 +514,7 @@ export default function AIAssistant({
                             {t("ai.form.dragOrClick") || "Перетащите файлы или нажмите для выбора"}
                           </p>
                           <p className="text-xs text-gray-400">
-                            {t("ai.form.fileFormats") || "Фото, PDF, Word, Excel (макс. 10 МБ)"}
+                            {t("ai.form.fileFormats") || "Фото, PDF, Word, Excel, аудио (макс. 10 МБ)"}
                           </p>
                         </div>
                       </div>
@@ -787,7 +804,7 @@ export default function AIAssistant({
                           {t("ai.form.dragOrClick") || "Перетащите файлы или нажмите для выбора"}
                         </p>
                         <p className="text-xs text-gray-400">
-                          {t("ai.form.fileFormats") || "Фото, PDF, Word, Excel (макс. 10 МБ)"}
+                          {t("ai.form.fileFormats") || "Фото, PDF, Word, Excel, аудио (макс. 10 МБ)"}
                         </p>
                       </div>
                     </div>

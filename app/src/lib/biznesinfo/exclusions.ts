@@ -6,9 +6,8 @@ import path from "node:path";
 import type { BiznesinfoCompany } from "./types";
 
 export const EXCLUDED_BIZNESINFO_COMPANY_IDS: string[] = [
-  // Keep empty for liquidation logic.
-  // Liquidation filtering should be based on external registry (Kartoteka):
-  // by UNP when available and by name fallback when UNP is missing.
+  // Manual removals from public catalog.
+  "biznesinfo-1002",
 ];
 
 // Manual fallback list by UNP (if an external registry result should be pinned locally).

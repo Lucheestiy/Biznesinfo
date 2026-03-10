@@ -1,211 +1,207 @@
-import fs from "node:fs";
-import { createInterface } from "node:readline";
-import { getMeiliClient, COMPANIES_INDEX } from "./client";
+import { getMeiliClient, getCompaniesIndex } from "./client";
 import { configureCompaniesIndex } from "./config";
 import type { MeiliCompanyDocument } from "./types";
-import type { BiznesinfoCompany } from "../biznesinfo/types";
-import { generateCompanyKeywords } from "../biznesinfo/keywords";
-import { getServerKeywordGenerationOptions } from "../biznesinfo/keywordRuntime";
-import { BIZNESINFO_MAP_OVERRIDES } from "../biznesinfo/mapOverrides";
-import { BIZNESINFO_WEBSITE_OVERRIDES } from "../biznesinfo/websiteOverrides";
-import { isExcludedBiznesinfoCompany, normalizeBiznesinfoUnp } from "../biznesinfo/exclusions";
+
+import {
+  biznesinfoListCompaniesForSearchIndex,
+  biznesinfoListCompaniesForSearchIndexBatch,
+} from "../biznesinfo/postgres";
+import { canonicalizeSemanticToken, tokenizeSemanticText } from "../search/semantic";
 import { normalizeCityForFilter } from "../utils/location";
 
-// Region normalization logic (reused from store.ts)
-function normalizeRegionSlug(city: string, region: string, address: string): string | null {
-  const cityLow = (city || "").toLowerCase();
-  const regionLow = (region || "").toLowerCase();
-  const addressLow = (address || "").toLowerCase();
+type IndexableCompany = Awaited<ReturnType<typeof biznesinfoListCompaniesForSearchIndex>>[number];
 
-  if (regionLow.includes("брест")) return "brest";
-  if (regionLow.includes("витеб")) return "vitebsk";
-  if (regionLow.includes("гомел")) return "gomel";
-  if (regionLow.includes("гродн")) return "grodno";
-  if (regionLow.includes("могил")) return "mogilev";
+export type ReindexAllResult = {
+  total: number;
+  indexed: number;
+};
 
-  if (cityLow.includes("брест")) return "brest";
-  if (cityLow.includes("витеб")) return "vitebsk";
-  if (cityLow.includes("гомел")) return "gomel";
-  if (cityLow.includes("гродн")) return "grodno";
-  if (cityLow.includes("могил")) return "mogilev";
+export type IndexCompanyResult = {
+  id: string;
+  indexed: boolean;
+  reason?: "not_found";
+};
 
-  const minskDistrictRe = /минск(?:ий|ого|ому|ом)?\s*(?:р-н|район)/i;
-  const minskOblastRe = /минск(?:ая|ой|ую|ом)?\s*(?:обл\.?|область)/i;
+export type DeleteCompanyResult = {
+  id: string;
+  deleted: boolean;
+};
 
-  const isMinskRegion =
-    minskDistrictRe.test(cityLow) ||
-    minskOblastRe.test(cityLow) ||
-    minskDistrictRe.test(regionLow) ||
-    minskOblastRe.test(regionLow) ||
-    minskDistrictRe.test(addressLow) ||
-    minskOblastRe.test(addressLow);
+const REINDEX_DB_PAGE_SIZE = 2000;
 
-  if (isMinskRegion) return "minsk-region";
+function buildKeywordList(company: IndexableCompany): string[] {
+  const source = [
+    company.description,
+    company.servicesText,
+    company.region,
+    company.city,
+    ...(company.serviceTitles || []),
+    ...(company.serviceCategories || []),
+    ...(company.categoryNames || []),
+    ...(company.serviceTokens || []),
+    ...(company.categoryTokens || []),
+    ...(company.domainTags || []),
+  ].filter(Boolean).join(" ");
 
-  if (cityLow.includes("минск")) return "minsk";
-  if (regionLow.includes("минск")) return "minsk";
-
-  return null;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of tokenizeSemanticText(source)) {
+    const token = canonicalizeSemanticToken(raw);
+    if (!token || token.length < 2 || seen.has(token)) continue;
+    seen.add(token);
+    out.push(token);
+    if (out.length >= 160) break;
+  }
+  return out;
 }
 
-function normalizeLogoUrl(raw: string): string {
-  const url = (raw || "").trim();
-  if (!url) return "";
-  const low = url.toLowerCase();
-  if (low.endsWith("/images/icons/og-icon.png")) return "";
-  if (low.includes("/images/logo/no-logo")) return "";
-  if (low.includes("/images/logo/no_logo")) return "";
-  return url;
-}
-
-function computeLogoRank(company: BiznesinfoCompany): number {
-  if (normalizeLogoUrl(company.logo_url || "")) return 2;
-  if ((company.name || "").trim()) return 1;
-  return 0;
-}
-
-function applyWebsiteOverride(companyId: string, websites: string[]): string[] {
-  const raw = (companyId || "").trim();
-  if (!raw) return websites;
-  const key = raw.toLowerCase();
-
-  const hasOverride =
-    Object.prototype.hasOwnProperty.call(BIZNESINFO_WEBSITE_OVERRIDES, raw) ||
-    Object.prototype.hasOwnProperty.call(BIZNESINFO_WEBSITE_OVERRIDES, key);
-  if (!hasOverride) return websites;
-
-  return BIZNESINFO_WEBSITE_OVERRIDES[raw] ?? BIZNESINFO_WEBSITE_OVERRIDES[key] ?? websites;
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function applyMapOverride(company: BiznesinfoCompany): BiznesinfoCompany {
-  const raw = (company.source_id || "").trim();
-  if (!raw) return company;
-  const key = raw.toLowerCase();
-  const override = BIZNESINFO_MAP_OVERRIDES[raw] ?? BIZNESINFO_MAP_OVERRIDES[key];
-  if (!override) return company;
-
-  const address = String(override.address || "").trim();
-  const nextAddress = address || company.address || "";
-  const currentExtra = company.extra || { lat: null, lng: null };
-  const nextLat = isFiniteNumber(override.lat) ? override.lat : currentExtra.lat;
-  const nextLng = isFiniteNumber(override.lng) ? override.lng : currentExtra.lng;
-
+function toDocument(company: IndexableCompany): MeiliCompanyDocument {
+  const categoryNames = (company.categoryNames || []).filter(Boolean);
+  const serviceTitles = (company.serviceTitles || []).filter(Boolean);
+  const serviceCategories = (company.serviceCategories || []).filter(Boolean);
+  const description = company.description || "";
   return {
-    ...company,
-    address: nextAddress,
-    extra: { lat: nextLat, lng: nextLng },
+    id: company.id,
+    name: company.name || "",
+    normalizedName: company.normalizedName || "",
+    description,
+    servicesText: company.servicesText || "",
+    serviceTitles,
+    serviceCategories,
+    categoryNames,
+    nameTokens: (company.nameTokens || []).filter(Boolean),
+    serviceTokens: (company.serviceTokens || []).filter(Boolean),
+    categoryTokens: (company.categoryTokens || []).filter(Boolean),
+    domainTags: (company.domainTags || []).filter(Boolean),
+    data_quality_score: Number.isFinite(company.data_quality_score) ? company.data_quality_score : 0,
+    data_quality_tier: company.data_quality_tier || "basic",
+    region: company.region || "",
+    city: company.city || "",
+    status: company.status || "active",
+    logo_url: company.logo_url || "",
+    logo_rank: company.logo_rank || 0,
+    createdAt: company.createdAt || new Date(0).toISOString(),
+    updatedAt: company.updatedAt || company.createdAt || new Date(0).toISOString(),
+    _geo: company._geo || null,
+
+    // Legacy compatibility fields used by nearby/AI flows.
+    source: "biznesinfo",
+    unp: "",
+    about: description,
+    address: "",
+    city_norm: normalizeCityForFilter(company.city || ""),
+    phones: [],
+    emails: [],
+    websites: [],
+    contact_person: "",
+    category_slugs: [],
+    category_names: categoryNames,
+    rubric_slugs: [],
+    rubric_names: categoryNames,
+    primary_category_slug: null,
+    primary_category_name: categoryNames[0] || null,
+    primary_rubric_slug: null,
+    primary_rubric_name: categoryNames[0] || null,
+    work_hours_status: null,
+    work_hours_time: null,
+    phones_ext: [],
+    keywords: buildKeywordList(company),
   };
 }
 
-function companyToDocument(
-  company: BiznesinfoCompany,
-  keywordOptions = getServerKeywordGenerationOptions(),
-): MeiliCompanyDocument {
-  const normalizedCompany = applyMapOverride(company);
-  const regionSlug = normalizeRegionSlug(normalizedCompany.city, normalizedCompany.region, normalizedCompany.address);
-  const primaryCategory = normalizedCompany.categories?.[0] ?? null;
-  const primaryRubric = normalizedCompany.rubrics?.[0] ?? null;
+async function addDocumentsInBatches(documents: MeiliCompanyDocument[], batchSize = 2000): Promise<number> {
+  if (documents.length === 0) return 0;
 
-  return {
-    id: normalizedCompany.source_id,
-    source: normalizedCompany.source,
-    unp: normalizeBiznesinfoUnp(normalizedCompany.unp || ""),
-    name: normalizedCompany.name || "",
-    description: normalizedCompany.description || "",
-    about: normalizedCompany.about || "",
-    address: normalizedCompany.address || "",
-    city: normalizedCompany.city || "",
-    city_norm: normalizeCityForFilter(normalizedCompany.city || ""),
-    region: regionSlug || "",
-    phones: normalizedCompany.phones || [],
-    emails: normalizedCompany.emails || [],
-    websites: applyWebsiteOverride(normalizedCompany.source_id, normalizedCompany.websites || []),
-    logo_url: normalizeLogoUrl(normalizedCompany.logo_url || ""),
-    logo_rank: computeLogoRank(normalizedCompany),
-    contact_person: normalizedCompany.contact_person || "",
+  const client = getMeiliClient();
+  const index = getCompaniesIndex();
+  let indexed = 0;
 
-    category_slugs: (normalizedCompany.categories || []).map(c => c.slug),
-    category_names: (normalizedCompany.categories || []).map(c => c.name),
-    rubric_slugs: (normalizedCompany.rubrics || []).map(r => r.slug),
-    rubric_names: (normalizedCompany.rubrics || []).map(r => r.name),
-    primary_category_slug: primaryCategory?.slug ?? null,
-    primary_category_name: primaryCategory?.name ?? null,
-    primary_rubric_slug: primaryRubric?.slug ?? null,
-    primary_rubric_name: primaryRubric?.name ?? null,
+  for (let offset = 0; offset < documents.length; offset += batchSize) {
+    const batch = documents.slice(offset, offset + batchSize);
+    const task = await index.addDocuments(batch);
+    await client.waitForTask(task.taskUid, { timeOutMs: 120000 });
+    indexed += batch.length;
+  }
 
-    _geo: (normalizedCompany.extra?.lat && normalizedCompany.extra?.lng)
-      ? { lat: normalizedCompany.extra.lat, lng: normalizedCompany.extra.lng }
-      : null,
-
-    work_hours_status: normalizedCompany.work_hours?.status ?? null,
-    work_hours_time: normalizedCompany.work_hours?.work_time ?? null,
-
-    phones_ext: normalizedCompany.phones_ext || [],
-
-    keywords: generateCompanyKeywords(normalizedCompany, keywordOptions),
-  };
+  return indexed;
 }
 
-export async function indexCompanies(jsonlPath: string): Promise<{ total: number; indexed: number }> {
-  console.log(`Starting Meilisearch indexing from: ${jsonlPath}`);
-  const keywordOptions = getServerKeywordGenerationOptions();
-
-  // Configure index first
+export async function reindexAll(): Promise<ReindexAllResult> {
   await configureCompaniesIndex();
 
   const client = getMeiliClient();
-  const index = client.index<MeiliCompanyDocument>(COMPANIES_INDEX);
+  const index = getCompaniesIndex();
 
-  // Clear existing documents
-  console.log("Clearing existing documents...");
-  const deleteTask = await index.deleteAllDocuments();
-  await client.waitForTask(deleteTask.taskUid, { timeOutMs: 60000 });
+  const removeTask = await index.deleteAllDocuments();
+  await client.waitForTask(removeTask.taskUid, { timeOutMs: 120000 });
 
-  const input = fs.createReadStream(jsonlPath, { encoding: "utf-8" });
-  const rl = createInterface({ input, crlfDelay: Infinity });
-
-  const documents: MeiliCompanyDocument[] = [];
-  const BATCH_SIZE = 5000;
   let total = 0;
   let indexed = 0;
+  let afterId: string | null = null;
 
-  for await (const line of rl) {
-    const raw = line.trim();
-    if (!raw) continue;
+  for (;;) {
+    const companies = await biznesinfoListCompaniesForSearchIndexBatch({
+      afterId,
+      limit: REINDEX_DB_PAGE_SIZE,
+    });
+    if (companies.length === 0) break;
 
-    try {
-      const company = JSON.parse(raw) as BiznesinfoCompany;
-      if (!company.source_id) continue;
-      if (isExcludedBiznesinfoCompany(company)) continue;
+    const documents = companies
+      .filter((company) => Boolean(company.id))
+      .map((company) => toDocument(company));
 
-      documents.push(companyToDocument(company, keywordOptions));
-      total++;
-
-      if (documents.length >= BATCH_SIZE) {
-        console.log(`Indexing batch of ${documents.length} documents...`);
-        const task = await index.addDocuments(documents);
-        await client.waitForTask(task.taskUid, { timeOutMs: 120000 });
-        indexed += documents.length;
-        console.log(`Indexed ${indexed} documents so far...`);
-        documents.length = 0;
-      }
-    } catch {
-      // Skip invalid JSON lines
-    }
+    total += documents.length;
+    indexed += await addDocumentsInBatches(documents, REINDEX_DB_PAGE_SIZE);
+    afterId = companies[companies.length - 1]?.id || null;
   }
 
-  // Index remaining documents
-  if (documents.length > 0) {
-    console.log(`Indexing final batch of ${documents.length} documents...`);
-    const task = await index.addDocuments(documents);
-    await client.waitForTask(task.taskUid, { timeOutMs: 120000 });
-    indexed += documents.length;
+  return {
+    total,
+    indexed,
+  };
+}
+
+export async function indexCompany(id: string): Promise<IndexCompanyResult> {
+  const targetId = String(id || "").trim();
+  if (!targetId) {
+    throw new Error("Company id is required");
   }
 
-  console.log(`Indexing complete: ${indexed}/${total} documents`);
-  return { total, indexed };
+  await configureCompaniesIndex();
+  const companyRows = await biznesinfoListCompaniesForSearchIndex([targetId]);
+  const company = companyRows[0];
+
+  if (!company) {
+    await deleteCompany(targetId);
+    return { id: targetId, indexed: false, reason: "not_found" };
+  }
+
+  const indexed = await addDocumentsInBatches([toDocument(company)], 1);
+  return {
+    id: targetId,
+    indexed: indexed === 1,
+  };
+}
+
+export async function deleteCompany(id: string): Promise<DeleteCompanyResult> {
+  const targetId = String(id || "").trim();
+  if (!targetId) {
+    throw new Error("Company id is required");
+  }
+
+  await configureCompaniesIndex();
+  const client = getMeiliClient();
+  const index = getCompaniesIndex();
+
+  const task = await index.deleteDocument(targetId);
+  await client.waitForTask(task.taskUid, { timeOutMs: 120000 });
+  return {
+    id: targetId,
+    deleted: true,
+  };
+}
+
+// Backward-compatible alias.
+export async function indexCompanies(): Promise<ReindexAllResult> {
+  return reindexAll();
 }

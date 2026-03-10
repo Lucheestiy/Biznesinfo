@@ -45,6 +45,7 @@ export interface MeiliSearchParams {
   keywords?: string | null;
   region?: string | null;
   city?: string | null;
+  category?: string | null;  // Категория для AI-ассистента
   categorySlug?: string | null;
   rubricSlug?: string | null;
   offset?: number;

@@ -7,9 +7,13 @@
     "build": "npm --prefix app run build",
     "start": "npm --prefix app run start",
     "lint": "npm --prefix app run lint",
+    "predeploy:assistant": "bash ./predeploy-assistant.sh",
     "sync:biznesinfo": "node scripts/sync_biznesinfo_data.mjs",
     "stats:coords": "node scripts/stats_company_coords.mjs",
-    "index:meili": "npx tsx scripts/index_meilisearch.ts"
+    "index:meili": "npx tsx scripts/index_meilisearch.ts",
+    "import:biznesinfo:pg": "npm --prefix app run import:biznesinfo:pg",
+    "verify:part4": "npm --prefix app run verify:part4",
+    "prisma:migrate:deploy": "npm --prefix app run prisma:migrate:deploy"
   },
   "dependencies": {
     "meilisearch": "^0.48.2",

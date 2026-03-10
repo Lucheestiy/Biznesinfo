@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { use, useEffect, useRef, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import CompanyCard from "@/components/CompanyCard";
+import Pagination from "@/components/Pagination";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
 import { regions } from "@/data/regions";
@@ -15,6 +16,47 @@ import { formatCompanyCount } from "@/lib/utils/plural";
 
 interface PageProps {
   params: Promise<{ category: string; rubric: string[] }>;
+}
+
+const PAGE_SIZE = 10;
+const EMPTY_LOGO_HINTS = [
+  "/images/logo/no-logo",
+  "/images/logo/no_logo",
+  "/images/logo/noimage",
+  "/images/logo/no-image",
+];
+
+function hasCompanyLogo(logoUrl: string): boolean {
+  const normalized = (logoUrl || "").trim().toLowerCase();
+  if (!normalized) return false;
+  return !EMPTY_LOGO_HINTS.some((hint) => normalized.includes(hint));
+}
+
+function textCompletenessScore(value: string, maxPoints: number): number {
+  const length = (value || "").trim().length;
+  if (!length) return 0;
+  return Math.min(maxPoints, Math.round(length / 80));
+}
+
+function companyCompletenessScore(company: BiznesinfoRubricResponse["companies"][number]): number {
+  let score = 0;
+
+  if ((company.address || "").trim()) score += 8;
+  if ((company.city || "").trim()) score += 4;
+  if (company.primary_category_slug || company.primary_rubric_slug) score += 6;
+  if ((company.work_hours?.status || "").trim()) score += 4;
+  if ((company.work_hours?.work_time || "").trim()) score += 4;
+
+  if ((company.phones_ext || []).length > 0) score += 14;
+  else if ((company.phones || []).length > 0) score += 10;
+
+  if ((company.emails || []).length > 0) score += 8;
+  if ((company.websites || []).length > 0) score += 8;
+
+  score += textCompletenessScore(company.description || "", 14);
+  score += textCompletenessScore(company.about || "", 20);
+
+  return score;
 }
 
 export default function SubcategoryPage({ params }: PageProps) {
@@ -28,6 +70,7 @@ export default function SubcategoryPage({ params }: PageProps) {
   const [companyDraft, setCompanyDraft] = useState("");
   const [serviceDraft, setServiceDraft] = useState("");
   const [cityDraft, setCityDraft] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
   const cityInputRef = useRef<HTMLInputElement>(null);
 
@@ -39,6 +82,14 @@ export default function SubcategoryPage({ params }: PageProps) {
     "absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl bg-[#820251]/10 text-[#820251] hover:bg-[#820251]/15 active:bg-[#820251]/20 transition-colors flex items-center justify-center";
   const clearInputButtonClassName =
     "absolute right-14 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg text-[#820251]/60 hover:text-[#820251] hover:bg-[#820251]/10 active:bg-[#820251]/15 transition-colors flex items-center justify-center";
+
+  const handleBackToAssistant = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/assistant");
+  };
 
   const navigateToSearch = () => {
     const params = new URLSearchParams();
@@ -56,13 +107,17 @@ export default function SubcategoryPage({ params }: PageProps) {
   };
 
   useEffect(() => {
+    setCurrentPage(1);
+  }, [category, rubricPath, selectedRegion]);
+
+  useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
 
     const rubricSlug = `${category}/${rubricPath}`;
     const region = selectedRegion || "";
     fetch(
-      `/api/biznesinfo/rubric?slug=${encodeURIComponent(rubricSlug)}&region=${encodeURIComponent(region)}&offset=0&limit=60`,
+      `/api/biznesinfo/rubric?slug=${encodeURIComponent(rubricSlug)}&region=${encodeURIComponent(region)}&offset=${(currentPage - 1) * PAGE_SIZE}&limit=${PAGE_SIZE}`,
     )
       .then((r) => (r.ok ? r.json() : null))
       .then((resp: BiznesinfoRubricResponse | null) => {
@@ -79,7 +134,26 @@ export default function SubcategoryPage({ params }: PageProps) {
     return () => {
       isMounted = false;
     };
-  }, [category, rubricPath, selectedRegion]);
+  }, [category, rubricPath, selectedRegion, currentPage]);
+
+  const totalPages = data ? Math.ceil((data.page?.total || 0) / PAGE_SIZE) : 0;
+
+  const sortedCompanies = useMemo(() => {
+    const items = (data?.companies || []).map((company, index) => ({
+      company,
+      index,
+      hasLogo: hasCompanyLogo(company.logo_url || ""),
+      completeness: companyCompletenessScore(company),
+    }));
+
+    items.sort((a, b) => {
+      if (a.hasLogo !== b.hasLogo) return a.hasLogo ? -1 : 1;
+      if (b.completeness !== a.completeness) return b.completeness - a.completeness;
+      return a.index - b.index;
+    });
+
+    return items.map((item) => item.company);
+  }, [data]);
 
   const icon = BIZNESINFO_CATEGORY_ICONS[category] || "🏢";
 
@@ -91,16 +165,28 @@ export default function SubcategoryPage({ params }: PageProps) {
         {/* Breadcrumbs */}
         <div className="bg-white border-b border-gray-200">
           <div className="container mx-auto px-4 py-3">
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Link href="/" className="hover:text-[#820251]">{t("common.home")}</Link>
-              <span>/</span>
-              <Link href="/#catalog" className="hover:text-[#820251]">{t("nav.catalog")}</Link>
-              <span>/</span>
-              <Link href={`/catalog/${category}`} className="hover:text-[#820251]">
-                {data?.rubric?.category_name || category}
-              </Link>
-              <span>/</span>
-              <span className="text-[#820251] font-medium">{data?.rubric?.name || rubricPath}</span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleBackToAssistant}
+                aria-label="Вернуться назад в AI-ассистент"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 text-[#820251] hover:bg-[#820251]/5 active:bg-[#820251]/10 transition-colors"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <div className="flex min-w-0 items-center gap-2 overflow-x-auto text-sm text-gray-600">
+                <Link href="/" className="whitespace-nowrap hover:text-[#820251]">{t("common.home")}</Link>
+                <span>/</span>
+                <Link href="/#catalog" className="whitespace-nowrap hover:text-[#820251]">{t("nav.catalog")}</Link>
+                <span>/</span>
+                <Link href={`/catalog/${category}`} className="whitespace-nowrap hover:text-[#820251]">
+                  {data?.rubric?.category_name || category}
+                </Link>
+                <span>/</span>
+                <span className="whitespace-nowrap text-[#820251] font-medium">{data?.rubric?.name || rubricPath}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -353,10 +439,18 @@ export default function SubcategoryPage({ params }: PageProps) {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {data.companies.map((company) => (
-                <CompanyCard key={company.id} company={company} />
-              ))}
+            <div className="space-y-6">
+              <div className="flex flex-col gap-4">
+                {sortedCompanies.map((company) => (
+                  <CompanyCard
+                    key={company.id}
+                    company={company}
+                    showCategory
+                    variant="search"
+                  />
+                ))}
+              </div>
+              <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
             </div>
           )}
         </div>

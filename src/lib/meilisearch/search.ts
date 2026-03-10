@@ -513,6 +513,11 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
   if (params.region) {
     filter.push(`region = "${params.region}"`);
   }
+  if (params.category) {
+    // Фильтруем по имени категории (contains для мягкого matching'а)
+    const catSafe = params.category.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    filter.push(`primary_category_name ~ "${catSafe}"`);
+  }
   if (params.categorySlug) {
     filter.push(`category_slugs = "${params.categorySlug}"`);
   }

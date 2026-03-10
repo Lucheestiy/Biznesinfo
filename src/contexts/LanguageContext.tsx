@@ -98,6 +98,7 @@ const translations: Record<Language, Record<string, string>> = {
     "ai.title": "AI-ассистент",
     "ai.description": "Оставьте заявку через AI-ассистента. Он автоматически разошлёт ваш запрос компаниям.",
     "ai.shortDesc": "Оставьте заявку — AI разошлёт её подходящим компаниям автоматически",
+    "ai.authRequired": "Доступен для авторизованных пользователей. Войдите или зарегистрируйтесь.",
     "ai.inactive": "AI-ассистент недоступен",
     "ai.personalAssistant": "Ваш персональный помощник",
     "ai.requestSent": "Заявка отправлена!",
@@ -701,6 +702,8 @@ const translations: Record<Language, Record<string, string>> = {
     // AI Assistant
     "ai.title": "AI Assistent",
     "ai.description": "Leave a request through AI assistant. It will automatically send your request to companies.",
+    "ai.shortDesc": "Leave a request — AI will automatically send it to suitable companies",
+    "ai.authRequired": "Available for authorized users. Sign in or register.",
     "ai.inactive": "AI assistant unavailable",
     "ai.personalAssistant": "Your personal assistant",
     "ai.requestSent": "Request sent!",
@@ -1295,6 +1298,8 @@ const translations: Record<Language, Record<string, string>> = {
     // AI Assistant
     "ai.title": "AI Assistent",
     "ai.description": "Пакіньце заяўку праз AI-асістэнта. Ён аўтаматычна разашле ваш запыт кампаніям.",
+    "ai.shortDesc": "Пакіньце заяўку — AI аўтаматычна разашле яе падыходзячым кампаніям",
+    "ai.authRequired": "Даступны для аўтарызаваных карыстальнікаў. Увайдзіце ці зарэгіструйцеся.",
     "ai.inactive": "AI-асістэнт недаступны",
     "ai.personalAssistant": "Ваш персанальны памочнік",
     "ai.requestSent": "Заяўка адпраўлена!",
@@ -1887,6 +1892,8 @@ const translations: Record<Language, Record<string, string>> = {
     // AI Assistant
     "ai.title": "AI Assistent",
     "ai.description": "通过AI助手提交请求。它会自动将您的请求发送给相关公司。",
+    "ai.shortDesc": "提交请求 - AI将自动将其发送给合适的公司",
+    "ai.authRequired": "仅限注册用户使用。请登录或注册。",
     "ai.inactive": "AI助手不可用",
     "ai.personalAssistant": "您的个人助手",
     "ai.requestSent": "请求已发送！",

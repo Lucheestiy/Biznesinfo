@@ -67,7 +67,7 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-gray-700 pt-6 text-center text-sm">
-          &copy; 2026 Biznesinfo.by. {t("footer.rights")}.
+          &copy; 2026 biznesinfo.by. {t("footer.rights")}.
         </div>
       </div>
     </footer>

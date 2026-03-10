@@ -234,6 +234,12 @@ export default function Header() {
       });
   }, [mobileMenuOpen, favoritesKey]);
 
+  useEffect(() => {
+    if (!mobileMenuOpen && expandedItem !== null) {
+      setExpandedItem(null);
+    }
+  }, [mobileMenuOpen, expandedItem]);
+
   return (
     <header ref={headerRef} className="bg-[#a0006d] text-white shadow-lg sticky top-0 z-50">
       <div className="container mx-auto px-3 sm:px-4">
@@ -710,48 +716,74 @@ export default function Header() {
             <nav className="flex flex-col gap-2 text-sm">
               {/* Favorites (quick list) */}
               <div className="border-b border-white/10">
-                <Link
-                  href="/favorites"
-                  onClick={() => setMobileMenuOpen(false)}
+                <button
+                  type="button"
+                  onClick={() => setExpandedItem(expandedItem === "favorites" ? null : "favorites")}
                   className="w-full flex items-center justify-between py-3 px-2 hover:text-yellow-400 transition-colors text-left font-medium"
                 >
                   <span className="flex items-center gap-2">
                     <span aria-hidden>❤️</span>
                     <span>{t("nav.favorites")}</span>
                   </span>
-                  <span className="text-xs text-white/80">{favorites.length}</span>
-                </Link>
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs text-white/80">{favorites.length}</span>
+                    <svg
+                      className={`w-4 h-4 transition-transform duration-200 ${
+                        expandedItem === "favorites" ? "rotate-180" : ""
+                      }`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </span>
+                </button>
 
-                {favorites.length === 0 ? (
-                  <div className="pl-4 pr-2 pb-3 text-white/80 text-sm">
-                    {t("favorites.empty")}
-                  </div>
-                ) : favoritesLoading ? (
-                  <div className="pl-4 pr-2 pb-3 text-white/80 text-sm">{t("common.loading")}</div>
-                ) : (
-                  <div className="pl-4 pr-2 pb-3 flex flex-col gap-2">
-                    {favoritesToShowInMenu.map((company) => (
-                      <Link
-                        key={company.id}
-                        href={`/company/${encodeURIComponent(companySlugForUrl(company.id))}`}
-                        onClick={() => setMobileMenuOpen(false)}
-                        className="text-white/90 hover:text-yellow-400 transition-colors truncate"
-                        title={company.name}
-                      >
-                        {company.name}
-                      </Link>
-                    ))}
-                    {hiddenFavoritesCount > 0 && (
+                <div
+                  className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                    expandedItem === "favorites" ? "max-h-[26rem] opacity-100 mb-2" : "max-h-0 opacity-0"
+                  }`}
+                >
+                  {favorites.length === 0 ? (
+                    <div className="pl-4 pr-2 pb-3 text-white/80 text-sm">
+                      {t("favorites.empty")}
+                    </div>
+                  ) : favoritesLoading ? (
+                    <div className="pl-4 pr-2 pb-3 text-white/80 text-sm">{t("common.loading")}</div>
+                  ) : (
+                    <div className="pl-4 pr-2 pb-3 flex flex-col gap-2">
+                      {favoritesToShowInMenu.map((company) => (
+                        <Link
+                          key={company.id}
+                          href={`/company/${encodeURIComponent(companySlugForUrl(company.id))}`}
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="text-white/90 hover:text-yellow-400 transition-colors truncate"
+                          title={company.name}
+                        >
+                          {company.name}
+                        </Link>
+                      ))}
+                      {hiddenFavoritesCount > 0 && (
+                        <Link
+                          href="/favorites"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="text-xs text-white/80 hover:text-yellow-400 transition-colors"
+                        >
+                          {t("common.more")} {hiddenFavoritesCount}
+                        </Link>
+                      )}
                       <Link
                         href="/favorites"
                         onClick={() => setMobileMenuOpen(false)}
-                        className="text-xs text-white/80 hover:text-yellow-400 transition-colors"
+                        className="pt-1 text-xs text-white/80 hover:text-yellow-400 transition-colors"
                       >
-                        {t("common.more")} {hiddenFavoritesCount}
+                        → {t("nav.favorites")}
                       </Link>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="border-b border-white/10">

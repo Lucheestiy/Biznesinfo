@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { indexCompanies } from "@/lib/meilisearch/indexer";
+import { reindexAll } from "@/lib/meilisearch/indexer";
 
 const ADMIN_SECRET = process.env.ADMIN_SECRET || "dev-secret-change-me";
 
@@ -10,12 +10,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const jsonlPath = process.env.BIZNESINFO_COMPANIES_JSONL_PATH
-    || "/app/public/data/biznesinfo/companies.jsonl";
-
   try {
-    console.log(`Starting reindex from: ${jsonlPath}`);
-    const result = await indexCompanies(jsonlPath);
+    console.log("Starting reindex from PostgreSQL catalog...");
+    const result = await reindexAll();
 
     return NextResponse.json({
       success: true,
@@ -39,6 +36,6 @@ export async function GET() {
     endpoint: "/api/admin/reindex",
     method: "POST",
     auth: "Bearer token required",
-    description: "Triggers a full reindex of the Meilisearch companies index",
+    description: "Triggers a full reindex of the Meilisearch companies index from PostgreSQL",
   });
 }

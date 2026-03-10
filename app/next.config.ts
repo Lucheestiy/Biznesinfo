@@ -14,6 +14,20 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      {
+        source: "/catalog/sporttovary",
+        destination: "/catalog/sport-zdorove-krasota/sportivnye-tovary-snaryajenie",
+        permanent: true,
+      },
+      {
+        source: "/catalog/selskoe-hozyaystvo",
+        destination: "/catalog/apk-selskoe-i-lesnoe-hozyaystvo/selskoe-hozyaystvo",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

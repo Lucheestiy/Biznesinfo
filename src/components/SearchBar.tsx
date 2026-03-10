@@ -505,6 +505,9 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
               <p className="text-pink-100 text-sm md:text-base leading-relaxed group-hover/consult:text-white transition-colors">
                 {t("ai.shortDesc")}
               </p>
+              <p className="text-yellow-200 text-xs mt-1 group-hover/consult:text-yellow-100 transition-colors">
+                {t("ai.authRequired")}
+              </p>
             </div>
 
             <div className="flex-shrink-0">

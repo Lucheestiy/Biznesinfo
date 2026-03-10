@@ -43,10 +43,10 @@ export default function ResetRequestClient() {
         <div className="container mx-auto px-4 py-10">
           <div className="max-w-md mx-auto bg-white rounded-xl shadow-sm p-8">
             <h1 className="text-2xl font-bold text-gray-800 mb-2">
-              {t("auth.reset") || "Сброс пароля"}
+              {t("auth.forgot") || "Забыли пароль?"}
             </h1>
             <p className="text-gray-600 mb-6">
-              {t("auth.resetDesc") || "Введите email — мы отправим ссылку для сброса (если аккаунт существует)."}
+              {t("auth.resetDesc") || "Введите email — мы отправим ссылку для восстановления доступа (если аккаунт существует)."}
             </p>
 
             {error && (
@@ -97,4 +97,3 @@ export default function ResetRequestClient() {
     </div>
   );
 }
-

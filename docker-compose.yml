@@ -25,7 +25,6 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      BIZNESINFO_COMPANIES_JSONL_PATH: /app/public/data/biznesinfo/companies.jsonl
       BIZNESINFO_LOGO_UPSTREAM_SUFFIX: ${BIZNESINFO_LOGO_UPSTREAM_SUFFIX:-}
       MEILI_HOST: http://meilisearch:7700
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-changeme-min-16-chars}
@@ -53,6 +52,9 @@ services:
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       OPENAI_TIMEOUT_SEC: ${OPENAI_TIMEOUT_SEC:-20}
       OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS:-800}
+      AI_UPLOAD_AUDIO_TRANSCRIPTION_MODEL: ${AI_UPLOAD_AUDIO_TRANSCRIPTION_MODEL:-whisper-1}
+      AI_UPLOAD_AUDIO_TRANSCRIPTION_TIMEOUT_SEC: ${AI_UPLOAD_AUDIO_TRANSCRIPTION_TIMEOUT_SEC:-45}
+      AI_UPLOAD_AUDIO_TRANSCRIPTION_LANGUAGE: ${AI_UPLOAD_AUDIO_TRANSCRIPTION_LANGUAGE:-}
       KARTOTEKA_API_TOKEN: ${KARTOTEKA_API_TOKEN:-}
       KARTOTEKA_API_BASE_URL: ${KARTOTEKA_API_BASE_URL:-https://api.kartoteka.by}
       KARTOTEKA_CACHE_TTL_HOURS: ${KARTOTEKA_CACHE_TTL_HOURS:-168}
@@ -60,6 +62,7 @@ services:
       KARTOTEKA_NAME_CACHE_TTL_HOURS: ${KARTOTEKA_NAME_CACHE_TTL_HOURS:-24}
       KARTOTEKA_TIMEOUT_MS: ${KARTOTEKA_TIMEOUT_MS:-5000}
       BIZNESINFO_LIQUIDATED_BLACKLIST_PATH: ${BIZNESINFO_LIQUIDATED_BLACKLIST_PATH:-/tmp/biznesinfo-liquidated-blacklist/liquidated-blacklist.json}
+      AI_UPLOADS_DIR: ${AI_UPLOADS_DIR:-/tmp/biznesinfo-ai-uploads}
     networks:
       - biznesinfo-network
       - federation-network
@@ -70,6 +73,7 @@ services:
       - ./app/public/companies:/app/public/companies:ro
       - ./app/.cache/biznesinfo-logo-cache:/tmp/biznesinfo-logo-cache
       - ./app/.cache/biznesinfo-liquidated-blacklist:/tmp/biznesinfo-liquidated-blacklist
+      - ./app/.cache/biznesinfo-ai-uploads:/tmp/biznesinfo-ai-uploads
       - ./secrets/codex-auth.json:/run/secrets/codex_auth_json:ro
     expose:
       - "3000"

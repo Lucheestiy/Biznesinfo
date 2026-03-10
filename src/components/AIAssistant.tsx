@@ -59,7 +59,11 @@ export default function AIAssistant({
     phone?: string;
     message?: string;
     files?: string;
+    submit?: string;
   }>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const [matchedCount, setMatchedCount] = useState(0);
 
   useEffect(() => {
     if (!floating || typeof window === "undefined") return;
@@ -209,40 +213,80 @@ export default function AIAssistant({
     };
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
-    // Here would be the API call to send the request to AI
-    console.log("AI Request:", {
-      senderCompanyName,
-      contactPerson,
-      position,
-      phone,
-      message,
-      companyName,
-      companyId,
-      files: attachedFiles.map((f) => ({
+    setIsLoading(true);
+    setErrors({});
+
+    try {
+      // Подготавливаем файлы (если есть)
+      const filesData = attachedFiles.map((f) => ({
         name: f.file.name,
         size: f.file.size,
         type: f.file.type,
-      })),
-    });
-    setSubmitted(true);
-    setMessage("");
-    // Cleanup file previews
-    attachedFiles.forEach((file) => {
-      if (file.preview) {
-        URL.revokeObjectURL(file.preview);
-      }
-    });
-    setAttachedFiles([]);
-    setErrors({});
+      }));
 
-    setTimeout(() => {
-      setSubmitted(false);
-      setIsOpen(false);
-    }, 3000);
+      // Отправляем запрос на сервер
+      const response = await fetch('/api/ai-assistant', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          senderCompanyName,
+          contactPerson,
+          position,
+          phone,
+          message,
+          targetCompanyId: companyId,
+          targetCompanyName: companyName,
+          files: filesData,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Ошибка отправки запроса');
+      }
+
+      // Сохраняем результаты
+      setRequestId(data.requestId);
+      setMatchedCount(data.matchedCompanies);
+      setSubmitted(true);
+
+      // Очищаем форму
+      setMessage("");
+      setSenderCompanyName("");
+      setContactPerson("");
+      setPosition("");
+      setPhone("");
+      
+      // Cleanup file previews
+      attachedFiles.forEach((file) => {
+        if (file.preview) {
+          URL.revokeObjectURL(file.preview);
+        }
+      });
+      setAttachedFiles([]);
+
+      // Закрываем через 5 секунд
+      setTimeout(() => {
+        setSubmitted(false);
+        setIsOpen(false);
+        setRequestId(null);
+      }, 5000);
+
+    } catch (error) {
+      console.error('AI Assistant submit error:', error);
+      setErrors({ 
+        submit: error instanceof Error ? error.message : 'Не удалось отправить заявку. Попробуйте позже.' 
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Floating button on main page
@@ -303,12 +347,40 @@ export default function AIAssistant({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-bold text-gray-800 mb-2">{t("ai.requestSent")}</h3>
-                  <p className="text-gray-600">{t("ai.requestProcessing")}</p>
+                  <h3 className="text-lg font-bold text-gray-800 mb-2">✅ Заявка отправлена!</h3>
+                  
+                  {requestId && (
+                    <div className="bg-gray-50 rounded-lg p-3 mb-3">
+                      <p className="text-sm text-gray-600">Номер заявки:</p>
+                      <p className="font-mono font-bold text-[#820251]">{requestId}</p>
+                    </div>
+                  )}
+                  
+                  {matchedCount > 0 && (
+                    <p className="text-gray-700 mb-2">
+                      📬 Найдено и уведомлено компаний: <strong>{matchedCount}</strong>
+                    </p>
+                  )}
+                  
+                  <p className="text-gray-600 text-sm">
+                    Ожидайте ответа в течение 15-30 минут. Мы отправим вам уведомление, когда компании ответят.
+                  </p>
+                  
+                  <button
+                    onClick={() => {
+                      setSubmitted(false);
+                      setIsOpen(false);
+                      setRequestId(null);
+                    }}
+                    className="mt-4 text-[#820251] hover:underline text-sm"
+                  >
+                    Закрыть
+                  </button>
                 </div>
               ) : (
                 <>
-                  <p className="text-gray-600 mb-4">{t("ai.description")}</p>
+                  <p className="text-gray-600 mb-2">{t("ai.description")}</p>
+                  <p className="text-orange-600 text-sm mb-4 font-medium">{t("ai.authRequired")}</p>
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="flex justify-end">
                       <Link
@@ -512,11 +584,28 @@ export default function AIAssistant({
                       )}
                     </div>
 
+                    {errors.submit && (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <p className="text-red-600 text-sm">{errors.submit}</p>
+                      </div>
+                    )}
+
                     <button
                       type="submit"
-                      className="w-full mt-4 bg-[#820251] text-white py-3 rounded-lg font-semibold hover:bg-[#7a0150] transition-colors"
+                      disabled={isLoading}
+                      className="w-full mt-4 bg-[#820251] text-white py-3 rounded-lg font-semibold hover:bg-[#7a0150] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
-                      {t("ai.sendRequest")}
+                      {isLoading ? (
+                        <>
+                          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                          </svg>
+                          Отправка...
+                        </>
+                      ) : (
+                        t("ai.sendRequest")
+                      )}
                     </button>
                   </form>
                 </>
@@ -591,8 +680,35 @@ export default function AIAssistant({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-bold text-gray-800 mb-2">{t("ai.prioritySent")}</h3>
-                  <p className="text-gray-600">{t("ai.priorityDesc")}</p>
+                  <h3 className="text-lg font-bold text-gray-800 mb-2">✅ Заявка отправлена!</h3>
+                  
+                  {requestId && (
+                    <div className="bg-gray-50 rounded-lg p-3 mb-3">
+                      <p className="text-sm text-gray-600">Номер заявки:</p>
+                      <p className="font-mono font-bold text-[#820251]">{requestId}</p>
+                    </div>
+                  )}
+                  
+                  {companyName && (
+                    <p className="text-gray-700 mb-2">
+                      📬 Отправлено компании: <strong>{companyName}</strong>
+                    </p>
+                  )}
+                  
+                  <p className="text-gray-600 text-sm">
+                    Ожидайте ответа в течение 15-30 минут.
+                  </p>
+                  
+                  <button
+                    onClick={() => {
+                      setSubmitted(false);
+                      setIsOpen(false);
+                      setRequestId(null);
+                    }}
+                    className="mt-4 text-[#820251] hover:underline text-sm"
+                  >
+                    Закрыть
+                  </button>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -798,11 +914,28 @@ export default function AIAssistant({
                     )}
                   </div>
 
+                  {errors.submit && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <p className="text-red-600 text-sm">{errors.submit}</p>
+                    </div>
+                  )}
+
                   <button
                     type="submit"
-                    className="w-full mt-4 bg-[#820251] text-white py-3 rounded-lg font-semibold hover:bg-[#7a0150] transition-colors"
+                    disabled={isLoading}
+                    className="w-full mt-4 bg-[#820251] text-white py-3 rounded-lg font-semibold hover:bg-[#7a0150] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    {t("ai.sendRequest")}
+                    {isLoading ? (
+                      <>
+                        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                        </svg>
+                        Отправка...
+                      </>
+                    ) : (
+                      t("ai.sendRequest")
+                    )}
                   </button>
                 </form>
               )}

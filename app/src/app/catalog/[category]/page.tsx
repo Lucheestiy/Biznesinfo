@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -13,10 +14,16 @@ interface PageProps {
   params: Promise<{ category: string }>;
 }
 
+const LEGACY_CATEGORY_ALIAS_REDIRECTS: Record<string, string> = {
+  sporttovary: "/catalog/sport-zdorove-krasota/sportivnye-tovary-snaryajenie",
+  "selskoe-hozyaystvo": "/catalog/apk-selskoe-i-lesnoe-hozyaystvo/selskoe-hozyaystvo",
+};
+
 export default function CategoryPage({ params }: PageProps) {
   const { category } = use(params);
   const { t } = useLanguage();
   const { selectedRegion, setSelectedRegion, regionName } = useRegion();
+  const router = useRouter();
 
   const [catalog, setCatalog] = useState<BiznesinfoCatalogResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,6 +51,13 @@ export default function CategoryPage({ params }: PageProps) {
 
   const categoryData: BiznesinfoCatalogCategory | null =
     (catalog?.categories || []).find((c: BiznesinfoCatalogCategory) => c.slug === category) || null;
+
+  useEffect(() => {
+    if (isLoading || categoryData) return;
+    const aliasPath = LEGACY_CATEGORY_ALIAS_REDIRECTS[String(category || "").trim().toLowerCase()];
+    if (!aliasPath) return;
+    router.replace(aliasPath);
+  }, [category, categoryData, isLoading, router]);
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-gray-100">

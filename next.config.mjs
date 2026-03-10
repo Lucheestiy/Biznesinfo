@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // output: "standalone", // temporarily disabled for build issues
+  output: "standalone",
   images: {
     remotePatterns: [
       {

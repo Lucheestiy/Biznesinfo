@@ -771,6 +771,69 @@ export async function isLiquidatedByKartoteka(candidate: KartotekaLookupCandidat
   return resolved;
 }
 
+export async function filterOutKnownLiquidatedByKartoteka<
+  T extends {
+    source_id?: string | null;
+    id?: string | null;
+    unp?: string | null;
+    name?: string | null;
+    city?: string | null;
+    address?: string | null;
+  },
+>(items: T[]): Promise<{
+  items: T[];
+  removed: number;
+}> {
+  const source = Array.isArray(items) ? items : [];
+  if (!source.length) return { items: [], removed: 0 };
+
+  await ensureCacheLoaded();
+  const now = Date.now();
+
+  const out: T[] = [];
+  let removed = 0;
+
+  for (const item of source) {
+    const sourceId = String(item?.source_id || item?.id || "").trim();
+    const unp = normalizeBiznesinfoUnp(item?.unp || "");
+
+    if (isExcludedBiznesinfoCompany({ source_id: sourceId, unp })) {
+      removed += 1;
+      continue;
+    }
+
+    if (isValidUnp(unp)) {
+      const cached = kartotekaCacheByUnp.get(unp);
+      if (cached && now - cached.checkedAtMs <= KARTOTEKA_CACHE_TTL_MS && cached.status === "liquidated") {
+        removed += 1;
+        continue;
+      }
+      out.push(item);
+      continue;
+    }
+
+    const lookupKey = buildNameLookupKey(item?.name || "", item?.city || "", item?.address || "");
+    if (!lookupKey) {
+      out.push(item);
+      continue;
+    }
+
+    const cachedByName = kartotekaCacheByName.get(lookupKey);
+    if (
+      cachedByName &&
+      now - cachedByName.checkedAtMs <= KARTOTEKA_NAME_CACHE_TTL_MS &&
+      cachedByName.status === "liquidated"
+    ) {
+      removed += 1;
+      continue;
+    }
+
+    out.push(item);
+  }
+
+  return { items: out, removed };
+}
+
 export async function filterOutLiquidatedByKartoteka<
   T extends {
     source_id?: string | null;
@@ -787,23 +850,40 @@ export async function filterOutLiquidatedByKartoteka<
   const source = Array.isArray(items) ? items : [];
   if (!source.length) return { items: [], removed: 0 };
 
+  // Parallelize checks with a conservative cap to reduce page latency.
+  const CONCURRENCY = 8;
+  const checks = new Array<boolean>(source.length).fill(false);
+  let cursor = 0;
+
+  const worker = async () => {
+    while (true) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= source.length) return;
+
+      const item = source[index];
+      checks[index] = await isLiquidatedByKartoteka({
+        source_id: item?.source_id || "",
+        id: item?.id || "",
+        unp: item?.unp || "",
+        name: item?.name || "",
+        city: item?.city || "",
+        address: item?.address || "",
+      });
+    }
+  };
+
+  const workers = Array.from({ length: Math.min(CONCURRENCY, source.length) }, () => worker());
+  await Promise.all(workers);
+
   const out: T[] = [];
   let removed = 0;
-
-  for (const item of source) {
-    const isLiquidated = await isLiquidatedByKartoteka({
-      source_id: item?.source_id || "",
-      id: item?.id || "",
-      unp: item?.unp || "",
-      name: item?.name || "",
-      city: item?.city || "",
-      address: item?.address || "",
-    });
-    if (isLiquidated) {
+  for (let i = 0; i < source.length; i += 1) {
+    if (checks[i]) {
       removed += 1;
       continue;
     }
-    out.push(item);
+    out.push(source[i]);
   }
 
   return { items: out, removed };

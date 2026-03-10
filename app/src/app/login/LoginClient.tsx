@@ -52,7 +52,7 @@ export default function LoginClient({ nextPath }: { nextPath?: string | null }) 
           <div className="max-w-md mx-auto bg-white rounded-xl shadow-sm p-8">
             <h1 className="text-2xl font-bold text-gray-800 mb-2">{t("auth.login") || "Вход"}</h1>
             <p className="text-gray-600 mb-6">
-              {t("auth.loginDesc") || "Войдите, чтобы открыть личный кабинет и лимиты AI."}
+              {t("auth.loginDesc") || "Войдите, чтобы открыть личный кабинет и лимиты AI. AI-ассистентом могут пользоваться только авторизованные пользователи."}
             </p>
 
             {error && (
@@ -89,6 +89,12 @@ export default function LoginClient({ nextPath }: { nextPath?: string | null }) 
                 />
               </div>
 
+              <div className="flex justify-end">
+                <Link href="/reset" className="text-sm text-[#820251] hover:underline">
+                  {t("auth.forgot") || "Забыли пароль?"}
+                </Link>
+              </div>
+
               <button
                 type="submit"
                 disabled={isSubmitting}
@@ -98,12 +104,9 @@ export default function LoginClient({ nextPath }: { nextPath?: string | null }) 
               </button>
             </form>
 
-            <div className="mt-6 text-sm text-gray-600 flex items-center justify-between">
+            <div className="mt-6 text-sm text-gray-600">
               <Link href="/register" className="text-[#820251] hover:underline">
                 {t("auth.createAccount") || "Создать аккаунт"}
-              </Link>
-              <Link href="/reset" className="text-gray-600 hover:underline">
-                {t("auth.forgot") || "Забыли пароль?"}
               </Link>
             </div>
           </div>
@@ -113,4 +116,3 @@ export default function LoginClient({ nextPath }: { nextPath?: string | null }) 
     </div>
   );
 }
-

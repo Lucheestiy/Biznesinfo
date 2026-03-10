@@ -70,7 +70,7 @@ export async function GET(request: Request) {
   const hasAnyQuery = Boolean(query.trim());
   const isAbbrevQuery = looksLikeCompanyAbbreviationQuery(query);
 
-  // Abbreviation-like queries (e.g. "мсу23") are better handled by in-memory logic
+  // Abbreviation-like queries (e.g. "мсу23") are better handled by PostgreSQL lookup
   // because Meilisearch suggest searches only by "name".
   if (isAbbrevQuery) {
     const data = await biznesinfoSuggest({ query, region, limit: safeLimit });
@@ -90,10 +90,10 @@ export async function GET(request: Request) {
       if ((normalized?.suggestions || []).length > 0) return NextResponse.json(normalized);
     }
   } catch (error) {
-    console.error("Meilisearch error, falling back to in-memory suggest:", error);
+    console.error("Meilisearch error, falling back to PostgreSQL suggest:", error);
   }
 
-  // Fallback to in-memory suggest
+  // Fallback to PostgreSQL suggest
   const data = await biznesinfoSuggest({
     query,
     region,

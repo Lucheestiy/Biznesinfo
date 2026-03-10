@@ -8,52 +8,31 @@ import CompanyCard from "@/components/CompanyCard";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
 import { regions } from "@/data/regions";
-import type { BiznesinfoCompanySummary, BiznesinfoSearchResponse } from "@/lib/biznesinfo/types";
+import type { BiznesinfoSearchResponse } from "@/lib/biznesinfo/types";
 import { formatCompanyCount } from "@/lib/utils/plural";
 import { tokenizeHighlightQuery } from "@/lib/utils/highlight";
 import Pagination from "@/components/Pagination";
 import Link from "next/link";
+import { companySlugForUrl } from "@/lib/biznesinfo/slug";
 
 const PAGE_SIZE = 10;
 const SEARCH_REQUEST_DEBOUNCE_MS = 120;
-const EMPTY_LOGO_HINTS = [
-  "/images/logo/no-logo",
-  "/images/logo/no_logo",
-  "/images/logo/noimage",
-  "/images/logo/no-image",
-];
 
-function hasCompanyLogo(logoUrl: string): boolean {
-  const normalized = (logoUrl || "").trim().toLowerCase();
-  if (!normalized) return false;
-  return !EMPTY_LOGO_HINTS.some((hint) => normalized.includes(hint));
+type SearchSupplyType = "any" | "delivery" | "pickup";
+type SearchBusinessFormat = "any" | "b2b" | "b2c";
+
+function normalizeSupplyType(raw: string | null): SearchSupplyType {
+  const value = String(raw || "").trim().toLowerCase();
+  if (value === "delivery") return "delivery";
+  if (value === "pickup") return "pickup";
+  return "any";
 }
 
-function textCompletenessScore(value: string, maxPoints: number): number {
-  const length = (value || "").trim().length;
-  if (!length) return 0;
-  return Math.min(maxPoints, Math.round(length / 80));
-}
-
-function companyCompletenessScore(company: BiznesinfoCompanySummary): number {
-  let score = 0;
-
-  if ((company.address || "").trim()) score += 8;
-  if ((company.city || "").trim()) score += 4;
-  if (company.primary_category_slug || company.primary_rubric_slug) score += 6;
-  if ((company.work_hours?.status || "").trim()) score += 4;
-  if ((company.work_hours?.work_time || "").trim()) score += 4;
-
-  if ((company.phones_ext || []).length > 0) score += 14;
-  else if ((company.phones || []).length > 0) score += 10;
-
-  if ((company.emails || []).length > 0) score += 8;
-  if ((company.websites || []).length > 0) score += 8;
-
-  score += textCompletenessScore(company.description || "", 14);
-  score += textCompletenessScore(company.about || "", 20);
-
-  return score;
+function normalizeBusinessFormat(raw: string | null): SearchBusinessFormat {
+  const value = String(raw || "").trim().toLowerCase();
+  if (value === "b2b") return "b2b";
+  if (value === "b2c") return "b2c";
+  return "any";
 }
 
 function SearchResults() {
@@ -67,13 +46,19 @@ function SearchResults() {
   const serviceQuery = searchParams.get("service") || legacyKeywords;
   const city = searchParams.get("city") || "";
   const regionFromUrl = searchParams.get("region") || "";
+  const supplyTypeFromUrl = normalizeSupplyType(searchParams.get("supply_type"));
+  const businessFormatFromUrl = normalizeBusinessFormat(searchParams.get("business_format"));
 
   const [companyDraft, setCompanyDraft] = useState(query);
   const [serviceDraft, setServiceDraft] = useState(serviceQuery);
   const [cityDraft, setCityDraft] = useState(city);
+  const [supplyTypeDraft, setSupplyTypeDraft] = useState<SearchSupplyType>(supplyTypeFromUrl);
+  const [businessFormatDraft, setBusinessFormatDraft] = useState<SearchBusinessFormat>(businessFormatFromUrl);
   const [debouncedCompanyDraft, setDebouncedCompanyDraft] = useState(query.trim());
   const [debouncedServiceDraft, setDebouncedServiceDraft] = useState(serviceQuery.trim());
   const [debouncedCityDraft, setDebouncedCityDraft] = useState(city.trim());
+  const [debouncedSupplyTypeDraft, setDebouncedSupplyTypeDraft] = useState<SearchSupplyType>(supplyTypeFromUrl);
+  const [debouncedBusinessFormatDraft, setDebouncedBusinessFormatDraft] = useState<SearchBusinessFormat>(businessFormatFromUrl);
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
   const cityInputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<number | null>(null);
@@ -90,10 +75,14 @@ function SearchResults() {
     setCompanyDraft(query);
     setServiceDraft(serviceQuery);
     setCityDraft(city);
+    setSupplyTypeDraft(supplyTypeFromUrl);
+    setBusinessFormatDraft(businessFormatFromUrl);
     setDebouncedCompanyDraft(query.trim());
     setDebouncedServiceDraft(serviceQuery.trim());
     setDebouncedCityDraft(city.trim());
-  }, [query, serviceQuery, city]);
+    setDebouncedSupplyTypeDraft(supplyTypeFromUrl);
+    setDebouncedBusinessFormatDraft(businessFormatFromUrl);
+  }, [query, serviceQuery, city, supplyTypeFromUrl, businessFormatFromUrl]);
 
   // Local debounced search source of truth: keeps results/logos updating without waiting for URL round-trip.
   useEffect(() => {
@@ -102,18 +91,25 @@ function SearchResults() {
       setDebouncedCompanyDraft(companyDraft.trim());
       setDebouncedServiceDraft(serviceDraft.trim());
       setDebouncedCityDraft(cityDraft.trim());
+      setDebouncedSupplyTypeDraft(supplyTypeDraft);
+      setDebouncedBusinessFormatDraft(businessFormatDraft);
     }, SEARCH_REQUEST_DEBOUNCE_MS);
 
     return () => {
       if (searchDebounceRef.current) window.clearTimeout(searchDebounceRef.current);
     };
-  }, [companyDraft, serviceDraft, cityDraft]);
+  }, [companyDraft, serviceDraft, cityDraft, supplyTypeDraft, businessFormatDraft]);
 
   // If region is present in URL, it becomes the source of truth.
   useEffect(() => {
     if (!regionFromUrl || city.trim()) return;
     const next = regions.some((r) => r.slug === regionFromUrl) ? regionFromUrl : null;
     if (next !== selectedRegion) setSelectedRegion(next);
+  }, [regionFromUrl, city, selectedRegion, setSelectedRegion]);
+
+  useEffect(() => {
+    if (regionFromUrl || city.trim()) return;
+    if (selectedRegion) setSelectedRegion(null);
   }, [regionFromUrl, city, selectedRegion, setSelectedRegion]);
 
   // If user is searching by city/street, region becomes irrelevant (auto-detected by location).
@@ -129,6 +125,8 @@ function SearchResults() {
       service?: string;
       city?: string;
       region?: string | null;
+      supply_type?: SearchSupplyType;
+      business_format?: SearchBusinessFormat;
     },
   ) => {
     const params = new URLSearchParams();
@@ -136,11 +134,15 @@ function SearchResults() {
     const nextService = (overrides?.service ?? serviceDraft).trim();
     const nextCity = (overrides?.city ?? cityDraft).trim();
     const nextRegion = overrides?.region ?? selectedRegion;
+    const nextSupplyType = overrides?.supply_type ?? supplyTypeDraft;
+    const nextBusinessFormat = overrides?.business_format ?? businessFormatDraft;
 
     if (nextQ) params.set("q", nextQ);
     if (nextService) params.set("service", nextService);
     if (nextCity) params.set("city", nextCity);
     if (!nextCity && nextRegion) params.set("region", nextRegion);
+    if (nextSupplyType !== "any") params.set("supply_type", nextSupplyType);
+    if (nextBusinessFormat !== "any") params.set("business_format", nextBusinessFormat);
 
     const qs = params.toString();
     const url = qs ? `/search?${qs}` : "/search";
@@ -183,32 +185,61 @@ function SearchResults() {
     const nextQ = companyDraft.trim();
     const nextService = serviceDraft.trim();
     const nextCity = cityDraft.trim();
+    const nextSupplyType = supplyTypeDraft;
+    const nextBusinessFormat = businessFormatDraft;
 
-    if (nextQ === query.trim() && nextService === serviceQuery.trim() && nextCity === city.trim()) return;
+    if (
+      nextQ === query.trim() &&
+      nextService === serviceQuery.trim() &&
+      nextCity === city.trim() &&
+      nextSupplyType === supplyTypeFromUrl &&
+      nextBusinessFormat === businessFormatFromUrl
+    ) return;
 
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
-      navigateToSearch("replace", { q: nextQ, service: nextService, city: nextCity });
+      navigateToSearch("replace", {
+        q: nextQ,
+        service: nextService,
+        city: nextCity,
+        supply_type: nextSupplyType,
+        business_format: nextBusinessFormat,
+      });
     }, 500);
 
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
-  }, [companyDraft, serviceDraft, cityDraft, query, serviceQuery, city]);
+  }, [
+    companyDraft,
+    serviceDraft,
+    cityDraft,
+    supplyTypeDraft,
+    businessFormatDraft,
+    query,
+    serviceQuery,
+    city,
+    supplyTypeFromUrl,
+    businessFormatFromUrl,
+  ]);
 
   const effectiveQuery = debouncedCompanyDraft;
   const effectiveServiceQuery = debouncedServiceDraft;
   const effectiveCity = debouncedCityDraft;
+  const effectiveSupplyType = debouncedSupplyTypeDraft;
+  const effectiveBusinessFormat = debouncedBusinessFormatDraft;
 
   // Reset page when effective search params or region change
   useEffect(() => {
     setCurrentPage(1);
-  }, [effectiveQuery, effectiveServiceQuery, effectiveCity, selectedRegion]);
+  }, [effectiveQuery, effectiveServiceQuery, effectiveCity, effectiveSupplyType, effectiveBusinessFormat, selectedRegion]);
 
   useEffect(() => {
     const q = effectiveQuery;
     const svc = effectiveServiceQuery;
     const cityValue = effectiveCity;
+    const supplyType = effectiveSupplyType;
+    const businessFormat = effectiveBusinessFormat;
     if (!q && !svc && !cityValue) {
       setData(null);
       setIsLoading(false);
@@ -221,6 +252,8 @@ function SearchResults() {
     if (svc) params.set("service", svc);
     if (cityValue) params.set("city", cityValue);
     if (region) params.set("region", region);
+    if (supplyType !== "any") params.set("supply_type", supplyType);
+    if (businessFormat !== "any") params.set("business_format", businessFormat);
     params.set("offset", String((currentPage - 1) * PAGE_SIZE));
     params.set("limit", String(PAGE_SIZE));
     const controller = new AbortController();
@@ -246,25 +279,21 @@ function SearchResults() {
     return () => {
       controller.abort();
     };
-  }, [currentPage, effectiveQuery, effectiveServiceQuery, effectiveCity, selectedRegion]);
+  }, [
+    currentPage,
+    effectiveQuery,
+    effectiveServiceQuery,
+    effectiveCity,
+    effectiveSupplyType,
+    effectiveBusinessFormat,
+    selectedRegion,
+  ]);
 
   const totalPages = data ? Math.ceil((data.total || 0) / PAGE_SIZE) : 0;
 
   const companies = useMemo(() => {
-    const items = (data?.companies || []).map((company, index) => ({
-      company,
-      index,
-      hasLogo: hasCompanyLogo(company.logo_url || ""),
-      completeness: companyCompletenessScore(company),
-    }));
-
-    items.sort((a, b) => {
-      if (a.hasLogo !== b.hasLogo) return a.hasLogo ? -1 : 1;
-      if (b.completeness !== a.completeness) return b.completeness - a.completeness;
-      return a.index - b.index;
-    });
-
-    return items.map((item) => item.company);
+    // Keep backend ranking order as-is; don't promote cards by visual completeness/logo.
+    return data?.companies || [];
   }, [data]);
 
   const highlightCompanyTokens = useMemo(() => tokenizeHighlightQuery(effectiveQuery), [effectiveQuery]);
@@ -273,6 +302,33 @@ function SearchResults() {
   const highlightNameTokens = useMemo(() => {
     return highlightCompanyTokens.length > 0 ? highlightCompanyTokens : highlightServiceTokens;
   }, [highlightCompanyTokens, highlightServiceTokens]);
+
+  const applyZeroVariant = (
+    patch: NonNullable<BiznesinfoSearchResponse["zero_results"]>["close_variants"][number]["params"],
+  ) => {
+    const nextQ = patch.q !== undefined ? patch.q : companyDraft;
+    const nextService = patch.service !== undefined ? patch.service : serviceDraft;
+    const nextCity = patch.city !== undefined ? patch.city : cityDraft;
+    const nextRegion = patch.region !== undefined ? patch.region : selectedRegion;
+    const nextSupply = patch.supply_type !== undefined ? patch.supply_type : supplyTypeDraft;
+    const nextFormat = patch.business_format !== undefined ? patch.business_format : businessFormatDraft;
+
+    if (patch.region !== undefined && !patch.region) setSelectedRegion(null);
+    if (patch.city !== undefined) setCityDraft(patch.city);
+    if (patch.q !== undefined) setCompanyDraft(patch.q);
+    if (patch.service !== undefined) setServiceDraft(patch.service);
+    if (patch.supply_type !== undefined) setSupplyTypeDraft(nextSupply);
+    if (patch.business_format !== undefined) setBusinessFormatDraft(nextFormat);
+
+    navigateToSearch("push", {
+      q: nextQ,
+      service: nextService,
+      city: nextCity,
+      region: nextRegion,
+      supply_type: nextSupply,
+      business_format: nextFormat,
+    });
+  };
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-gray-100">
@@ -490,6 +546,7 @@ function SearchResults() {
                 </svg>
               </button>
             </div>
+
           </div>
         </div>
 
@@ -540,10 +597,50 @@ function SearchResults() {
             <div className="bg-white rounded-lg p-10 text-center">
               <div className="text-6xl mb-4">🔍</div>
               <h3 className="text-xl font-bold text-gray-700 mb-2">{t("company.notFound")}</h3>
-              <p className="text-gray-500 mb-4">{t("company.notFoundDesc")}</p>
+              <p className="text-gray-500 mb-4">{data?.zero_results?.message || t("company.notFoundDesc")}</p>
+
+              {(data?.zero_results?.close_variants || []).length > 0 && (
+                <div className="mb-5 text-left max-w-2xl mx-auto">
+                  <p className="text-sm font-semibold text-gray-700 mb-2">Близкие варианты:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(data?.zero_results?.close_variants || []).map((variant, idx) => (
+                      <button
+                        key={`${variant.label}-${idx}`}
+                        type="button"
+                        onClick={() => applyZeroVariant(variant.params)}
+                        className="px-3 py-1.5 rounded-full text-xs font-semibold border border-[#820251]/25 text-[#820251] hover:bg-[#820251]/10 transition-colors"
+                      >
+                        {variant.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(data?.zero_results?.sample_companies || []).length > 0 && (
+                <div className="mb-5 text-left max-w-2xl mx-auto">
+                  <p className="text-sm font-semibold text-gray-700 mb-2">Похожие компании по текущему запросу:</p>
+                  <ul className="space-y-1.5">
+                    {(data?.zero_results?.sample_companies || []).slice(0, 5).map((company) => (
+                      <li key={company.id}>
+                        <Link
+                          href={`/company/${companySlugForUrl(company.id)}`}
+                          className="text-sm text-[#820251] hover:underline"
+                        >
+                          {company.name}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {selectedRegion && (
                 <button
-                  onClick={() => setSelectedRegion(null)}
+                  onClick={() => {
+                    setSelectedRegion(null);
+                    navigateToSearch("push", { region: null });
+                  }}
                   className="text-[#820251] hover:underline mb-4 block mx-auto"
                 >
                   {t("company.showAllRegions")}
