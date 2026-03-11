@@ -4317,6 +4317,8 @@ function extractSingleCompanyLookupName(message: string): string | null {
   if (quoted.length > 0) return quoted[0];
 
   const patterns = [
+    /(?:ссылк\p{L}*|url|линк|link|путь)\s+(?:на\s+)?(?:карточк\p{L}*|страниц\p{L}*)\s+(?:компан\p{L}*|фирм\p{L}*|организац\p{L}*)?\s*[:\-]?\s*(.+)$/iu,
+    /(?:пришли|отправ\p{L}*|скинь|дай|покажи|подскажи)\s+(?:.*?\s+)?(?:ссылк\p{L}*|url|линк|link|путь)\s+(?:на\s+)?(?:карточк\p{L}*|страниц\p{L}*)\s+(.+)$/iu,
     /(?:контакт\p{L}*|телефон|номер|e-?mail|email|почт\p{L}*|сайт|адрес|как\s+связат\p{L}*)\s+(?:у\s+)?(?:компан\p{L}*|фирм\p{L}*|организац\p{L}*)?\s*[:\-]?\s*(.+)$/iu,
     /(?:компан\p{L}*|фирм\p{L}*|организац\p{L}*)\s+(.+?)\s+(?:контакт\p{L}*|телефон|номер|e-?mail|email|почт\p{L}*|сайт|адрес)\b/iu,
     /(?:какие|какой|какая|дай|покажи|подскажи|нужн\p{L}*|скажи)\s+(?:.*?\s+)?(?:контакт\p{L}*|телефон|номер|e-?mail|email|почт\p{L}*|сайт|адрес)\s+(.+)$/iu,
@@ -4468,7 +4470,7 @@ function rankSingleCompanyLookupCandidates(candidates: BiznesinfoCompanySummary[
   return [];
 }
 
-type SingleCompanyDetailKind = "phone" | "email" | "website" | "address" | "contacts" | "profile";
+type SingleCompanyDetailKind = "phone" | "email" | "website" | "address" | "contacts" | "profile" | "card";
 
 function detectSingleCompanyDetailKind(message: string): SingleCompanyDetailKind | null {
   const text = normalizeComparableText(message || "");
@@ -4501,11 +4503,15 @@ function detectSingleCompanyDetailKind(message: string): SingleCompanyDetailKind
   const asksWebsite = /(сайт|website|web\s*site|url|домен)/u.test(text);
   const asksAddress = /(адрес|location|локац\p{L}*|где\s+наход)/u.test(text);
   const asksContacts = /(контакт\p{L}*|как\s+связат\p{L}*|связаться|contacts?)/u.test(text);
+  const asksCardLink =
+    /(?:ссылк\p{L}*|url|линк|link|путь)\s+(?:на\s+)?(?:карточк\p{L}*|страниц\p{L}*|компан\p{L}*)/u.test(text) ||
+    /(?:карточк\p{L}*|страниц\p{L}*)\s+(?:компан\p{L}*)?\s*(?:ссылк\p{L}*|url|линк|link|путь)/u.test(text) ||
+    /\/\s*company\s*\//u.test(text);
   const asksProfile = /(чем\s+занима(?:ется|ют)|вид\p{L}*\s+деятельност\p{L}*|какой\s+профил\p{L}*|что\s+делает|чем\s+компан\p{L}*\s+занима(?:ется|ют))/u.test(
     text,
   );
 
-  if (!asksPhone && !asksEmail && !asksWebsite && !asksAddress && !asksContacts && !asksProfile) return null;
+  if (!asksPhone && !asksEmail && !asksWebsite && !asksAddress && !asksContacts && !asksProfile && !asksCardLink) return null;
 
   const lookupNameHint = extractSingleCompanyLookupName(message);
 
@@ -4513,13 +4519,18 @@ function detectSingleCompanyDetailKind(message: string): SingleCompanyDetailKind
     text,
   );
   if (!singleTargetHint && !lookupNameHint && looksLikeVendorLookupIntent(message || "")) return null;
-  if (!singleTargetHint && !lookupNameHint && !/(дай|покажи|укажи|продублир|where|show|какие|какой|какая|подскажи|нужн\p{L}*|скажи)/u.test(text)) {
+  if (
+    !singleTargetHint &&
+    !lookupNameHint &&
+    !/(дай|покажи|укажи|продублир|where|show|какие|какой|какая|подскажи|нужн\p{L}*|скажи|пришли|отправ\p{L}*|скинь)/u.test(text)
+  ) {
     return null;
   }
 
   const specificCount = Number(asksPhone) + Number(asksEmail) + Number(asksWebsite) + Number(asksAddress);
   if (asksContacts || specificCount > 1) return "contacts";
   if (asksProfile) return "profile";
+  if (asksCardLink) return "card";
   if (asksPhone) return "phone";
   if (asksEmail) return "email";
   if (asksWebsite) return "website";
@@ -4589,6 +4600,12 @@ function buildSingleCompanyDetailReply(params: {
   const description = truncate(oneLine(candidate.description || ""), 260);
   const about = truncate(oneLine(candidate.about || ""), 260);
   const profileText = description || about;
+
+  if (kind === "card") {
+    const lines = [`Ссылка на карточку компании: ${path}`, `Компания: ${name}`];
+    if (rubric) lines.push(`Профиль: ${rubric}`);
+    return lines.join("\n");
+  }
 
   if (kind === "profile") {
     const lines = [`Карточка компании: **${name}** — ${path}`];

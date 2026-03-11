@@ -680,6 +680,31 @@ test("post-process appends /company links when reply lists companies without car
   assert.match(result, /Конкретные компании из текущего списка|Ссылки на карточки компаний/u);
 });
 
+test("post-process returns direct company card link for explicit card-link request", () => {
+  const iris = makeVendorCandidate({
+    id: "iris-intern-grupp",
+    name: "Ирис Интерн Групп",
+    primary_rubric_name: "Транспорт, логистика, перевозки",
+    description: "Международные грузоперевозки и логистика",
+  });
+
+  const result = __assistantRouteTestHooks.postProcessAssistantReply({
+    replyText: [
+      "Я подобрал вам релевантные рубрики на портале, которые соответствуют вашему запросу.",
+      "Транспорт, логистика, перевозки: /catalog/transport-logistika-perevozki",
+    ].join("\n"),
+    message: "Пришли ссылку на карточку Ирис Интерн Групп",
+    history: [],
+    mode: { templateRequested: false, rankingRequested: false, checklistRequested: false },
+    rubricHintItems: [],
+    vendorCandidates: [iris],
+    vendorLookupContext: null,
+  });
+
+  assert.match(result, /Ссылка на карточку компании:\s*\/company\/iris-intern-grupp/u);
+  assert.doesNotMatch(result, /\/catalog\//u);
+});
+
 test("normalize shortlist wording removes standalone budget question line", () => {
   const source = [
     "Для того чтобы помочь Вам, мне нужно уточнить несколько вопросов:",
