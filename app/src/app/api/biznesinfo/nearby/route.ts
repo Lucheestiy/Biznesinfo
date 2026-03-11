@@ -61,6 +61,20 @@ const SERVICE_QUERY_DESCRIPTOR_STOP_WORDS = new Set([
   "направления",
 ]);
 
+const SERVICE_QUERY_PROXIMITY_HELPER_WORDS = new Set([
+  "рядом",
+  "поблизости",
+  "недалеко",
+  "возле",
+  "около",
+  "близко",
+  "здесь",
+  "тут",
+  "мной",
+  "мне",
+  "меня",
+]);
+
 const SERVICE_QUERY_DESCRIPTOR_PREFIXES = [
   "компан",
   "предприят",
@@ -109,6 +123,16 @@ const CUISINE_QUALIFIER_PREFIXES = [
   "тайск",
   "мексикан",
 ];
+
+function isProximityHelperToken(raw: string): boolean {
+  const token = normalizeServiceQueryToken(raw);
+  if (!token) return false;
+  if (SERVICE_QUERY_PROXIMITY_HELPER_WORDS.has(token)) return true;
+  if (token.startsWith("ближайш")) return true;
+  if (token.startsWith("поблиз")) return true;
+  if (token.startsWith("недалек")) return true;
+  return false;
+}
 
 function tokenizeServiceQuery(raw: string): string[] {
   const cleaned = (raw || "")
@@ -166,9 +190,19 @@ function normalizeNearbyQuery(raw: string): string {
   const filtered = tokens.filter((token) => {
     if (SERVICE_QUERY_INTENT_STOP_WORDS.has(token)) return false;
     if (isServiceDescriptorToken(token)) return false;
+    if (isProximityHelperToken(token)) return false;
     return true;
   });
-  let picked = (filtered.length > 0 ? filtered : tokens)
+
+  const hasOnlyContextTokens = tokens.every((token) => {
+    if (SERVICE_QUERY_INTENT_STOP_WORDS.has(token)) return true;
+    if (isServiceDescriptorToken(token)) return true;
+    if (isProximityHelperToken(token)) return true;
+    return false;
+  });
+
+  const pickedSource = filtered.length > 0 ? filtered : hasOnlyContextTokens ? [] : tokens;
+  let picked = pickedSource
     .map((token) => normalizeServiceQueryToken(token))
     .filter(Boolean);
 
@@ -184,6 +218,17 @@ function normalizeNearbyQuery(raw: string): string {
   }
 
   return picked.join(" ").trim();
+}
+
+function isContextOnlyNearbyQuery(raw: string): boolean {
+  const tokens = tokenizeServiceQuery(raw);
+  if (tokens.length === 0) return false;
+  return tokens.every((token) => {
+    if (SERVICE_QUERY_INTENT_STOP_WORDS.has(token)) return true;
+    if (isServiceDescriptorToken(token)) return true;
+    if (isProximityHelperToken(token)) return true;
+    return false;
+  });
 }
 
 function shouldApplyMilkFilter(raw: string): boolean {
@@ -346,7 +391,8 @@ export async function GET(request: Request) {
     const index = getCompaniesIndex();
     const rawQuery = query.trim();
     const normalizedQuery = normalizeNearbyQuery(rawQuery);
-    const searchQuery = normalizedQuery || rawQuery;
+    const contextOnlyQuery = isContextOnlyNearbyQuery(rawQuery);
+    const searchQuery = normalizedQuery || (contextOnlyQuery ? "" : rawQuery);
     const applyMilkFilter = shouldApplyMilkFilter(searchQuery);
     const applyCheeseFilter = shouldApplyCheeseFilter(searchQuery);
     const applyKeywordFilter = applyMilkFilter || applyCheeseFilter;
