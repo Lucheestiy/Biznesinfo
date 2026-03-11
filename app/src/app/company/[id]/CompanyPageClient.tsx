@@ -1078,7 +1078,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                         <div className="space-y-2">
                           {phones.map((p, idx) => (
                             <div key={`${p.number}-${idx}`} className="flex items-start gap-2">
-                              <div className="flex items-center gap-3 w-full flex-nowrap">
+                              <div className="flex w-full flex-col gap-1 sm:flex-row sm:items-start sm:gap-3">
                                 <a
                                   href={`tel:${normalizePhoneForTel(p.number) || p.number}`}
                                   className="flex items-start gap-2 text-[#820251] font-semibold text-base md:text-lg hover:underline whitespace-nowrap"
@@ -1098,7 +1098,9 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                                   <span>{p.number}</span>
                                 </a>
                                 {p.labels && p.labels.length > 0 && (
-                                  <div className="text-sm md:text-base text-gray-500 ml-auto text-right whitespace-nowrap">{p.labels.join(", ")}</div>
+                                  <div className="text-sm md:text-base text-gray-500 leading-snug sm:ml-auto sm:text-right break-words">
+                                    {p.labels.join(", ")}
+                                  </div>
                                 )}
                               </div>
                             </div>
