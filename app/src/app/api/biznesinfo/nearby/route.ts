@@ -105,6 +105,39 @@ const FOOD_VENUE_TOKEN_PREFIXES = [
   "столов",
 ];
 
+const FOOD_VENUE_STRONG_TOKEN_PREFIXES = [
+  "ресторан",
+  "кафе",
+  "бар",
+  "пиццер",
+  "пицц",
+  "суши",
+  "кофейн",
+  "закусоч",
+  "бистро",
+  "общепит",
+  "обществен",
+];
+
+const FOOD_VENUE_WEAK_TOKEN_PREFIXES = [
+  "столов",
+];
+
+const FOOD_VENUE_NEGATIVE_TOKEN_PREFIXES = [
+  "прибор",
+  "посуд",
+  "фарфор",
+  "сервиз",
+  "мебел",
+  "оборуд",
+  "холодиль",
+  "торгов",
+  "инвентар",
+  "текстил",
+  "утвар",
+  "кухон",
+];
+
 const CUISINE_QUALIFIER_PREFIXES = [
   "итальян",
   "япон",
@@ -175,6 +208,66 @@ function normalizeServiceQueryToken(token: string): string {
 
 function hasFoodVenueToken(tokens: string[]): boolean {
   return tokens.some((token) => FOOD_VENUE_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix)));
+}
+
+function hitMatchesFoodVenueIntent(hit: any): boolean {
+  const searchableSource = [
+    hit?.name || "",
+    ...(hit?.keywords || []),
+    ...(hit?.rubric_names || []),
+    ...(hit?.category_names || []),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const fieldTokens = tokenizeServiceQuery(searchableSource);
+  if (fieldTokens.length === 0) return false;
+
+  const hasStrongVenueSignal = fieldTokens.some((token) =>
+    FOOD_VENUE_STRONG_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix)),
+  );
+  const hasWeakVenueSignal = fieldTokens.some((token) =>
+    FOOD_VENUE_WEAK_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix)),
+  );
+  if (!hasStrongVenueSignal && !hasWeakVenueSignal) return false;
+
+  const hasNegativeSignal = fieldTokens.some((token) =>
+    FOOD_VENUE_NEGATIVE_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix)),
+  );
+
+  // "Столовые" can refer to canteens or tableware/equipment.
+  // If we only have weak venue markers and clear non-venue markers, treat as non-venue.
+  if (!hasStrongVenueSignal && hasNegativeSignal) return false;
+
+  return true;
+}
+
+function hitMatchesStrictFoodVenueIntent(hit: any): boolean {
+  const primarySource = [
+    hit?.name || "",
+    ...(hit?.rubric_names || []),
+    ...(hit?.category_names || []),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const fieldTokens = tokenizeServiceQuery(primarySource);
+  if (fieldTokens.length === 0) return false;
+
+  const hasStrongVenueSignal = fieldTokens.some((token) =>
+    FOOD_VENUE_STRONG_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix)),
+  );
+  const hasWeakVenueSignal = fieldTokens.some((token) =>
+    FOOD_VENUE_WEAK_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix)),
+  );
+  if (!hasStrongVenueSignal && !hasWeakVenueSignal) return false;
+
+  const hasNegativeSignal = fieldTokens.some((token) =>
+    FOOD_VENUE_NEGATIVE_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix)),
+  );
+  if (!hasStrongVenueSignal && hasNegativeSignal) return false;
+
+  return true;
 }
 
 function isCuisineQualifierToken(token: string): boolean {
@@ -399,6 +492,12 @@ export async function GET(request: Request) {
     const strictQueryTokens = tokenizeForStrictMatch(searchQuery);
     const queryTokenCount = tokenizeServiceQuery(searchQuery).length;
     const queryMatchingStrategy = searchQuery ? (queryTokenCount > 1 ? "last" : "all") : undefined;
+    const queryServiceTokens = tokenizeServiceQuery(searchQuery);
+    const applyFoodVenueFilter = queryServiceTokens.length > 0 && hasFoodVenueToken(queryServiceTokens);
+    const useStrictFoodVenueFilter =
+      applyFoodVenueFilter &&
+      queryServiceTokens.length > 0 &&
+      queryServiceTokens.every((token) => FOOD_VENUE_WEAK_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix)));
 
     // Build search options
     const searchOptions: any = {
@@ -426,6 +525,12 @@ export async function GET(request: Request) {
     for (const hit of result.hits as any[]) {
       if (isExcludedBiznesinfoCompany({ source_id: hit?.id || "", unp: hit?.unp || "" })) continue;
       if (strictQueryTokens.length > 0 && !hitMatchesStrictQuery(hit, strictQueryTokens)) continue;
+      if (applyFoodVenueFilter) {
+        const matchesFoodVenue = useStrictFoodVenueFilter
+          ? hitMatchesStrictFoodVenueIntent(hit)
+          : hitMatchesFoodVenueIntent(hit);
+        if (!matchesFoodVenue) continue;
+      }
       if (applyKeywordFilter) {
         const keywords: string[] = hit?.keywords || [];
         if (applyMilkFilter && !hasMilkKeyword(keywords)) continue;
