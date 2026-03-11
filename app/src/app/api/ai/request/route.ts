@@ -7178,6 +7178,8 @@ function postProcessAssistantReply(params: {
     /(^|\n)\s*\*{0,2}письм[оа]\*{0,2}\s*$/imu.test(out) ||
     /(^|\n)\s*\*{0,2}тема\*{0,2}\s*[:\-—]/iu.test(out);
   const explicitTemplateDraftingNow = looksLikeExplicitTemplateDraftingRequest(params.message || "");
+  const suppressSourcingFollowUpsForTemplate =
+    params.mode.templateRequested || explicitTemplateDraftingNow || hasTemplateBlocksInReply;
   const hasCompanyLinksInReply = /\/\s*company\s*\/\s*[a-z0-9-]+/iu.test(out);
   if (
     sourcingIntentNow &&
@@ -8670,12 +8672,12 @@ function postProcessAssistantReply(params: {
       }
     }
 
-    if (claimsNoRelevantVendors && !hasUsefulNextStepMarkers(out)) {
+    if (!suppressSourcingFollowUpsForTemplate && claimsNoRelevantVendors && !hasUsefulNextStepMarkers(out)) {
       out = `${out}\n\nКороткий next step: укажите 1) что именно нужно, 2) город/регион, 3) формат поставки/услуги — и сделаю повторный поиск с прозрачным ranking по релевантности, локации и полноте контактов.`.trim();
     }
 
     const hasSupplierTopicMarkers = /(поставщ|подряд|компан|категор|рубр|поиск|достав|услов|контакт)/iu.test(out);
-    if (!hasSupplierTopicMarkers) {
+    if (!suppressSourcingFollowUpsForTemplate && !hasSupplierTopicMarkers) {
       out = `${out}\n\nПо подбору компаний: могу сузить поиск по категории/рубрике и сравнить условия, доставку и контакты.`.trim();
     }
 
@@ -8829,7 +8831,7 @@ function postProcessAssistantReply(params: {
   }
 
   const refusalTone = /(не могу|не смогу|cannot|can't|нет доступа|не имею доступа|not able)/iu.test(out);
-  if (refusalTone && !hasUsefulNextStepMarkers(out)) {
+  if (refusalTone && !hasUsefulNextStepMarkers(out) && !suppressSourcingFollowUpsForTemplate) {
     out = `${out}\n\n${buildPracticalRefusalAppendix({
       message: params.message,
       vendorCandidates: continuityCandidates,
