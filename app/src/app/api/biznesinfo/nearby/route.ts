@@ -138,6 +138,21 @@ const FOOD_VENUE_NEGATIVE_TOKEN_PREFIXES = [
   "кухон",
 ];
 
+function matchesFoodVenueTokenPrefix(token: string, prefix: string): boolean {
+  if (!token || !prefix) return false;
+  // Avoid false positives like "кафедра" while keeping valid compound forms.
+  if (prefix === "кафе") {
+    return token === "кафе" || token.startsWith("кафе-");
+  }
+  if (prefix === "суши") {
+    return token === "суши" || token.startsWith("суши-");
+  }
+  if (prefix === "бар") {
+    return /^бар(ы|а|у|е|ом|ов|ам|ами|ах)?$/u.test(token) || token.startsWith("бар-");
+  }
+  return token.startsWith(prefix);
+}
+
 const CUISINE_QUALIFIER_PREFIXES = [
   "итальян",
   "япон",
@@ -207,7 +222,7 @@ function normalizeServiceQueryToken(token: string): string {
 }
 
 function hasFoodVenueToken(tokens: string[]): boolean {
-  return tokens.some((token) => FOOD_VENUE_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix)));
+  return tokens.some((token) => FOOD_VENUE_TOKEN_PREFIXES.some((prefix) => matchesFoodVenueTokenPrefix(token, prefix)));
 }
 
 function hitMatchesFoodVenueIntent(hit: any): boolean {
@@ -224,7 +239,7 @@ function hitMatchesFoodVenueIntent(hit: any): boolean {
   if (fieldTokens.length === 0) return false;
 
   const hasStrongVenueSignal = fieldTokens.some((token) =>
-    FOOD_VENUE_STRONG_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix)),
+    FOOD_VENUE_STRONG_TOKEN_PREFIXES.some((prefix) => matchesFoodVenueTokenPrefix(token, prefix)),
   );
   const hasWeakVenueSignal = fieldTokens.some((token) =>
     FOOD_VENUE_WEAK_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix)),
@@ -255,7 +270,7 @@ function hitMatchesStrictFoodVenueIntent(hit: any): boolean {
   if (fieldTokens.length === 0) return false;
 
   const hasStrongVenueSignal = fieldTokens.some((token) =>
-    FOOD_VENUE_STRONG_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix)),
+    FOOD_VENUE_STRONG_TOKEN_PREFIXES.some((prefix) => matchesFoodVenueTokenPrefix(token, prefix)),
   );
   const hasWeakVenueSignal = fieldTokens.some((token) =>
     FOOD_VENUE_WEAK_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix)),
