@@ -12,6 +12,8 @@ export default function AddCompanyPage() {
   const { t } = useLanguage();
   const { selectedRegion } = useRegion();
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [formData, setFormData] = useState({
     companyName: "",
     category: "",
@@ -28,11 +30,31 @@ export default function AddCompanyPage() {
 
   const selectedCategory = businessCategories.find((c) => c.slug === formData.category);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Here would be the API call to submit the request to AI assistant
-    console.log("Add company request submitted:", formData);
-    setSubmitted(true);
+    if (isSubmitting) return;
+
+    setSubmitError("");
+    setIsSubmitting(true);
+    try {
+      const response = await fetch("/api/add-company/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        const message = typeof payload?.message === "string" ? payload.message : "REQUEST_FAILED";
+        throw new Error(message);
+      }
+
+      setSubmitted(true);
+    } catch {
+      setSubmitError("Не удалось отправить заявку. Попробуйте еще раз или напишите на surdoe@yandex.ru.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -97,8 +119,8 @@ export default function AddCompanyPage() {
                     </div>
                     <p className="text-sm text-blue-800">
                       Заполните форму, и наш AI-ассистент обработает вашу заявку. После проверки
-                      информации ваша организация будет добавлена в каталог Biznes.lucheestiy.com.
-                      Оставьте свой контакт, а менеджер свяжется с вами в ближайшее время.
+                      информации, ваша компания будет размещена на нашем портале: www.biznesinfo.by.
+                      Менеджер свяжется с вами в ближайшее время, если нужно будет уточнить информацию.
                     </p>
                   </div>
                 </div>
@@ -313,11 +335,18 @@ export default function AddCompanyPage() {
                     </p>
                   </div>
 
+                  {submitError ? (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {submitError}
+                    </div>
+                  ) : null}
+
                   <button
                     type="submit"
-                    className="w-full bg-[#820251] text-white py-4 rounded-lg font-semibold hover:bg-[#6a0143] transition-colors"
+                    disabled={isSubmitting}
+                    className="w-full bg-[#820251] text-white py-4 rounded-lg font-semibold hover:bg-[#6a0143] transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                   >
-                    Отправить заявку
+                    {isSubmitting ? "Отправляем..." : "Отправить заявку"}
                   </button>
                 </form>
               </div>

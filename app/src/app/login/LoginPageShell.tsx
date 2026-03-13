@@ -53,7 +53,7 @@ export default function LoginPageShell({
         <section className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-8">
           <h1 className="text-3xl font-bold mb-2">Вход</h1>
           <p className="text-gray-600 mb-6">
-            Войдите, чтобы открыть личный кабинет и лимиты AI. AI-ассистентом могут пользоваться только авторизованные пользователи.
+            Войдите, чтобы открыть личный кабинет портала. AI-ассистент и функции кабинета доступны только авторизованным пользователям.
           </p>
 
           {error && (

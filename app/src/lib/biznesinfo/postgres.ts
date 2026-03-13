@@ -1557,6 +1557,12 @@ export async function biznesinfoGetSearchItemsByIds(ids: string[]): Promise<Bizn
   for (const row of result.rows) {
     const lat = Number.isFinite(row.lat) ? row.lat : null;
     const lng = Number.isFinite(row.lng) ? row.lng : null;
+    const rowId = String(row.id || "").trim();
+    const rowIdLower = rowId.toLowerCase();
+    const logoOverride =
+      BIZNESINFO_LOGO_OVERRIDES[rowId] ??
+      BIZNESINFO_LOGO_OVERRIDES[rowIdLower] ??
+      "";
     byId.set(row.id, {
       id: row.id,
       name: normalizeSearchText(row.name || ""),
@@ -1565,7 +1571,7 @@ export async function biznesinfoGetSearchItemsByIds(ids: string[]): Promise<Bizn
       city: normalizeSearchText(row.city || ""),
       address: normalizeSearchText(row.address || ""),
       status: normalizeSearchText(row.status || ""),
-      logo_url: normalizeSearchText(row.logo_url || ""),
+      logo_url: normalizeSearchText(logoOverride || row.logo_url || ""),
       createdAt: toIsoString(row.created_at),
       _geo: hasValidGeo(lat, lng) ? { lat: lat as number, lng: lng as number } : null,
     });
@@ -2266,18 +2272,23 @@ function buildPhoneSearchPatterns(rawPhone: string): string[] {
   if (digits.length < 7) return [];
 
   const variants = new Set<string>([digits]);
-  if (digits.startsWith("375") && digits.length >= 11) {
-    const local = digits.slice(3);
-    if (local) {
-      variants.add(local);
-      variants.add(`0${local}`);
-    }
-  }
-  if (digits.startsWith("80") && digits.length >= 10) {
-    variants.add(digits.slice(1));
-  }
-  if (digits.startsWith("0") && digits.length >= 9) {
-    variants.add(`375${digits.slice(1)}`);
+  const addBelarusPhoneForms = (nationalNumber: string) => {
+    const national = String(nationalNumber || "").replace(/[^\d]+/gu, "");
+    if (national.length < 7) return;
+    variants.add(national);
+    variants.add(`0${national}`);
+    variants.add(`80${national}`);
+    variants.add(`375${national}`);
+  };
+
+  if (digits.startsWith("375") && digits.length > 3) {
+    addBelarusPhoneForms(digits.slice(3));
+  } else if (digits.startsWith("80") && digits.length > 2) {
+    addBelarusPhoneForms(digits.slice(2));
+  } else if (digits.startsWith("0") && digits.length > 1) {
+    addBelarusPhoneForms(digits.slice(1));
+  } else if (digits.length >= 9) {
+    addBelarusPhoneForms(digits);
   }
 
   return Array.from(variants)
@@ -3001,7 +3012,13 @@ export async function biznesinfoSuggestFromPg(params: {
 
     for (const company of companiesRes.rows) {
       if (suggestions.length >= safeLimit) break;
-      const normalizedLogoUrl = normalizeSearchText(company.logo_url || "");
+      const companyId = String(company.id || "").trim();
+      const companyIdLower = companyId.toLowerCase();
+      const logoOverride =
+        BIZNESINFO_LOGO_OVERRIDES[companyId] ??
+        BIZNESINFO_LOGO_OVERRIDES[companyIdLower] ??
+        "";
+      const normalizedLogoUrl = normalizeSearchText(logoOverride || company.logo_url || "");
       const hasCompanyLogo = computeLogoRankFromUrl(normalizedLogoUrl) > 1;
       suggestions.push({
         type: "company",

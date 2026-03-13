@@ -13,6 +13,7 @@ import { BIZNESINFO_CATEGORY_ICONS } from "@/lib/biznesinfo/icons";
 import { BIZNESINFO_ABOUT_OVERRIDES } from "@/lib/biznesinfo/aboutOverrides";
 import { BIZNESINFO_HEADER_OVERRIDES } from "@/lib/biznesinfo/headerOverrides";
 import { BIZNESINFO_LOGO_OVERRIDES } from "@/lib/biznesinfo/logoOverrides";
+import { localizeCatalogCategoryName, localizeCatalogRubricName } from "@/lib/biznesinfo/catalog-localization";
 import { getCompanyOverride } from "@/lib/companyOverrides";
 import { generateCompanyKeywordPhrases } from "@/lib/biznesinfo/keywords";
 
@@ -67,11 +68,28 @@ function getWorkStatusDotClass(workStatus: { isOpen: boolean }): string {
   return "bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.35)]";
 }
 
+interface WorkStatusLabels {
+  open: string;
+  closed: string;
+  break: string;
+  dayOff: string;
+}
+
+const DEFAULT_WORK_STATUS_LABELS: WorkStatusLabels = {
+  open: "Открыто",
+  closed: "Закрыто",
+  break: "Перерыв",
+  dayOff: "Выходной",
+};
+
 /**
  * Determines if the company is currently open based on work_time.
  * Returns { isOpen, statusText, workTime } or null if cannot determine.
  */
-function getWorkStatus(workHours: { work_time?: string; break_time?: string; status?: string } | null | undefined): {
+function getWorkStatus(
+  workHours: { work_time?: string; break_time?: string; status?: string } | null | undefined,
+  labels: WorkStatusLabels = DEFAULT_WORK_STATUS_LABELS,
+): {
   isOpen: boolean;
   statusText: string;
   workTime: string;
@@ -86,7 +104,7 @@ function getWorkStatus(workHours: { work_time?: string; break_time?: string; sta
     workTimeLower.includes("24х7") ||
     workTimeLower.includes("24x7")
   ) {
-    return { isOpen: true, statusText: "Открыто", workTime };
+    return { isOpen: true, statusText: labels.open, workTime };
   }
   
   // Parse time range like "08:00-17:00" or "8:00 - 17:00" or "08.00-17.00"
@@ -135,7 +153,7 @@ function getWorkStatus(workHours: { work_time?: string; break_time?: string; sta
       if (currentMins >= breakStartMins && currentMins < breakEndMins) {
         return {
           isOpen: false,
-          statusText: "Перерыв",
+          statusText: labels.break,
           workTime: workHours.break_time,
         };
       }
@@ -153,7 +171,7 @@ function getWorkStatus(workHours: { work_time?: string; break_time?: string; sta
     if (!statusLower.includes("работ") && !statusLower.includes("откр")) {
       return {
         isOpen: false,
-        statusText: "Выходной",
+        statusText: labels.dayOff,
         workTime,
       };
     }
@@ -161,7 +179,7 @@ function getWorkStatus(workHours: { work_time?: string; break_time?: string; sta
   
   return {
     isOpen,
-    statusText: isOpen ? "Открыто" : "Закрыто",
+    statusText: isOpen ? labels.open : labels.closed,
     workTime,
   };
 }
@@ -323,7 +341,7 @@ function truncateDescription(raw: string, maxLength = 250): string {
 }
 
 export default function CompanyPageClient({ id, initialData }: CompanyPageClientProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [messageModalOpen, setMessageModalOpen] = useState(false);
   const [data, setData] = useState<BiznesinfoCompanyResponse | null>(initialData);
@@ -343,28 +361,43 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
     setShowAllWebsites(false);
     setPhotoViewerOpen(false);
     setPhotoViewerIndex(0);
+    const shouldFetchLocalized = language !== "ru";
+    const endpoint = shouldFetchLocalized
+      ? `/api/biznesinfo/company/${encodeURIComponent(id)}?lang=${encodeURIComponent(language)}`
+      : `/api/biznesinfo/company/${encodeURIComponent(id)}`;
+
+    if (initialData && !shouldFetchLocalized) {
+      setData(initialData);
+      setIsLoading(false);
+      return () => {
+        isMounted = false;
+      };
+    }
+
     if (initialData) {
       setData(initialData);
       setIsLoading(false);
     } else {
       setIsLoading(true);
-      fetch(`/api/biznesinfo/company/${encodeURIComponent(id)}`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((resp: BiznesinfoCompanyResponse | null) => {
-          if (!isMounted) return;
-          setData(resp);
-          setIsLoading(false);
-        })
-        .catch(() => {
-          if (!isMounted) return;
-          setData(null);
-          setIsLoading(false);
-        });
     }
+
+    fetch(endpoint)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((resp: BiznesinfoCompanyResponse | null) => {
+        if (!isMounted) return;
+        setData(resp);
+        setIsLoading(false);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        if (!initialData) setData(null);
+        setIsLoading(false);
+      });
+
     return () => {
       isMounted = false;
     };
-  }, [id, initialData]);
+  }, [id, initialData, language]);
 
   const companyMaybe = data?.company ?? null;
   const logoOverride = useMemo(() => {
@@ -404,8 +437,24 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
     return Math.max(0, regularWebsites.length - websitesToRender.length);
   }, [regularWebsites.length, showAllWebsites, websitesToRender.length]);
 
+  const workStatusLabels = useMemo<WorkStatusLabels>(() => {
+    if (language === "en") {
+      return { open: "Open", closed: "Closed", break: "Break", dayOff: "Day off" };
+    }
+    if (language === "be") {
+      return { open: "Адкрыта", closed: "Зачынена", break: "Перапынак", dayOff: "Выходны" };
+    }
+    if (language === "zh") {
+      return { open: "营业中", closed: "已关闭", break: "休息中", dayOff: "休息日" };
+    }
+    return DEFAULT_WORK_STATUS_LABELS;
+  }, [language]);
+
   // Calculate work status based on current time in Minsk (must be above conditional returns to keep hooks order stable)
-  const workStatus = useMemo(() => getWorkStatus(companyMaybe?.work_hours), [companyMaybe?.work_hours]);
+  const workStatus = useMemo(
+    () => getWorkStatus(companyMaybe?.work_hours, workStatusLabels),
+    [companyMaybe?.work_hours, workStatusLabels],
+  );
 
   useEffect(() => {
     if (!showLogoCandidate) return;
@@ -508,6 +557,16 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
 
   const primaryCategory = company.categories?.[0] ?? null;
   const primaryRubric = company.rubrics?.[0] ?? null;
+  const localizedPrimaryCategoryName = localizeCatalogCategoryName(
+    language,
+    primaryCategory?.slug || primaryRubric?.category_slug || "",
+    (primaryCategory?.name || primaryRubric?.category_name || "").trim(),
+  );
+  const localizedPrimaryRubricName = localizeCatalogRubricName(
+    language,
+    primaryRubric?.slug || "",
+    (primaryRubric?.name || "").trim(),
+  );
 
   const icon = primaryCategory?.slug ? BIZNESINFO_CATEGORY_ICONS[primaryCategory.slug] || "🏢" : "🏢";
 
@@ -544,7 +603,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
   const headerDescription = hasHeaderOverride
     ? headerDescriptionSource
     : truncateDescription(headerDescriptionSource, 250);
-  const secondaryLabel = primaryCategory?.name || primaryRubric?.name || "";
+  const secondaryLabel = localizedPrimaryCategoryName || localizedPrimaryRubricName || "";
   const isMsu23 = (() => {
     const keys = [id, company.source_id]
       .filter(Boolean)
@@ -562,8 +621,8 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
   const categoryLink = primaryCategory ? `/catalog/${primaryCategory.slug}` : "/#catalog";
   const rubricSubSlug = primaryRubric ? primaryRubric.slug.split("/").slice(1).join("/") : "";
   const rubricLink = primaryCategory && rubricSubSlug ? `/catalog/${primaryCategory.slug}/${rubricSubSlug}` : categoryLink;
-  const breadcrumbCategoryLabel = (primaryCategory?.name || primaryRubric?.category_name || "").trim();
-  const breadcrumbRubricLabel = (primaryRubric?.name || "").trim();
+  const breadcrumbCategoryLabel = localizedPrimaryCategoryName;
+  const breadcrumbRubricLabel = localizedPrimaryRubricName;
   const rubricPlacements = useMemo(() => {
     const entries = company.rubrics || [];
     const seen = new Set<string>();
@@ -589,12 +648,16 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
       const href = rawUrl.startsWith("/catalog/")
         ? rawUrl
         : (categorySlug && subSlug ? `/catalog/${categorySlug}/${subSlug}` : categoryLink);
-
-      list.push({ key, href, name, categoryName });
+      list.push({
+        key,
+        href,
+        name: localizeCatalogRubricName(language, slug, name),
+        categoryName: localizeCatalogCategoryName(language, categorySlug, categoryName),
+      });
     }
 
     return list;
-  }, [categoryLink, company.rubrics, primaryCategory?.slug]);
+  }, [categoryLink, company.rubrics, language, primaryCategory?.slug]);
 
   const hasGeo = company.extra?.lat != null && company.extra?.lng != null;
   const lat = company.extra?.lat ?? null;
@@ -743,12 +806,12 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                   <button
                     onClick={() => {
                       const url = window.location.href;
-                      const text = `${company.name} — ${primaryCategory?.name || ""}`;
+                      const text = `${company.name} — ${localizedPrimaryCategoryName || ""}`;
                       if (navigator.share) {
                         navigator.share({ title: company.name, text, url }).catch(() => {});
                       } else {
                         navigator.clipboard.writeText(url).then(() => {
-                          alert("Ссылка скопирована!");
+                          alert(t("company.linkCopied"));
                         }).catch(() => {});
                       }
                     }}
@@ -757,7 +820,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                     </svg>
-                    <span>Поделиться</span>
+                    <span>{t("company.share")}</span>
                   </button>
 
                   <button
@@ -840,7 +903,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                         navigator.share({ title: company.name, text, url }).catch(() => {});
                       } else {
                         navigator.clipboard.writeText(url).then(() => {
-                          alert("Ссылка скопирована!");
+                          alert(t("company.linkCopied"));
                         }).catch(() => {});
                       }
                     }}
@@ -849,7 +912,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                     </svg>
-                    <span>Поделиться</span>
+                    <span>{t("company.share")}</span>
                   </button>
 
                   <button
@@ -898,7 +961,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                 <svg className="w-4 h-4 text-[#D97706] group-hover:text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.86 19.86 0 0 1 3 5.18 2 2 0 0 1 5 3h3a2 2 0 0 1 2 1.72 12.36 12.36 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L9.1 10.9a16 16 0 0 0 4 4l1.26-1.15a2 2 0 0 1 2.11-.45 12.36 12.36 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
                 </svg>
-                <span className="block text-center font-serif tracking-wide">Контакты</span>
+                <span className="block text-center font-serif tracking-wide">{t("company.contacts")}</span>
               </a>
               <span className="text-white/30 text-xl">|</span>
               <a
@@ -912,7 +975,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                   <path d="M16 17H8" />
                   <path d="M10 9H8" />
                 </svg>
-                <span className="block text-center font-serif tracking-wide">О компании</span>
+                <span className="block text-center font-serif tracking-wide">{t("company.about")}</span>
               </a>
               {servicesList.length > 0 && (
                 <>
@@ -924,7 +987,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                     <svg className="w-4 h-4 text-[#D97706] group-hover:text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                     </svg>
-                    <span className="block text-center font-serif tracking-wide">Наши услуги</span>
+                    <span className="block text-center font-serif tracking-wide">{t("company.services")}</span>
                   </a>
                 </>
               )}
@@ -940,7 +1003,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                       <circle cx="8.5" cy="8.5" r="1.5" />
                       <path d="M21 15l-5-5L5 21" />
                     </svg>
-                    <span className="block text-center font-serif tracking-wide">Фото</span>
+                    <span className="block text-center font-serif tracking-wide">{t("company.gallery")}</span>
                   </a>
                 </>
               )}
@@ -954,7 +1017,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                     <svg className="w-4 h-4 text-[#D97706] group-hover:text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14l-5-4.87 6.91-1.01L12 2z" />
                     </svg>
-                    <span className="block text-center font-serif tracking-wide">Отзывы</span>
+                    <span className="block text-center font-serif tracking-wide">{t("company.reviewsTitle")}</span>
                   </a>
                 </>
               )}
@@ -967,7 +1030,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                   <path d="M20.59 13.41L11 3H4v7l9.59 9.59a2 2 0 0 0 2.82 0l4.18-4.18a2 2 0 0 0 0-2.82z" />
                   <path d="M7 7h.01" />
                 </svg>
-                <span className="block text-center font-serif tracking-wide">Ключевые слова</span>
+                <span className="block text-center font-serif tracking-wide">{t("company.keywords")}</span>
               </a>
               <span className="text-white/30 text-xl">|</span>
               <a
@@ -978,7 +1041,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                   <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0z" />
                   <circle cx="12" cy="10" r="3" />
                 </svg>
-                <span className="block text-center font-serif tracking-wide">Карта</span>
+                <span className="block text-center font-serif tracking-wide">{t("company.map")}</span>
               </a>
             </nav>
           </div>
@@ -1155,7 +1218,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
 
                     {socials.length > 0 && (
                       <div>
-                        <div className="text-gray-500 text-sm mb-2">Социальные сети</div>
+                        <div className="text-gray-500 text-sm mb-2">{t("company.socials")}</div>
                         <div className="space-y-2">
                           {socials.map((social, idx) => (
                             <a
@@ -1189,13 +1252,13 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {company.unp && (
                         <div>
-                          <div className="text-gray-500 text-sm mb-1">УНП</div>
+                          <div className="text-gray-500 text-sm mb-1">{t("company.unp")}</div>
                           <div className="text-gray-700 font-medium">{company.unp}</div>
                         </div>
                       )}
                       {company.contact_person && (
                         <div>
-                          <div className="text-gray-500 text-sm mb-1">Контактное лицо</div>
+                          <div className="text-gray-500 text-sm mb-1">{t("company.contactPerson")}</div>
                           <div className="text-gray-700 font-medium">{company.contact_person}</div>
                         </div>
                       )}
@@ -1219,7 +1282,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                               <span>{company.work_hours.work_time}</span>
                             </div>
                           )}
-                          {company.work_hours.break_time && <div>Перерыв: {company.work_hours.break_time}</div>}
+                          {company.work_hours.break_time && <div>{t("company.breakLabel")}: {company.work_hours.break_time}</div>}
                         </div>
                       </div>
                     )}
@@ -1285,7 +1348,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
 	                  <div id="services" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#b10a78]">
 	                  <h2 className="text-xl font-bold text-[#820251] mb-4 flex items-center gap-2">
 	                    <span className="text-2xl">⚡</span>
-	                    Наши услуги
+	                    {t("company.services")}
 	                  </h2>
 	                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {servicesList.map((service, idx) => (
@@ -1330,7 +1393,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
 	                  <div id="photos" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#7a0150]">
 	                    <h2 className="text-xl font-bold text-[#820251] mb-4 flex items-center gap-2">
 	                      <span className="text-2xl">🖼️</span>
-	                      Фотогалерея
+	                      {t("company.gallery")}
 	                    </h2>
 	                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       {photos.map((photo, idx) => (
@@ -1340,7 +1403,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                             onClick={() => openPhotoViewer(idx)}
                             className="block w-full h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#820251]/60 focus-visible:ring-offset-2"
                             title={photo.alt || company.name}
-                            aria-label={`Открыть фото: ${photo.alt || company.name}`}
+                            aria-label={`${t("company.openPhoto")}: ${photo.alt || company.name}`}
                           >
                             <img
                               src={getOptimizedLocalImageSrc(photo.url, 256) || photo.url}
@@ -1368,7 +1431,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                   <div id="reviews" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#820251]">
                     <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                       <span className="text-2xl">⭐</span>
-                      Отзывы
+                      {t("company.reviewsTitle")}
                     </h2>
                     <div className="space-y-4">
                       {reviews.map((review, idx) => (
@@ -1378,7 +1441,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                             {review.date && <div className="text-sm text-gray-400">{review.date}</div>}
                           </div>
                           {typeof review.rating === "number" && (
-                            <div className="text-sm text-yellow-600 mb-2">Рейтинг: {review.rating}/5</div>
+                            <div className="text-sm text-yellow-600 mb-2">{t("company.rating")}: {review.rating}/5</div>
                           )}
                           <div className="text-gray-700">{review.text}</div>
                         </div>
@@ -1399,7 +1462,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
               <div id="keywords" className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#14532d]">
                 <h2 className="text-xl font-bold text-[#074c48] mb-4 flex items-center gap-2">
                   <span className="text-2xl">🏷️</span>
-                  Ключевые слова
+                  {t("company.keywords")}
                 </h2>
                 <div className="flex flex-wrap gap-2">
                   {generateKeywords(company, data?.generated_keywords).map((keyword, idx) => (
@@ -1441,7 +1504,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
           {rubricPlacements.length > 0 && (
             <div className="mt-8">
               <div className="rounded-xl border border-[#820251]/15 bg-[#820251]/[0.04] p-3 md:p-4">
-                <h2 className="text-sm font-semibold text-[#820251] mb-2">Рубрики размещения</h2>
+                <h2 className="text-sm font-semibold text-[#820251] mb-2">{t("company.rubricPlacements")}</h2>
                 <div className="flex flex-wrap gap-2">
                   {rubricPlacements.map((rubric) => (
                     <Link
@@ -1466,7 +1529,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
               href={rubricLink}
               className="inline-flex items-center gap-2 text-[#820251] hover:underline"
             >
-              ← {t("catalog.backToCategory")} {primaryRubric ? primaryRubric.name : primaryCategory?.name || t("nav.catalog")}
+              ← {t("catalog.backToCategory")} {localizedPrimaryRubricName || localizedPrimaryCategoryName || t("nav.catalog")}
             </Link>
           </div>
         </div>
@@ -1477,9 +1540,9 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
         type="button"
         onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
         className="fixed bottom-6 right-4 z-[70] flex items-center gap-2 px-4 py-2 rounded-full bg-[#820251] text-white shadow-lg hover:bg-[#7a0150] transition-colors"
-        aria-label="Наверх"
+        aria-label={t("common.backToTop")}
       >
-        <span className="text-sm font-semibold">Меню</span>
+        <span className="text-sm font-semibold">{t("common.menu")}</span>
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M18 15l-6-6-6 6" />
         </svg>
@@ -1492,7 +1555,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
           className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-3"
           role="dialog"
           aria-modal="true"
-          aria-label="Просмотр фото"
+          aria-label={t("company.photoViewer")}
           onClick={closePhotoViewer}
         >
           <div className="relative w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
@@ -1506,13 +1569,13 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                   rel="noopener noreferrer"
                   className="text-sm text-white/80 hover:text-white underline underline-offset-2"
                 >
-                  Открыть оригинал
+                  {t("company.openOriginal")}
                 </a>
                 <button
                   type="button"
                   onClick={closePhotoViewer}
                   className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-                  aria-label="Закрыть"
+                  aria-label={t("company.close")}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1528,7 +1591,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                   type="button"
                   onClick={goPrevPhoto}
                   className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-black/55 hover:bg-black/75 text-white shadow-lg ring-1 ring-white/25 flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-                  aria-label="Предыдущее фото"
+                  aria-label={t("company.prevPhoto")}
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
@@ -1550,7 +1613,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                   type="button"
                   onClick={goNextPhoto}
                   className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-black/55 hover:bg-black/75 text-white shadow-lg ring-1 ring-white/25 flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-                  aria-label="Следующее фото"
+                  aria-label={t("company.nextPhoto")}
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />

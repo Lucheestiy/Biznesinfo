@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  localizeTextByUiLanguage,
+  normalizeUiLanguage,
+  type BiznesinfoUiLanguage,
+} from "@/lib/biznesinfo/translation";
 
 interface NewsItem {
   id: string;
@@ -16,6 +21,16 @@ let lastFetch = 0;
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 const RSS_TIMEOUT_MS = 2500;
 const IMAGE_TIMEOUT_MS = 1200;
+const LOCALIZED_NEWS_CACHE_TTL_MS = 10 * 60 * 1000;
+const NEWS_TRANSLATE_ITEM_CONCURRENCY = 2;
+
+type LocalizedNewsCacheEntry = {
+  value: NewsItem[];
+  expiresAt: number;
+  sourceStamp: number;
+};
+
+const localizedNewsCache = new Map<BiznesinfoUiLanguage, LocalizedNewsCacheEntry>();
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
@@ -58,6 +73,79 @@ async function fetchImageFromPage(url: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (_item: T, _index: number) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const out = new Array<R>(items.length);
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.min(Math.max(concurrency, 1), items.length) },
+    async () => {
+      while (true) {
+        const index = cursor;
+        cursor += 1;
+        if (index >= items.length) break;
+        out[index] = await mapper(items[index], index);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return out;
+}
+
+function getLocalizedNewsCache(language: BiznesinfoUiLanguage): NewsItem[] | null {
+  const cached = localizedNewsCache.get(language);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now() || cached.sourceStamp !== lastFetch) {
+    localizedNewsCache.delete(language);
+    return null;
+  }
+  return cached.value;
+}
+
+function setLocalizedNewsCache(language: BiznesinfoUiLanguage, value: NewsItem[]): void {
+  localizedNewsCache.set(language, {
+    value,
+    expiresAt: Date.now() + LOCALIZED_NEWS_CACHE_TTL_MS,
+    sourceStamp: lastFetch,
+  });
+}
+
+async function localizeNewsItems(
+  news: NewsItem[],
+  language: BiznesinfoUiLanguage,
+): Promise<NewsItem[]> {
+  if (!Array.isArray(news) || news.length === 0) return news;
+  if (language === "ru") return news;
+
+  const cached = getLocalizedNewsCache(language);
+  if (cached) return cached;
+
+  const localized = await mapWithConcurrency(
+    news,
+    NEWS_TRANSLATE_ITEM_CONCURRENCY,
+    async (item) => {
+      const [title, description, categoryTranslated] = await Promise.all([
+        localizeTextByUiLanguage(item.title, language),
+        localizeTextByUiLanguage(item.description, language),
+        localizeTextByUiLanguage(item.category || "", language),
+      ]);
+      return {
+        ...item,
+        title: title || item.title,
+        description: description || item.description,
+        category: categoryTranslated || item.category,
+      };
+    },
+  );
+
+  setLocalizedNewsCache(language, localized);
+  return localized;
 }
 
 async function fetchRSS(): Promise<NewsItem[]> {
@@ -157,14 +245,17 @@ function cleanHtml(text: string): string {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const language = normalizeUiLanguage(searchParams.get("lang") || searchParams.get("language"));
   const limit = Math.min(parseInt(searchParams.get("limit") || "3", 10), 10);
 
   const news = await fetchRSS();
+  const localizedNews = await localizeNewsItems(news, language);
 
   return NextResponse.json({
     success: true,
-    news: news.slice(0, limit),
+    news: localizedNews.slice(0, limit),
     source: "belta.by",
+    language,
     cached: Date.now() - lastFetch < 1000,
   });
 }

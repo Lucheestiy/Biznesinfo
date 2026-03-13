@@ -10,6 +10,7 @@ import Pagination from "@/components/Pagination";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
 import { regions } from "@/data/regions";
+import { localizeCatalogCategoryName, localizeCatalogRubricName } from "@/lib/biznesinfo/catalog-localization";
 import type { BiznesinfoRubricResponse } from "@/lib/biznesinfo/types";
 import { BIZNESINFO_CATEGORY_ICONS } from "@/lib/biznesinfo/icons";
 import { formatCompanyCount } from "@/lib/utils/plural";
@@ -61,7 +62,7 @@ function companyCompletenessScore(company: BiznesinfoRubricResponse["companies"]
 
 export default function SubcategoryPage({ params }: PageProps) {
   const { category, rubric } = use(params);
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { selectedRegion, setSelectedRegion, regionName } = useRegion();
   const router = useRouter();
 
@@ -117,7 +118,7 @@ export default function SubcategoryPage({ params }: PageProps) {
     const rubricSlug = `${category}/${rubricPath}`;
     const region = selectedRegion || "";
     fetch(
-      `/api/biznesinfo/rubric?slug=${encodeURIComponent(rubricSlug)}&region=${encodeURIComponent(region)}&offset=${(currentPage - 1) * PAGE_SIZE}&limit=${PAGE_SIZE}`,
+      `/api/biznesinfo/rubric?slug=${encodeURIComponent(rubricSlug)}&region=${encodeURIComponent(region)}&offset=${(currentPage - 1) * PAGE_SIZE}&limit=${PAGE_SIZE}&lang=${encodeURIComponent(language)}`,
     )
       .then((r) => (r.ok ? r.json() : null))
       .then((resp: BiznesinfoRubricResponse | null) => {
@@ -134,7 +135,7 @@ export default function SubcategoryPage({ params }: PageProps) {
     return () => {
       isMounted = false;
     };
-  }, [category, rubricPath, selectedRegion, currentPage]);
+  }, [category, rubricPath, selectedRegion, currentPage, language]);
 
   const totalPages = data ? Math.ceil((data.page?.total || 0) / PAGE_SIZE) : 0;
 
@@ -167,6 +168,9 @@ export default function SubcategoryPage({ params }: PageProps) {
   }, [data]);
 
   const icon = BIZNESINFO_CATEGORY_ICONS[category] || "🏢";
+  const resolvedRubricSlug = data?.rubric?.slug || `${category}/${rubricPath}`;
+  const rubricName = localizeCatalogRubricName(language, resolvedRubricSlug, data?.rubric?.name || rubricPath);
+  const categoryName = localizeCatalogCategoryName(language, category, data?.rubric?.category_name || category);
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-gray-100">
@@ -193,10 +197,10 @@ export default function SubcategoryPage({ params }: PageProps) {
                 <Link href="/#catalog" className="whitespace-nowrap hover:text-[#820251]">{t("nav.catalog")}</Link>
                 <span>/</span>
                 <Link href={`/catalog/${category}`} className="whitespace-nowrap hover:text-[#820251]">
-                  {data?.rubric?.category_name || category}
+                  {categoryName}
                 </Link>
                 <span>/</span>
-                <span className="whitespace-nowrap text-[#820251] font-medium">{data?.rubric?.name || rubricPath}</span>
+                <span className="whitespace-nowrap text-[#820251] font-medium">{rubricName}</span>
               </div>
             </div>
           </div>
@@ -208,11 +212,11 @@ export default function SubcategoryPage({ params }: PageProps) {
             <div className="flex items-center gap-4">
               <span className="text-5xl">{icon}</span>
               <div>
-                <h1 className="text-3xl font-bold">{data?.rubric?.name || rubricPath}</h1>
+                <h1 className="text-3xl font-bold">{rubricName}</h1>
                 <p className="text-pink-200 mt-1">
-                  {data?.rubric?.category_name || category}
+                  {categoryName}
                   {" • "}
-                  {isLoading ? "…" : formatCompanyCount(data?.page?.total ?? 0)}
+                  {isLoading ? "…" : formatCompanyCount(data?.page?.total ?? 0, language)}
                   {selectedRegion && ` • ${regionName}`}
                 </p>
               </div>
@@ -427,7 +431,7 @@ export default function SubcategoryPage({ params }: PageProps) {
         <div className="container mx-auto py-10 px-4">
           <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
             <span className="w-1 h-6 bg-[#820251] rounded"></span>
-            {formatCompanyCount(data?.page?.total ?? 0)}
+            {formatCompanyCount(data?.page?.total ?? 0, language)}
             {selectedRegion && (
               <span className="text-sm font-normal text-gray-500">
                 — {regionName}
@@ -472,7 +476,7 @@ export default function SubcategoryPage({ params }: PageProps) {
             href={`/catalog/${category}`}
             className="inline-flex items-center gap-2 text-[#820251] hover:underline"
           >
-            ← {t("catalog.backToCategory")} {data?.rubric?.category_name || category}
+            ← {t("catalog.backToCategory")} {categoryName}
           </Link>
         </div>
       </main>

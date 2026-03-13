@@ -95,6 +95,7 @@ const FOOD_CHEESE_CATEGORY_RE =
   /(^|[^\p{L}\p{N}])(пищев\p{L}*|молоч\p{L}*|продукт\p{L}*\s+питан|сыр(?!ь)\p{L}*|продовольств\p{L}*)(?=$|[^\p{L}\p{N}])/iu;
 const FOOD_COMMODITY_TOKEN_RE =
   /^(молок\p{L}*|молоч\p{L}*|сыр\p{L}*|рыб\p{L}*|хлеб\p{L}*|сахар\p{L}*|зелен\p{L}*|овощ\p{L}*|фрукт\p{L}*|мяс\p{L}*|яйц\p{L}*|круп\p{L}*|мук\p{L}*|масл\p{L}*|бакале\p{L}*|напит\p{L}*)$/iu;
+const FOOD_LARD_TOKEN_RE = /^(сало|сала|салу|салом|сале|сальц\p{L}*|шпик\p{L}*)$/iu;
 const FOOD_PRODUCT_SIGNAL_RE =
   /(^|[^\p{L}\p{N}])(пищ\p{L}*|продукт\p{L}*|продоволь\p{L}*|бакале\p{L}*|агро\p{L}*|ферм\p{L}*|молоч\p{L}*|мяс\p{L}*|рыб\p{L}*|сахар\p{L}*|хлеб\p{L}*|овощ\p{L}*|фрукт\p{L}*|зерн\p{L}*|круп\p{L}*|мук\p{L}*|масл\p{L}*|напит\p{L}*|кондитер\p{L}*)(?=$|[^\p{L}\p{N}])/iu;
 const FOOD_SUPPLY_CHAIN_SIGNAL_RE =
@@ -314,8 +315,21 @@ function looksLikeCommodityIntent(raw: string, tokens: string[]): boolean {
 
 function looksLikeFoodCommodityIntent(raw: string, tokens: string[]): boolean {
   if (!raw) return false;
-  if (tokens.some((token) => FOOD_COMMODITY_TOKEN_RE.test(token))) return true;
+  if (tokens.some((token) => isFoodCommodityIntentToken(token))) return true;
   return FOOD_PRODUCT_SIGNAL_RE.test(raw);
+}
+
+function isFoodCommodityIntentToken(raw: string): boolean {
+  const token = (raw || "").trim().toLowerCase().replace(/ё/gu, "е");
+  if (!token) return false;
+  if (FOOD_COMMODITY_TOKEN_RE.test(token)) return true;
+  return FOOD_LARD_TOKEN_RE.test(token);
+}
+
+function isStrictFoodCommodityIntentToken(raw: string): boolean {
+  const token = (raw || "").trim().toLowerCase().replace(/ё/gu, "е");
+  if (!token) return false;
+  return FOOD_LARD_TOKEN_RE.test(token);
 }
 
 function resolveCommodityStructuredMinScore(queryTokens: string[]): number {
@@ -1280,11 +1294,22 @@ function hasCommodityMustMatch(
   queryTokens: string[],
 ): boolean {
   if (queryTokens.length === 0) return true;
-  const foodCommodityIntent = queryTokens.some((token) => FOOD_COMMODITY_TOKEN_RE.test(token));
+  const foodCommodityIntent = queryTokens.some((token) => isFoodCommodityIntentToken(token));
+  const strictFoodCommodityIntent = queryTokens.some((token) => isStrictFoodCommodityIntentToken(token));
   const coreTokens = buildCommodityCoreTokens(hit);
-  if (coreTokens.length > 0 && overlapCountBounded(coreTokens, queryTokens, 1) >= 1) return true;
+  if (coreTokens.length > 0 && overlapCountBounded(coreTokens, queryTokens, strictFoodCommodityIntent ? 0 : 1) >= 1) {
+    return true;
+  }
 
   const coreText = buildCommodityCoreTextParts(hit).join(" ");
+  if (strictFoodCommodityIntent) {
+    const strictFoodContext = `${coreText} ${(hit.keywords || []).join(" ")}`.trim();
+    const strictFoodMatch =
+      isFoodCategoryContext(strictFoodContext) ||
+      FOOD_PRODUCT_SIGNAL_RE.test(strictFoodContext) ||
+      (hit.domainTags || []).includes("food");
+    if (!strictFoodMatch) return false;
+  }
   if (coreText && semanticOverlapScore(coreText, queryTokens) >= 2) return true;
 
   if (foodCommodityIntent && (hit.domainTags || []).includes("food")) {
@@ -1367,6 +1392,7 @@ function applyCommodityStructuredHitGuard(
   if (!looksLikeCommodityIntent(rawProductQuery, queryTokens)) return hits;
   if (queryTokens.length === 0) return hits;
   const foodCommodityIntent = looksLikeFoodCommodityIntent(rawProductQuery, queryTokens);
+  const strictFoodCommodityIntent = queryTokens.some((token) => isStrictFoodCommodityIntentToken(token));
   const procurementIntent = PROCUREMENT_CUE_RE.test(rawProductQuery);
   const packagingQuery = PACKAGING_QUERY_CUE_RE.test(rawProductQuery);
   const rawMaterialQuery = RAW_MATERIAL_TOKEN_RE.test(rawProductQuery);
@@ -1398,7 +1424,7 @@ function applyCommodityStructuredHitGuard(
     ].join(" ");
     const hasFoodProductSignal = FOOD_PRODUCT_SIGNAL_RE.test(foodContextText);
     const hasFoodSupplyChainSignal = FOOD_SUPPLY_CHAIN_SIGNAL_RE.test(foodContextText);
-    const hasCommodityNameSignal = semanticOverlapScore(hit.name || "", queryTokens) >= 2;
+    const hasCommodityNameSignal = !strictFoodCommodityIntent && semanticOverlapScore(hit.name || "", queryTokens) >= 2;
     const hasFoodSupplySignal = procurementIntent
       ? hasFoodProductSignal && hasFoodSupplyChainSignal
       : (hasFoodProductSignal || hasCommodityNameSignal);
@@ -1467,6 +1493,7 @@ function applyCommodityRelevanceGuard(
   if (!looksLikeCommodityIntent(rawProductQuery, queryTokens)) return companies;
   if (queryTokens.length === 0) return companies;
   const foodCommodityIntent = looksLikeFoodCommodityIntent(rawProductQuery, queryTokens);
+  const strictFoodCommodityIntent = queryTokens.some((token) => isStrictFoodCommodityIntentToken(token));
   const cheeseIntent = looksLikeCheeseCommodityIntent(rawProductQuery);
   const packagingQuery = PACKAGING_QUERY_CUE_RE.test(rawProductQuery);
   const rawMaterialQuery = RAW_MATERIAL_TOKEN_RE.test(rawProductQuery);
@@ -1483,6 +1510,11 @@ function applyCommodityRelevanceGuard(
     const categoryScore = semanticOverlapScore(categoryText, queryTokens);
     const detailsScore = semanticOverlapScore(detailsText, queryTokens);
     const nameScore = semanticOverlapScore(nameText, queryTokens);
+    const strictFoodContextText = `${categoryText} ${detailsText}`.trim();
+    const strictFoodMismatch =
+      strictFoodCommodityIntent &&
+      !isFoodCategoryContext(strictFoodContextText) &&
+      !FOOD_PRODUCT_SIGNAL_RE.test(strictFoodContextText);
     const entityNameOverlap = requiredNameEntityTokens.length > 0
       ? overlapCount(nameTokens, requiredNameEntityTokens)
       : 0;
@@ -1508,7 +1540,8 @@ function applyCommodityRelevanceGuard(
     const hardDistractor =
       ((mediaCategory || industrialCategory) && categoryScore === 0 && detailsScore === 0) ||
       cheeseRawMaterialDistractor ||
-      nonFoodCommodityDistractor;
+      nonFoodCommodityDistractor ||
+      strictFoodMismatch;
     const score =
       (categoryScore * 100) +
       (detailsScore * 6) +
@@ -1516,7 +1549,16 @@ function applyCommodityRelevanceGuard(
       (entityNameOverlap * 40) -
       (hardDistractor ? 1000 : 0);
     const minScorePass = score >= resolveCommoditySummaryMinScore(queryTokens);
-    return { company, index, score, hardDistractor, entityNameMatch, minScorePass, summaryMustMatch };
+    return {
+      company,
+      index,
+      score,
+      hardDistractor,
+      strictFoodMismatch,
+      entityNameMatch,
+      minScorePass,
+      summaryMustMatch,
+    };
   });
 
   if (requiredNameEntityTokens.length > 0) {
@@ -1524,6 +1566,7 @@ function applyCommodityRelevanceGuard(
     if (entityMatched.length === 0) return [];
 
     const withoutHardDistractors = entityMatched.filter((item) => !item.hardDistractor);
+    if (strictFoodCommodityIntent && withoutHardDistractors.length === 0) return [];
     const base = withoutHardDistractors.length > 0 ? withoutHardDistractors : entityMatched;
     base.sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
@@ -1535,6 +1578,7 @@ function applyCommodityRelevanceGuard(
   const withoutHardDistractors = ranked.filter(
     (item) => !item.hardDistractor && item.minScorePass && item.summaryMustMatch,
   );
+  if (strictFoodCommodityIntent && withoutHardDistractors.length === 0) return [];
   const base = withoutHardDistractors.length > 0 ? withoutHardDistractors : ranked;
 
   base.sort((a, b) => {

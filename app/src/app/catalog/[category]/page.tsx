@@ -8,6 +8,7 @@ import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
 import { regions } from "@/data/regions";
+import { localizeCatalogCategoryName, localizeCatalogRubricName } from "@/lib/biznesinfo/catalog-localization";
 import type { BiznesinfoCatalogCategory, BiznesinfoCatalogResponse } from "@/lib/biznesinfo/types";
 
 interface PageProps {
@@ -21,7 +22,7 @@ const LEGACY_CATEGORY_ALIAS_REDIRECTS: Record<string, string> = {
 
 export default function CategoryPage({ params }: PageProps) {
   const { category } = use(params);
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { selectedRegion, setSelectedRegion, regionName } = useRegion();
   const router = useRouter();
 
@@ -51,6 +52,9 @@ export default function CategoryPage({ params }: PageProps) {
 
   const categoryData: BiznesinfoCatalogCategory | null =
     (catalog?.categories || []).find((c: BiznesinfoCatalogCategory) => c.slug === category) || null;
+  const categoryTitle = categoryData
+    ? localizeCatalogCategoryName(language, categoryData.slug, categoryData.name)
+    : category;
 
   useEffect(() => {
     if (isLoading || categoryData) return;
@@ -72,7 +76,7 @@ export default function CategoryPage({ params }: PageProps) {
               <span>/</span>
               <Link href="/#catalog" className="hover:text-[#820251]">{t("nav.catalog")}</Link>
               <span>/</span>
-              <span className="text-[#820251] font-medium">{categoryData?.name || category}</span>
+              <span className="text-[#820251] font-medium">{categoryTitle}</span>
             </div>
           </div>
         </div>
@@ -83,7 +87,7 @@ export default function CategoryPage({ params }: PageProps) {
             <div className="flex items-center gap-4">
               <span className="text-5xl">{categoryData?.icon || "🏢"}</span>
               <div>
-                <h1 className="text-3xl font-bold">{categoryData?.name || category}</h1>
+                <h1 className="text-3xl font-bold">{categoryTitle}</h1>
                 <p className="text-pink-200 mt-1">{t("catalog.subcategories")}</p>
               </div>
             </div>
@@ -153,7 +157,7 @@ export default function CategoryPage({ params }: PageProps) {
                     className="bg-white p-5 rounded-lg shadow-sm hover:shadow-md transition-all border border-gray-100 hover:border-[#820251] flex justify-between items-center group"
                   >
                     <span className="font-medium text-gray-700 group-hover:text-[#820251]">
-                      {r.name}
+                      {localizeCatalogRubricName(language, r.slug, r.name)}
                     </span>
                     <span className="text-sm text-gray-400 bg-gray-100 px-2 py-1 rounded">
                       {r.count}

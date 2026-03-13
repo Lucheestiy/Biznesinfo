@@ -56,10 +56,12 @@ const translations: Record<Language, Record<string, string>> = {
     "stats.companies": "Компаний",
     "stats.categories": "Категорий",
     "stats.regions": "Регионов",
+    "home.mapNearby": "Искать на карте рядом со мной",
+    "home.employeeSearch": "Поиск сотрудников",
 
     // Catalog
     "catalog.title": "Каталог по категориям",
-    "catalog.subcategories": "Подкатегории",
+    "catalog.subcategories": "Подрубрики",
     "catalog.companies": "Компании",
     "catalog.backToCatalog": "Вернуться в каталог",
     "catalog.backToCategory": "Вернуться к категории",
@@ -93,6 +95,21 @@ const translations: Record<Language, Record<string, string>> = {
     "company.linkCopied": "Ссылка скопирована!",
     "company.details": "Подробнее",
     "company.reviews": "отзывов",
+    "company.reviewsTitle": "Отзывы",
+    "company.keywords": "Ключевые слова",
+    "company.map": "Карта",
+    "company.rating": "Рейтинг",
+    "company.rubricPlacements": "Рубрики размещения",
+    "company.socials": "Социальные сети",
+    "company.unp": "УНП",
+    "company.contactPerson": "Контактное лицо",
+    "company.breakLabel": "Перерыв",
+    "company.openOriginal": "Открыть оригинал",
+    "company.photoViewer": "Просмотр фото",
+    "company.openPhoto": "Открыть фото",
+    "company.close": "Закрыть",
+    "company.prevPhoto": "Предыдущее фото",
+    "company.nextPhoto": "Следующее фото",
     "company.notFound": "Компании не найдены",
     "company.notFoundDesc": "В выбранном регионе нет компаний в этой категории",
     "company.showAllRegions": "Показать все регионы",
@@ -101,6 +118,7 @@ const translations: Record<Language, Record<string, string>> = {
     "ai.title": "AI-ассистент",
     "ai.description": "Оставьте заявку через AI-ассистента. Он автоматически разошлёт ваш запрос компаниям.",
     "ai.shortDesc": "Оставьте заявку — AI разошлёт её подходящим компаниям автоматически",
+    "ai.newBadge": "НОВОЕ",
     "ai.inactive": "AI-ассистент недоступен",
     "ai.personalAssistant": "Ваш персональный помощник",
     "ai.disclaimer": "Ответы генерируются AI и могут быть неточными. Не передавайте чувствительные данные и проверяйте важную информацию.",
@@ -249,7 +267,11 @@ const translations: Record<Language, Record<string, string>> = {
 
     // News
     "news.title": "Новости",
+    "news.partnersTitle": "Новости партнёров",
+    "news.beltaSubtitle": "Актуальные новости от БелТА",
     "news.readMore": "Читать далее",
+    "news.sourceBelta": "Источник: БелТА — Белорусское телеграфное агентство",
+    "news.loadError": "Не удалось загрузить новости",
 
     // Footer
     "footer.forBusiness": "Для бизнеса",
@@ -261,6 +283,7 @@ const translations: Record<Language, Record<string, string>> = {
     "footer.agreement": "Пользовательское соглашение",
     "footer.offer": "Публичный договор (оферта)",
     "footer.adRequest": "Заявка на размещение рекламы",
+    "footer.phone": "Тел",
     "footer.rights": "Все права защищены",
     "footer.information": "Информация",
 
@@ -282,6 +305,8 @@ const translations: Record<Language, Record<string, string>> = {
     "common.home": "Главная",
     "common.previous": "Назад",
     "common.next": "Далее",
+    "common.menu": "Меню",
+    "common.backToTop": "Наверх",
 
     // Categories
     "cat.automobiles": "Автомобили",
@@ -400,6 +425,7 @@ const translations: Record<Language, Record<string, string>> = {
     "services.article.cta.description": "Оставьте заявку, и мы свяжемся с вами для обсуждения деталей и расчёта стоимости.",
     "services.article.cta.button": "Оставить заявку",
     "services.article.cta.otherServices": "Другие услуги",
+    "services.article.cta.mailSubject": "Заявка на услугу:",
 
     // News
     "news.corporate": "Новости компаний Беларуси",
@@ -472,7 +498,7 @@ const translations: Record<Language, Record<string, string>> = {
     "map.coordsFromAddressNote": "Координаты определены по адресу. Уточните точку на карте через поиск, если нужно.",
 
 		    // Filter labels
-		    "filter.locationLabel": "Город, улица, дом",
+		    "filter.locationLabel": "Область, город, улица, дом",
 		    "filter.chooseRegion": "Выбрать регион",
 		    "filter.region": "Регион",
 		    "filter.city": "Город",
@@ -770,10 +796,12 @@ const translations: Record<Language, Record<string, string>> = {
     "stats.companies": "Companies",
     "stats.categories": "Categories",
     "stats.regions": "Regions",
+    "home.mapNearby": "Search on map near me",
+    "home.employeeSearch": "Employee search",
 
     // Catalog
     "catalog.title": "Catalog by categories",
-    "catalog.subcategories": "Subcategories",
+    "catalog.subcategories": "Subrubrics",
     "catalog.companies": "Companies",
     "catalog.backToCatalog": "Back to catalog",
     "catalog.backToCategory": "Back to category",
@@ -807,6 +835,21 @@ const translations: Record<Language, Record<string, string>> = {
     "company.linkCopied": "Link copied!",
     "company.details": "Details",
     "company.reviews": "reviews",
+    "company.reviewsTitle": "Reviews",
+    "company.keywords": "Keywords",
+    "company.map": "Map",
+    "company.rating": "Rating",
+    "company.rubricPlacements": "Placement rubrics",
+    "company.socials": "Social media",
+    "company.unp": "UNP",
+    "company.contactPerson": "Contact person",
+    "company.breakLabel": "Break",
+    "company.openOriginal": "Open original",
+    "company.photoViewer": "Photo viewer",
+    "company.openPhoto": "Open photo",
+    "company.close": "Close",
+    "company.prevPhoto": "Previous photo",
+    "company.nextPhoto": "Next photo",
     "company.notFound": "No companies found",
     "company.notFoundDesc": "There are no companies in this category in the selected region",
     "company.showAllRegions": "Show all regions",
@@ -814,6 +857,8 @@ const translations: Record<Language, Record<string, string>> = {
     // AI Assistant
     "ai.title": "AI Assistant",
     "ai.description": "Leave a request through AI assistant. It will automatically send your request to companies.",
+    "ai.shortDesc": "Leave a request and AI will automatically send it to suitable companies",
+    "ai.newBadge": "NEW",
     "ai.inactive": "AI assistant unavailable",
     "ai.personalAssistant": "Your personal assistant",
     "ai.disclaimer": "AI-generated responses may be inaccurate. Don't share sensitive data and verify important information.",
@@ -962,7 +1007,11 @@ const translations: Record<Language, Record<string, string>> = {
 
     // News
     "news.title": "News",
+    "news.partnersTitle": "Partner News",
+    "news.beltaSubtitle": "Latest updates from BelTA",
     "news.readMore": "Read more",
+    "news.sourceBelta": "Source: BelTA — Belarusian Telegraph Agency",
+    "news.loadError": "Failed to load news",
 
     // Footer
     "footer.forBusiness": "For business",
@@ -974,6 +1023,7 @@ const translations: Record<Language, Record<string, string>> = {
     "footer.agreement": "User agreement",
     "footer.offer": "Public offer",
     "footer.adRequest": "Advertising request",
+    "footer.phone": "Phone",
     "footer.rights": "All rights reserved",
     "footer.information": "Information",
 
@@ -995,6 +1045,8 @@ const translations: Record<Language, Record<string, string>> = {
     "common.home": "Home",
     "common.previous": "Previous",
     "common.next": "Next",
+    "common.menu": "Menu",
+    "common.backToTop": "Back to top",
 
     // Categories
     "cat.automobiles": "Automobiles",
@@ -1104,6 +1156,16 @@ const translations: Record<Language, Record<string, string>> = {
     "services.contactUs": "Contact Us",
     "services.expand": "Show all services",
     "services.collapse": "Hide services",
+    "services.readMore": "Read more",
+    "services.backToServices": "Back to services",
+    "services.article.benefits": "Benefits for your business",
+    "services.article.details": "Detailed description",
+    "services.article.features": "What is included",
+    "services.article.cta.title": "Ready to start?",
+    "services.article.cta.description": "Leave a request and we will contact you to discuss details and pricing.",
+    "services.article.cta.button": "Leave a request",
+    "services.article.cta.otherServices": "Other services",
+    "services.article.cta.mailSubject": "Service request:",
 
     // News
     "news.corporate": "Belarus Corporate News",
@@ -1176,7 +1238,7 @@ const translations: Record<Language, Record<string, string>> = {
     "map.coordsFromAddressNote": "Coordinates were resolved from the address. Use the map search to fine-tune the location if needed.",
 
 		    // Filter labels
-		    "filter.locationLabel": "City, street, house",
+		    "filter.locationLabel": "Region, city, street, house",
 		    "filter.chooseRegion": "Choose region",
 		    "filter.region": "Region",
 		    "filter.city": "City",
@@ -1474,10 +1536,12 @@ const translations: Record<Language, Record<string, string>> = {
     "stats.companies": "Кампаній",
     "stats.categories": "Катэгорый",
     "stats.regions": "Рэгіёнаў",
+    "home.mapNearby": "Шукаць на карце побач са мной",
+    "home.employeeSearch": "Пошук супрацоўнікаў",
 
     // Catalog
     "catalog.title": "Каталог па катэгорыях",
-    "catalog.subcategories": "Падкатэгорыі",
+    "catalog.subcategories": "Падрубрыкі",
     "catalog.companies": "Кампаніі",
     "catalog.backToCatalog": "Вярнуцца ў каталог",
     "catalog.backToCategory": "Вярнуцца да катэгорыі",
@@ -1511,6 +1575,21 @@ const translations: Record<Language, Record<string, string>> = {
     "company.linkCopied": "Спасылка скапіявана!",
     "company.details": "Падрабязней",
     "company.reviews": "водгукаў",
+    "company.reviewsTitle": "Водгукі",
+    "company.keywords": "Ключавыя словы",
+    "company.map": "Карта",
+    "company.rating": "Рэйтынг",
+    "company.rubricPlacements": "Рубрыкі размяшчэння",
+    "company.socials": "Сацыяльныя сеткі",
+    "company.unp": "УНП",
+    "company.contactPerson": "Кантактная асоба",
+    "company.breakLabel": "Перапынак",
+    "company.openOriginal": "Адкрыць арыгінал",
+    "company.photoViewer": "Прагляд фота",
+    "company.openPhoto": "Адкрыць фота",
+    "company.close": "Закрыць",
+    "company.prevPhoto": "Папярэдняе фота",
+    "company.nextPhoto": "Наступнае фота",
     "company.notFound": "Кампаніі не знойдзены",
     "company.notFoundDesc": "У выбраным рэгіёне няма кампаній у гэтай катэгорыі",
     "company.showAllRegions": "Паказаць усе рэгіёны",
@@ -1518,6 +1597,8 @@ const translations: Record<Language, Record<string, string>> = {
     // AI Assistant
     "ai.title": "AI-асістэнт",
     "ai.description": "Пакіньце заяўку праз AI-асістэнта. Ён аўтаматычна разашле ваш запыт кампаніям.",
+    "ai.shortDesc": "Пакіньце заяўку — AI аўтаматычна разашле яе прыдатным кампаніям",
+    "ai.newBadge": "НОВАЕ",
     "ai.inactive": "AI-асістэнт недаступны",
     "ai.personalAssistant": "Ваш персанальны памочнік",
     "ai.disclaimer": "Адказы генеруюцца AI і могуць быць недакладнымі. Не перадавайце адчувальныя даныя і правярайце важную інфармацыю.",
@@ -1654,7 +1735,11 @@ const translations: Record<Language, Record<string, string>> = {
 
     // News
     "news.title": "Навіны",
+    "news.partnersTitle": "Навіны партнёраў",
+    "news.beltaSubtitle": "Актуальныя навіны ад БелТА",
     "news.readMore": "Чытаць далей",
+    "news.sourceBelta": "Крыніца: БелТА — Беларускае тэлеграфнае агенцтва",
+    "news.loadError": "Не ўдалося загрузіць навіны",
 
     // Footer
     "footer.forBusiness": "Для бізнесу",
@@ -1666,6 +1751,7 @@ const translations: Record<Language, Record<string, string>> = {
     "footer.agreement": "Карыстальніцкае пагадненне",
     "footer.offer": "Публічны дагавор (аферта)",
     "footer.adRequest": "Заяўка на размяшчэнне рэкламы",
+    "footer.phone": "Тэл",
     "footer.rights": "Усе правы абаронены",
     "footer.information": "Інфармацыя",
 
@@ -1684,6 +1770,8 @@ const translations: Record<Language, Record<string, string>> = {
     "common.error": "Памылка",
     "common.back": "Назад",
     "common.home": "Галоўная",
+    "common.menu": "Меню",
+    "common.backToTop": "Наверх",
 
     // Categories
     "cat.automobiles": "Аўтамабілі",
@@ -1793,6 +1881,16 @@ const translations: Record<Language, Record<string, string>> = {
     "services.contactUs": "Напісаць нам",
     "services.expand": "Паказаць усе паслугі",
     "services.collapse": "Згарнуць паслугі",
+    "services.readMore": "Падрабязней",
+    "services.backToServices": "Вярнуцца да паслуг",
+    "services.article.benefits": "Перавагі для вашага бізнесу",
+    "services.article.details": "Падрабязнае апісанне",
+    "services.article.features": "Што ўваходзіць у паслугу",
+    "services.article.cta.title": "Гатовыя пачаць?",
+    "services.article.cta.description": "Пакіньце заяўку, і мы звяжамся з вамі, каб абмеркаваць дэталі і кошт.",
+    "services.article.cta.button": "Пакінуць заяўку",
+    "services.article.cta.otherServices": "Іншыя паслугі",
+    "services.article.cta.mailSubject": "Заяўка на паслугу:",
 
     // News
     "news.corporate": "Навіны кампаній Беларусі",
@@ -1865,7 +1963,7 @@ const translations: Record<Language, Record<string, string>> = {
     "map.coordsFromAddressNote": "Каардынаты вызначаны па адрасе. Удакладніце кропку на карце праз пошук, калі трэба.",
 
 		    // Filter labels
-		    "filter.locationLabel": "Горад, вуліца, дом",
+		    "filter.locationLabel": "Вобласць, горад, вуліца, дом",
 		    "filter.chooseRegion": "Выбраць рэгіён",
 		    "filter.region": "Рэгіён",
 		    "filter.city": "Горад",
@@ -2163,10 +2261,12 @@ const translations: Record<Language, Record<string, string>> = {
     "stats.companies": "公司",
     "stats.categories": "类别",
     "stats.regions": "地区",
+    "home.mapNearby": "在地图上搜索我附近",
+    "home.employeeSearch": "搜索员工",
 
     // Catalog
     "catalog.title": "按类别目录",
-    "catalog.subcategories": "子类别",
+    "catalog.subcategories": "子栏目",
     "catalog.companies": "公司",
     "catalog.backToCatalog": "返回目录",
     "catalog.backToCategory": "返回类别",
@@ -2200,6 +2300,21 @@ const translations: Record<Language, Record<string, string>> = {
     "company.linkCopied": "链接已复制！",
     "company.details": "详情",
     "company.reviews": "条评论",
+    "company.reviewsTitle": "评价",
+    "company.keywords": "关键词",
+    "company.map": "地图",
+    "company.rating": "评分",
+    "company.rubricPlacements": "发布栏目",
+    "company.socials": "社交媒体",
+    "company.unp": "统一纳税号",
+    "company.contactPerson": "联系人",
+    "company.breakLabel": "休息",
+    "company.openOriginal": "打开原图",
+    "company.photoViewer": "图片查看",
+    "company.openPhoto": "打开图片",
+    "company.close": "关闭",
+    "company.prevPhoto": "上一张图片",
+    "company.nextPhoto": "下一张图片",
     "company.notFound": "未找到公司",
     "company.notFoundDesc": "所选地区没有此类别的公司",
     "company.showAllRegions": "显示所有地区",
@@ -2207,6 +2322,8 @@ const translations: Record<Language, Record<string, string>> = {
     // AI Assistant
     "ai.title": "AI助手",
     "ai.description": "通过AI助手提交请求。它会自动将您的请求发送给相关公司。",
+    "ai.shortDesc": "提交您的请求，AI 会自动发送给合适的公司",
+    "ai.newBadge": "新",
     "ai.inactive": "AI助手不可用",
     "ai.personalAssistant": "您的个人助手",
     "ai.disclaimer": "AI生成的回答可能不准确。请勿分享敏感信息，并核实重要内容。",
@@ -2343,7 +2460,11 @@ const translations: Record<Language, Record<string, string>> = {
 
     // News
     "news.title": "新闻",
+    "news.partnersTitle": "合作伙伴新闻",
+    "news.beltaSubtitle": "来自白通社的最新资讯",
     "news.readMore": "阅读更多",
+    "news.sourceBelta": "来源：BelTA（白俄罗斯国家通讯社）",
+    "news.loadError": "新闻加载失败",
 
     // Footer
     "footer.forBusiness": "商业服务",
@@ -2355,6 +2476,7 @@ const translations: Record<Language, Record<string, string>> = {
     "footer.agreement": "用户协议",
     "footer.offer": "公开要约",
     "footer.adRequest": "广告请求",
+    "footer.phone": "电话",
     "footer.rights": "版权所有",
     "footer.information": "信息",
 
@@ -2373,6 +2495,8 @@ const translations: Record<Language, Record<string, string>> = {
     "common.error": "错误",
     "common.back": "返回",
     "common.home": "首页",
+    "common.menu": "菜单",
+    "common.backToTop": "返回顶部",
 
     // Categories
     "cat.automobiles": "汽车",
@@ -2475,13 +2599,23 @@ const translations: Record<Language, Record<string, string>> = {
     "news.alutech.excerpt": "铝型材和卷帘系统制造商在哈萨克斯坦和乌兹别克斯坦开设办事处。公司计划到2027年将出口翻一番。",
 
     // Services section
-    "services.title": "Business Group有限公司的附加服务",
+    "services.title": "商业集团有限公司的附加服务",
     "services.subtitle": "营销、战略和全面的业务发展解决方案",
     "services.consultation": "需要咨询?",
     "services.consultationDesc": "我们将为您的业务找到最佳解决方案",
     "services.contactUs": "联系我们",
     "services.expand": "显示所有服务",
     "services.collapse": "隐藏服务",
+    "services.readMore": "了解详情",
+    "services.backToServices": "返回服务列表",
+    "services.article.benefits": "对您业务的优势",
+    "services.article.details": "详细说明",
+    "services.article.features": "服务包含内容",
+    "services.article.cta.title": "准备开始了吗？",
+    "services.article.cta.description": "提交申请后，我们将联系您沟通细节并核算费用。",
+    "services.article.cta.button": "提交申请",
+    "services.article.cta.otherServices": "其他服务",
+    "services.article.cta.mailSubject": "服务申请：",
 
     // News
     "news.corporate": "白俄罗斯企业新闻",
@@ -2512,14 +2646,14 @@ const translations: Record<Language, Record<string, string>> = {
     "services.leadsDesc": "通过优化的广告渠道开发潜在客户",
     "services.processAutomation": "流程自动化",
     "services.processAutomationDesc": "减轻团队负担并提高转化率",
-    "services.crm": "CRM系统",
+    "services.crm": "客户关系管理系统",
     "services.crmDesc": "客户管理系统的实施和配置",
     "services.websites": "网站开发",
     "services.websitesDesc": "企业网站、着陆页和在线商店",
-    "services.seo": "SEO推广",
-    "services.seoDesc": "Yandex和Google搜索引擎优化",
+    "services.seo": "搜索引擎优化推广",
+    "services.seoDesc": "扬德克斯和谷歌搜索引擎优化",
     "services.contextAds": "上下文广告",
-    "services.contextAdsDesc": "在Google、Yandex、Meta和社交网络上的广告",
+    "services.contextAdsDesc": "在谷歌、扬德克斯、美塔及社交网络投放广告",
     "services.aiBots": "AI机器人和聊天机器人",
     "services.aiBotsDesc": "用于Telegram、WhatsApp和网站的智能机器人",
     "services.integrations": "系统集成",
@@ -2554,7 +2688,7 @@ const translations: Record<Language, Record<string, string>> = {
     "map.coordsFromAddressNote": "坐标由地址解析得到。如有需要，可通过地图搜索来微调位置。",
 
 		    // Filter labels
-		    "filter.locationLabel": "城市、街道、门牌号",
+		    "filter.locationLabel": "地区、城市、街道、门牌号",
 		    "filter.chooseRegion": "选择地区",
 		    "filter.region": "地区",
 		    "filter.city": "城市",

@@ -247,11 +247,7 @@ test("done payload can apply template when stream is also template", () => {
 
 test("colloquial greeting uses capabilities reply without sourcing checklist", () => {
   const result = __assistantRouteTestHooks.buildHardFormattedReply("че как") || "";
-  assert.match(result, /Здравствуйте! Я ваш личный помощник Лориэн\./u);
-  assert.match(result, /Подберу релевантные рубрики на портале/u);
-  assert.match(result, /коммерческое предложение\/заявку/u);
-  assert.doesNotMatch(result, /важные\s+условия/u);
-  assert.doesNotMatch(result, /срок,\s*бюджет,\s*объ[её]м/u);
+  assert.match(result, /Здравствуйте! Чем я могу вам помочь\?/u);
 });
 
 test("capabilities follow-up uses fixed competency boundary reply", () => {

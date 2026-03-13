@@ -24,25 +24,31 @@ const localeMap: Record<Language, string> = {
 const PLACEHOLDER_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='200' viewBox='0 0 400 200'%3E%3Crect fill='%23820251' width='400' height='200'/%3E%3Ctext fill='%23fff' font-family='sans-serif' font-size='16' x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle'%3E%D0%9D%D0%BE%D0%B2%D0%BE%D1%81%D1%82%D0%B8%3C/text%3E%3C/svg%3E";
 
 export default function NewsBlock() {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
+    const controller = new AbortController();
 
     async function fetchNews() {
+      setLoading(true);
+      setError(null);
       try {
-        const res = await fetch("/api/news?limit=6");
+        const res = await fetch(`/api/news?limit=6&lang=${encodeURIComponent(language)}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
         if (!res.ok) throw new Error("Failed to fetch news");
         const data = await res.json();
         if (isMounted && data.news) {
           setNews(data.news);
         }
       } catch {
-        if (isMounted) {
-          setError("Не удалось загрузить новости");
+        if (isMounted && !controller.signal.aborted) {
+          setError("load_failed");
         }
       } finally {
         if (isMounted) {
@@ -54,8 +60,9 @@ export default function NewsBlock() {
     fetchNews();
     return () => {
       isMounted = false;
+      controller.abort();
     };
-  }, []);
+  }, [language]);
 
   const formatDate = (dateStr: string) => {
     try {
@@ -75,7 +82,7 @@ export default function NewsBlock() {
       <div id="news" className="container mx-auto pt-6 pb-12 px-4">
         <h2 className="text-2xl font-bold text-gray-800 mb-2 flex items-center gap-2">
           <span className="w-1 h-8 bg-[#820251] rounded"></span>
-          Новости партнёров
+          {t("news.partnersTitle")}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
           {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -101,10 +108,10 @@ export default function NewsBlock() {
     <div id="news" className="container mx-auto pt-6 pb-12 px-4">
       <h2 className="text-2xl font-bold text-gray-800 mb-2 flex items-center gap-2">
         <span className="w-1 h-8 bg-[#820251] rounded"></span>
-        Новости партнёров
+        {t("news.partnersTitle")}
       </h2>
       <p className="text-gray-600 mb-8 ml-3">
-        Актуальные новости от БелТА
+        {t("news.beltaSubtitle")}
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -167,7 +174,7 @@ export default function NewsBlock() {
                 {/* Read more link */}
                 <div className="mt-4 text-[#820251] text-sm font-semibold flex items-center gap-1
                   group-hover:gap-2 transition-all">
-                  Читать далее
+                  {t("news.readMore")}
                   <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
@@ -186,7 +193,7 @@ export default function NewsBlock() {
           rel="noopener noreferrer"
           className="block w-full max-w-[290px] text-center text-sm text-gray-500 hover:text-[#820251] transition-colors"
         >
-          Источник: БелТА — Белорусское телеграфное агентство
+          {t("news.sourceBelta")}
         </a>
       </div>
     </div>

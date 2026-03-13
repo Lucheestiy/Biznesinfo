@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { biznesinfoGetCompany } from "@/lib/biznesinfo/store";
 import { isExcludedBiznesinfoCompanyId } from "@/lib/biznesinfo/exclusions";
 import { isLiquidatedByKartoteka } from "@/lib/biznesinfo/kartoteka";
+import { localizeCompanyResponse, normalizeUiLanguage } from "@/lib/biznesinfo/translation";
 
 export const runtime = "nodejs";
 
-export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { searchParams } = new URL(request.url);
+  const language = normalizeUiLanguage(searchParams.get("lang") || searchParams.get("language"));
   const { id } = await ctx.params;
   const companyId = (id || "").trim();
   if (!companyId) {
@@ -28,7 +31,8 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
     ) {
       return NextResponse.json({ error: "company_not_found" }, { status: 404 });
     }
-    return NextResponse.json(data);
+    const localized = await localizeCompanyResponse(data, language);
+    return NextResponse.json(localized);
   } catch (e) {
     const msg = String((e as Error)?.message || "");
     if (msg.startsWith("company_not_found:")) {

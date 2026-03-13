@@ -3,6 +3,11 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
+import {
+  localizeCatalogCategoryName,
+  localizeCatalogRubricName,
+  type CatalogLanguage,
+} from "@/lib/biznesinfo/catalog-localization";
 import type { BiznesinfoCatalogCategory, BiznesinfoCatalogResponse } from "@/lib/biznesinfo/types";
 import { formatCompanyCount } from "@/lib/utils/plural";
 
@@ -12,7 +17,7 @@ interface RubricatorProps {
 }
 
 export default function Rubricator({ floating = true, inline = false }: RubricatorProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [catalog, setCatalog] = useState<BiznesinfoCatalogResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -161,16 +166,16 @@ export default function Rubricator({ floating = true, inline = false }: Rubricat
                       key={category.slug}
                       href={`/catalog/${category.slug}`}
                       onClick={() => setIsOpen(false)}
-                      className="bg-gray-50 p-4 rounded-xl hover:shadow-lg transition-all text-center group border border-gray-100 hover:border-[#820251] hover:scale-105"
+                      className="bg-gray-50 p-3 rounded-xl hover:shadow-lg transition-all text-center group border border-gray-100 hover:border-[#820251] hover:scale-105 min-w-0 flex flex-col items-center"
                     >
                       <span className="text-3xl block mb-2 group-hover:scale-110 transition-transform">
                         {category.icon || "🏢"}
                       </span>
-                      <span className="font-semibold text-gray-700 text-sm group-hover:text-[#820251] block leading-tight">
-                        {category.name}
+                      <span className="font-semibold text-gray-700 text-sm group-hover:text-[#820251] block leading-snug text-center w-full whitespace-normal break-normal [word-break:normal] [overflow-wrap:normal] [hyphens:auto]">
+                        {localizeCatalogCategoryName(language, category.slug, category.name)}
                       </span>
-                      <span className="text-xs text-gray-400 mt-1 block">
-                        {formatCompanyCount(category.company_count)}
+                      <span className="text-xs text-gray-400 mt-2 block w-full text-center">
+                        {formatCompanyCount(category.company_count, language)}
                       </span>
                     </Link>
                   ))}
@@ -264,7 +269,7 @@ export default function Rubricator({ floating = true, inline = false }: Rubricat
                     isExpanded={expandedCategories.has(category.slug)}
                     onToggle={() => toggleCategory(category.slug)}
                     onNavigate={() => setIsOpen(false)}
-                    t={t}
+                    language={language}
                   />
                 ))}
               </div>
@@ -281,10 +286,10 @@ interface CategoryItemProps {
   isExpanded: boolean;
   onToggle: () => void;
   onNavigate: () => void;
-  t: (key: string) => string;
+  language: CatalogLanguage;
 }
 
-function CategoryItem({ category, isExpanded, onToggle, onNavigate, t }: CategoryItemProps) {
+function CategoryItem({ category, isExpanded, onToggle, onNavigate, language }: CategoryItemProps) {
   const hasRubrics = category.rubrics.length > 0;
 
   return (
@@ -315,10 +320,12 @@ function CategoryItem({ category, isExpanded, onToggle, onNavigate, t }: Categor
         >
           <span className="text-xl flex-shrink-0">{category.icon || "📁"}</span>
           <div className="flex-grow min-w-0">
-            <div className="font-medium text-gray-800 text-base whitespace-normal break-words">{category.name}</div>
+            <div className="font-medium text-gray-800 text-base whitespace-normal break-words">
+              {localizeCatalogCategoryName(language, category.slug, category.name)}
+            </div>
           </div>
           <span className="text-sm text-gray-400 flex-shrink-0 bg-gray-100 px-2 py-0.5 rounded-full">
-            {formatCompanyCount(category.company_count)}
+            {formatCompanyCount(category.company_count, language)}
           </span>
         </Link>
       </div>
@@ -335,7 +342,7 @@ function CategoryItem({ category, isExpanded, onToggle, onNavigate, t }: Categor
             >
               <div className="w-2 h-2 rounded-full bg-[#820251]/40 group-hover:bg-[#820251] transition-colors flex-shrink-0" />
               <span className="text-gray-700 text-base flex-grow whitespace-normal break-words group-hover:text-[#820251] transition-colors">
-                {rubric.name}
+                {localizeCatalogRubricName(language, rubric.slug, rubric.name)}
               </span>
               <span className="text-sm text-gray-400 flex-shrink-0">
                 {rubric.count}

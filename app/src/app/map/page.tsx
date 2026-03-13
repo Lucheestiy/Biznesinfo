@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import CompanyMap from "@/components/CompanyMap";
@@ -79,7 +79,110 @@ function withCityHint(query: string, cityHint: string | null): string {
 }
 
 export default function MapPage() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const mapText = useMemo(() => (language === "en"
+    ? {
+        hintAddressHouse: "Companies near the entered address (street + house number) are shown within the selected radius.",
+        hintStreetRadius: "All companies within the selected radius from the specified street are shown.",
+        hintStreetFallback: "Could not resolve the street. A regular query search was performed.",
+        geoErrorDetect: "Could not determine your location. Minsk is used by default.",
+        geoErrorUnsupported: "Geolocation is not supported by your browser.",
+        breadcrumb: "Map Search",
+        pageTitle: "🗺️ Company Search on Map",
+        pageSubtitle: "Find companies within a selected radius from your location or a specified street.",
+        locating: "Detecting location...",
+        searchLabel: "What are you looking for?",
+        searchPlaceholder: "For example: milk, building materials, car service...",
+        searchingButton: "Searching...",
+        searchButton: "Search",
+        searchHelp:
+          "Enter a service, a street, or a street with a house number (for example, “Prititskogo St, 17”). For a street, we show all companies in the radius; for street + house number, companies at that address.",
+        quickFiltersLabel: "Quick filters:",
+        quickFilters: [
+          { value: "молоко", label: "milk" },
+          { value: "стройматериалы", label: "building materials" },
+          { value: "автосервис", label: "car service" },
+          { value: "кафе", label: "cafe" },
+          { value: "аптека", label: "pharmacy" },
+        ],
+      }
+    : language === "be"
+      ? {
+          hintAddressHouse: "Паказаны кампаніі па ўведзеным адрасе (вуліца + дом) у выбраным радыусе.",
+          hintStreetRadius: "Паказаны ўсе кампаніі ў выбраным радыусе ад указанай вуліцы.",
+          hintStreetFallback: "Не атрымалася вызначыць вуліцу. Выкананы звычайны пошук па запыце.",
+          geoErrorDetect: "Не атрымалася вызначыць месцазнаходжанне. Па змаўчанні выкарыстоўваецца Мінск.",
+          geoErrorUnsupported: "Геалакацыя не падтрымліваецца браўзерам.",
+          breadcrumb: "Пошук на карце",
+          pageTitle: "🗺️ Пошук кампаній на карце",
+          pageSubtitle: "Знайдзіце кампаніі ў зададзеным радыусе ад вашага месцазнаходжання або ўказанай вуліцы.",
+          locating: "Вызначэнне месцазнаходжання...",
+          searchLabel: "Што шукаем?",
+          searchPlaceholder: "Напрыклад: малако, будаўнічыя матэрыялы, аўтасэрвіс...",
+          searchingButton: "Шукаем...",
+          searchButton: "Знайсці",
+          searchHelp:
+            "Увядзіце паслугу, вуліцу або вуліцу з домам (напрыклад, «вул. Прытыцкага, 17»). Для вуліцы паказваем усе кампаніі ў радыусе, для вуліцы+дома — кампаніі па адрасе.",
+          quickFiltersLabel: "Хуткія фільтры:",
+          quickFilters: [
+            { value: "молоко", label: "малако" },
+            { value: "стройматериалы", label: "будаўнічыя матэрыялы" },
+            { value: "автосервис", label: "аўтасэрвіс" },
+            { value: "кафе", label: "кафэ" },
+            { value: "аптека", label: "аптэка" },
+          ],
+        }
+      : language === "zh"
+        ? {
+            hintAddressHouse: "已显示所填地址（街道+门牌号）在所选半径内的公司。",
+            hintStreetRadius: "已显示所填街道在所选半径内的全部公司。",
+            hintStreetFallback: "无法识别街道，已按普通关键词执行搜索。",
+            geoErrorDetect: "无法确定您的位置。默认使用明斯克。",
+            geoErrorUnsupported: "您的浏览器不支持地理定位。",
+            breadcrumb: "地图搜索",
+            pageTitle: "🗺️ 地图公司搜索",
+            pageSubtitle: "在您当前位置或指定街道周围的半径范围内查找公司。",
+            locating: "正在定位...",
+            searchLabel: "要找什么？",
+            searchPlaceholder: "例如：牛奶、建材、汽车服务...",
+            searchingButton: "搜索中...",
+            searchButton: "搜索",
+            searchHelp:
+              "输入服务、街道，或街道+门牌号（例如“普里季茨基街17号”）。按街道显示半径内所有公司；按街道+门牌号显示该地址公司。",
+            quickFiltersLabel: "快捷筛选：",
+            quickFilters: [
+              { value: "молоко", label: "牛奶" },
+              { value: "стройматериалы", label: "建材" },
+              { value: "автосервис", label: "汽车服务" },
+              { value: "кафе", label: "咖啡馆" },
+              { value: "аптека", label: "药店" },
+            ],
+          }
+        : {
+            hintAddressHouse: "Показаны компании по введенному адресу (улица + дом) в выбранном радиусе.",
+            hintStreetRadius: "Показаны все компании в выбранном радиусе от указанной улицы.",
+            hintStreetFallback: "Улицу определить не удалось. Выполнен обычный поиск по запросу.",
+            geoErrorDetect: "Не удалось определить местоположение. Используется Минск по умолчанию.",
+            geoErrorUnsupported: "Геолокация не поддерживается браузером.",
+            breadcrumb: "Поиск на карте",
+            pageTitle: "🗺️ Поиск компаний на карте",
+            pageSubtitle: "Найдите компании в заданном радиусе от вашего местоположения или указанной улицы",
+            locating: "Определение местоположения...",
+            searchLabel: "Что ищем?",
+            searchPlaceholder: "Например: молоко, строительные материалы, автосервис...",
+            searchingButton: "Ищем...",
+            searchButton: "Найти",
+            searchHelp:
+              "Введите услугу, улицу или улицу с домом (например, «ул. Притыцкого, 17»). Для улицы показываем все компании в радиусе, для улицы+дома — компании по адресу.",
+            quickFiltersLabel: "Быстрые фильтры:",
+            quickFilters: [
+              { value: "молоко", label: "молоко" },
+              { value: "стройматериалы", label: "стройматериалы" },
+              { value: "автосервис", label: "автосервис" },
+              { value: "кафе", label: "кафе" },
+              { value: "аптека", label: "аптека" },
+            ],
+          }), [language]);
   const restoredStateRef = useRef(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [userCityHint, setUserCityHint] = useState<string | null>(null);
@@ -194,8 +297,8 @@ export default function MapPage() {
       setSearchQuery(hasHouse ? nextQuery : "");
       setSearchHint(
         hasHouse
-          ? "Показаны компании по введенному адресу (улица + дом) в выбранном радиусе."
-          : "Показаны все компании в выбранном радиусе от указанной улицы.",
+          ? mapText.hintAddressHouse
+          : mapText.hintStreetRadius,
       );
     } catch {
       if (userLocation) {
@@ -203,11 +306,11 @@ export default function MapPage() {
       }
       setSearchCenterLabel(null);
       setSearchQuery(nextQuery);
-      setSearchHint("Улицу определить не удалось. Выполнен обычный поиск по запросу.");
+      setSearchHint(mapText.hintStreetFallback);
     } finally {
       setSearchingAddress(false);
     }
-  }, [searchInput, userLocation, userCityHint]);
+  }, [searchInput, userLocation, userCityHint, mapText]);
 
   useEffect(() => {
     const geolocationOptions: PositionOptions = {
@@ -235,7 +338,7 @@ export default function MapPage() {
         },
         (error) => {
           console.error("Geolocation error:", error);
-          setLocationError("Не удалось определить местоположение. Используется Минск по умолчанию.");
+          setLocationError(mapText.geoErrorDetect);
           // Default to Minsk
           const fallbackLocation = { lat: 53.9, lng: 27.56 };
           setUserLocation(fallbackLocation);
@@ -249,7 +352,7 @@ export default function MapPage() {
         geolocationOptions
       );
     } else {
-      setLocationError("Геолокация не поддерживается браузером.");
+      setLocationError(mapText.geoErrorUnsupported);
       const fallbackLocation = { lat: 53.9, lng: 27.56 };
       setUserLocation(fallbackLocation);
       setSearchCenter((prev) => {
@@ -259,7 +362,7 @@ export default function MapPage() {
       });
       setLoadingLocation(false);
     }
-  }, []);
+  }, [mapText]);
 
   useEffect(() => {
     if (!userLocation) {
@@ -312,7 +415,7 @@ export default function MapPage() {
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <a href="/" className="hover:text-[#820251]">{t("common.home")}</a>
               <span>/</span>
-              <span className="text-[#820251] font-medium">Поиск на карте</span>
+              <span className="text-[#820251] font-medium">{mapText.breadcrumb}</span>
             </div>
           </div>
         </div>
@@ -322,10 +425,10 @@ export default function MapPage() {
             {/* Page header */}
             <div className="mb-6">
               <h1 className="text-2xl font-bold text-gray-800 mb-2">
-                🗺️ Поиск компаний на карте
+                {mapText.pageTitle}
               </h1>
               <p className="text-gray-600">
-                Найдите компании в заданном радиусе от вашего местоположения или указанной улицы
+                {mapText.pageSubtitle}
               </p>
             </div>
 
@@ -333,7 +436,7 @@ export default function MapPage() {
             {loadingLocation ? (
               <div className="bg-white rounded-lg p-6 text-center mb-6">
                 <div className="w-8 h-8 border-4 border-[#820251] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-                <p className="text-gray-500">Определение местоположения...</p>
+                <p className="text-gray-500">{mapText.locating}</p>
               </div>
             ) : locationError ? (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
@@ -344,7 +447,7 @@ export default function MapPage() {
             {/* Search input */}
             <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Что ищем?
+                {mapText.searchLabel}
               </label>
               <div className="flex gap-2">
                 <input
@@ -354,7 +457,7 @@ export default function MapPage() {
                   spellCheck={false}
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="Например: молоко, строительные материалы, автосервис..."
+                  placeholder={mapText.searchPlaceholder}
                   className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#820251]/30 focus:border-[#820251]"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -368,32 +471,32 @@ export default function MapPage() {
                   disabled={searchingAddress}
                   className="px-6 py-2.5 bg-[#820251] text-white rounded-lg font-medium hover:bg-[#7a0150] transition-colors"
                 >
-                  {searchingAddress ? "Ищем..." : "Найти"}
+                  {searchingAddress ? mapText.searchingButton : mapText.searchButton}
                 </button>
               </div>
               <p className="mt-2 text-xs text-gray-500">
-                Введите услугу, улицу или улицу с домом (например, «ул. Притыцкого, 17»). Для улицы показываем все компании в радиусе, для улицы+дома — компании по адресу.
+                {mapText.searchHelp}
               </p>
               {searchHint && (
                 <p className="mt-2 text-xs text-[#820251]">{searchHint}</p>
               )}
               <div className="flex gap-2 mt-2 flex-wrap">
-                <span className="text-xs text-gray-500">Быстрые фильтры:</span>
-                {["молоко", "стройматериалы", "автосервис", "кафе", "аптека"].map((tag) => (
+                <span className="text-xs text-gray-500">{mapText.quickFiltersLabel}</span>
+                {mapText.quickFilters.map((tag) => (
                   <button
-                    key={tag}
+                    key={tag.value}
                     onClick={() => {
-                      setSearchInput(tag);
+                      setSearchInput(tag.value);
                       if (userLocation) {
                         setSearchCenter(userLocation);
                       }
                       setSearchCenterLabel(null);
                       setSearchHint("");
-                      setSearchQuery(tag);
+                      setSearchQuery(tag.value);
                     }}
                     className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
                   >
-                    {tag}
+                    {tag.label}
                   </button>
                 ))}
               </div>

@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useState, useCallback, useMemo, useRef, type UIEvent } from "react";
 import { YMaps, Map as YandexMap, Placemark, Circle } from "@pbe/react-yandex-maps";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface Company {
   id: string;
@@ -23,13 +24,7 @@ interface CompanyMapProps {
   onRadiusChange?: (_radius: number) => void;
 }
 
-const RADIUS_OPTIONS = [
-  { value: 5000, label: "5 км" },
-  { value: 10000, label: "10 км" },
-  { value: 20000, label: "20 км" },
-  { value: 30000, label: "30 км" },
-  { value: 50000, label: "50 км" },
-];
+const RADIUS_OPTIONS = [5000, 10000, 20000, 30000, 50000];
 const MIN_CUSTOM_RADIUS_KM = 1;
 const MAX_CUSTOM_RADIUS_KM = 100;
 const MAP_FETCH_LIMIT = 2000;
@@ -93,9 +88,10 @@ function buildLogoProxyUrl(companyId: string, rawLogoUrl: string): string {
   return `/api/biznesinfo/logo?u=${encodeURIComponent(logoUrl)}&v=${LOGO_PROXY_VERSION}`;
 }
 
-function formatDistanceKm(distanceMeters: number): string {
+function formatDistanceKm(distanceMeters: number, params: { unit: string; decimalComma: boolean }): string {
   if (!Number.isFinite(distanceMeters)) return "";
-  return `${(distanceMeters / 1000).toFixed(1).replace(".", ",")} км`;
+  const num = (distanceMeters / 1000).toFixed(1).replace(".", params.decimalComma ? "," : ".");
+  return `${num} ${params.unit}`;
 }
 
 type RouteMode = "drive" | "walk";
@@ -210,6 +206,118 @@ function CompanyMap({
   radius, 
   onRadiusChange 
 }: CompanyMapProps) {
+  const { language } = useLanguage();
+  const mapText = useMemo(() => (language === "en"
+    ? {
+        decimalComma: false,
+        kmUnit: "km",
+        searchError: "Could not perform the search. Please refresh and try again.",
+        coordsLabel: "Coordinates",
+        resolvingAddress: "Resolving address...",
+        youAreHere: "You are here",
+        fromYou: "from you",
+        distancePending: "Distance is being determined",
+        phone: "Phone",
+        openCard: "Open company card",
+        radiusLabel: "Search radius:",
+        customPlaceholder: "Custom",
+        customAria: "Custom radius in kilometers",
+        searching: "Searching...",
+        found: "Found",
+        companies: "companies",
+        refresh: "Refresh",
+        searchCenter: "Search center",
+        drive: "Drive",
+        walk: "Walk",
+        scrollMore: "Scroll down to show {count} more companies",
+        andMore: "...and {count} more companies",
+        shown: "Shown",
+        of: "of",
+        loaded: "loaded",
+      }
+    : language === "be"
+      ? {
+          decimalComma: true,
+          kmUnit: "км",
+          searchError: "Не атрымалася выканаць пошук. Абнавіце і паспрабуйце яшчэ раз.",
+          coordsLabel: "Каардынаты",
+          resolvingAddress: "Вызначаем адрас...",
+          youAreHere: "Вы тут",
+          fromYou: "ад вас",
+          distancePending: "Адлегласць удакладняецца",
+          phone: "Тэлефон",
+          openCard: "Адкрыць картку",
+          radiusLabel: "Радыус пошуку:",
+          customPlaceholder: "Свой",
+          customAria: "Свой радыус у кіламетрах",
+          searching: "Пошук...",
+          found: "Знойдзена",
+          companies: "кампаній",
+          refresh: "Абнавіць",
+          searchCenter: "Цэнтр пошуку",
+          drive: "Ехаць",
+          walk: "Ісці",
+          scrollMore: "Пракруціце ніжэй, каб паказаць яшчэ {count} кампаній",
+          andMore: "...і яшчэ {count} кампаній",
+          shown: "Паказана",
+          of: "з",
+          loaded: "загружана",
+        }
+      : language === "zh"
+        ? {
+            decimalComma: false,
+            kmUnit: "公里",
+            searchError: "搜索失败，请刷新后重试。",
+            coordsLabel: "坐标",
+            resolvingAddress: "正在解析地址...",
+            youAreHere: "您在这里",
+            fromYou: "距您",
+            distancePending: "距离计算中",
+            phone: "电话",
+            openCard: "打开公司卡片",
+            radiusLabel: "搜索半径：",
+            customPlaceholder: "自定义",
+            customAria: "自定义半径（公里）",
+            searching: "搜索中...",
+            found: "找到",
+            companies: "家公司",
+            refresh: "刷新",
+            searchCenter: "搜索中心",
+            drive: "驾车",
+            walk: "步行",
+            scrollMore: "向下滚动以显示另外 {count} 家公司",
+            andMore: "...还有 {count} 家公司",
+            shown: "已显示",
+            of: "/",
+            loaded: "已加载",
+          }
+        : {
+            decimalComma: true,
+            kmUnit: "км",
+            searchError: "Не удалось выполнить поиск. Попробуйте обновить.",
+            coordsLabel: "Координаты",
+            resolvingAddress: "Определяем адрес...",
+            youAreHere: "Вы здесь",
+            fromYou: "от вас",
+            distancePending: "Расстояние уточняется",
+            phone: "Телефон",
+            openCard: "Открыть карточку",
+            radiusLabel: "Радиус поиска:",
+            customPlaceholder: "Свой",
+            customAria: "Свой радиус в километрах",
+            searching: "Поиск...",
+            found: "Найдено",
+            companies: "компаний",
+            refresh: "Обновить",
+            searchCenter: "Центр поиска",
+            drive: "Ехать",
+            walk: "Идти",
+            scrollMore: "Прокрутите ниже, чтобы показать ещё {count} компаний",
+            andMore: "...и ещё {count} компаний",
+            shown: "Показано",
+            of: "из",
+            loaded: "загружено",
+          }), [language]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [totalCompanies, setTotalCompanies] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -261,14 +369,14 @@ function CompanyMap({
         setCompanies([]);
         setTotalCompanies(0);
         setVisibleCompanyCount(INITIAL_VISIBLE_COMPANIES);
-        setSearchError("Не удалось выполнить поиск. Попробуйте обновить.");
+        setSearchError(mapText.searchError);
       }
     } finally {
       if (requestSeq === requestSeqRef.current) {
         setLoading(false);
       }
     }
-  }, [searchCenter, radius, searchQuery]);
+  }, [searchCenter, radius, searchQuery, mapText.searchError]);
 
   useEffect(() => {
     fetchNearbyCompanies();
@@ -328,7 +436,7 @@ function CompanyMap({
   }, [userLocation.lat, userLocation.lng]);
 
   const placemarkCompanies = useMemo(() => spreadDuplicateCompanyPoints(companies), [companies]);
-  const isPresetRadius = useMemo(() => RADIUS_OPTIONS.some((opt) => opt.value === radius), [radius]);
+  const isPresetRadius = useMemo(() => RADIUS_OPTIONS.some((opt) => opt === radius), [radius]);
   const effectiveTotalCompanies = Math.max(totalCompanies, companies.length);
   const shownCompanyCount = Math.min(visibleCompanyCount, companies.length);
   const visibleCompanies = companies.slice(0, shownCompanyCount);
@@ -353,15 +461,15 @@ function CompanyMap({
     () => !arePointsEqual(userLocation, searchCenter),
     [userLocation, searchCenter],
   );
-  const searchCenterText = (searchCenterLabel || "").trim() || `Координаты: ${searchCenterCoordinatesText}`;
-  const userAddressText = userAddress || (loadingUserAddress ? "Определяем адрес..." : `Координаты: ${userCoordinatesText}`);
+  const searchCenterText = (searchCenterLabel || "").trim() || `${mapText.coordsLabel}: ${searchCenterCoordinatesText}`;
+  const userAddressText = userAddress || (loadingUserAddress ? mapText.resolvingAddress : `${mapText.coordsLabel}: ${userCoordinatesText}`);
   const userBalloonHtml = `
     <div style="padding:8px;max-width:260px;">
-      <div style="font-size:14px;font-weight:700;color:#d60032;margin-bottom:6px;">Вы здесь</div>
+      <div style="font-size:14px;font-weight:700;color:#d60032;margin-bottom:6px;">${mapText.youAreHere}</div>
       <div style="font-size:12px;line-height:1.45;color:#333;">${escapeHtml(userAddressText)}</div>
     </div>
   `;
-  const userHintText = userAddress ? `Вы здесь: ${userAddress}` : "Вы здесь";
+  const userHintText = userAddress ? `${mapText.youAreHere}: ${userAddress}` : mapText.youAreHere;
 
   const getPlacemarkPreset = (distance: number) => {
     if (distance < 1000) return "islands#redDotIcon";
@@ -374,17 +482,17 @@ function CompanyMap({
     const name = escapeHtml(company.name || "");
     const address = escapeHtml(company.address || "");
     const distanceText = Number.isFinite(company.distance)
-      ? `${formatDistanceKm(company.distance)} от вас`
-      : "Расстояние уточняется";
+      ? `${formatDistanceKm(company.distance, { unit: mapText.kmUnit, decimalComma: mapText.decimalComma })} ${mapText.fromYou}`
+      : mapText.distancePending;
 
     const bodyLines = [
       address,
-      phone ? `Телефон: ${phone}` : "",
+      phone ? `${mapText.phone}: ${phone}` : "",
       distanceText,
     ].filter(Boolean);
 
     const body = bodyLines.join("<br/>");
-    const footer = `<a href="/company/${encodeURIComponent(company.id)}" style="color:#820251;text-decoration:underline;">Открыть карточку</a>`;
+    const footer = `<a href="/company/${encodeURIComponent(company.id)}" style="color:#820251;text-decoration:underline;">${mapText.openCard}</a>`;
 
     return {
       name,
@@ -447,18 +555,18 @@ function CompanyMap({
     <div className="w-full">
       {/* Radius selector */}
       <div className="flex flex-wrap gap-2 mb-4">
-        <span className="text-gray-600 text-sm py-2">Радиус поиска:</span>
+        <span className="text-gray-600 text-sm py-2">{mapText.radiusLabel}</span>
         {RADIUS_OPTIONS.map((opt) => (
           <button
-            key={opt.value}
-            onClick={() => onRadiusChange?.(opt.value)}
+            key={opt}
+            onClick={() => onRadiusChange?.(opt)}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              radius === opt.value
+              radius === opt
                 ? "bg-[#820251] text-white"
                 : "bg-gray-100 text-gray-700 hover:bg-gray-200"
             }`}
           >
-            {opt.label}
+            {`${Math.round(opt / 1000)} ${mapText.kmUnit}`}
           </button>
         ))}
         <div
@@ -477,11 +585,11 @@ function CompanyMap({
                 applyCustomRadius();
               }
             }}
-            placeholder="Свой"
+            placeholder={mapText.customPlaceholder}
             className="w-14 border-0 bg-transparent text-sm text-gray-800 focus:outline-none"
-            aria-label="Свой радиус в километрах"
+            aria-label={mapText.customAria}
           />
-          <span className="text-xs text-gray-500">км</span>
+          <span className="text-xs text-gray-500">{mapText.kmUnit}</span>
           <button
             type="button"
             onClick={applyCustomRadius}
@@ -495,14 +603,14 @@ function CompanyMap({
       {/* Results count */}
       <div className="mb-3 flex items-center justify-between">
         <span className="text-sm text-gray-600">
-          {loading ? "Поиск..." : `Найдено: ${totalCompanies} компаний`}
+          {loading ? mapText.searching : `${mapText.found}: ${totalCompanies} ${mapText.companies}`}
         </span>
         <button
           onClick={fetchNearbyCompanies}
           className="text-sm text-[#820251] hover:underline"
           disabled={loading}
         >
-          🔄 Обновить
+          🔄 {mapText.refresh}
         </button>
       </div>
       {searchError && (
@@ -519,7 +627,7 @@ function CompanyMap({
             <circle cx="19" cy="18" r="7" fill="#ffffff" />
             <circle cx="19" cy="18" r="3.3" fill="#FF1744" />
           </svg>
-          <span>Вы здесь</span>
+          <span>{mapText.youAreHere}</span>
         </div>
         <YMaps query={{ apikey: process.env.NEXT_PUBLIC_YANDEX_MAPS_API_KEY || "" }}>
           <YandexMap
@@ -553,7 +661,7 @@ function CompanyMap({
               properties={{
                 hintContent: userHintText,
                 balloonContent: userBalloonHtml,
-                balloonContentHeader: "Вы здесь",
+                balloonContentHeader: mapText.youAreHere,
                 balloonContentBody: escapeHtml(userAddressText),
               }}
               options={{
@@ -570,8 +678,8 @@ function CompanyMap({
                 geometry={[searchCenter.lat, searchCenter.lng]}
                 modules={["geoObject.addon.hint", "geoObject.addon.balloon"]}
                 properties={{
-                  hintContent: `Центр поиска: ${searchCenterText}`,
-                  balloonContentHeader: "Центр поиска",
+                  hintContent: `${mapText.searchCenter}: ${searchCenterText}`,
+                  balloonContentHeader: mapText.searchCenter,
                   balloonContentBody: escapeHtml(searchCenterText),
                 }}
                 options={{
@@ -621,7 +729,7 @@ function CompanyMap({
                 <div className="text-sm text-gray-500 truncate">{company.address}</div>
               </div>
               <div className="text-sm text-[#820251] font-medium whitespace-nowrap">
-                {Number.isFinite(company.distance) ? formatDistanceKm(company.distance) : "—"}
+                {Number.isFinite(company.distance) ? formatDistanceKm(company.distance, { unit: mapText.kmUnit, decimalComma: mapText.decimalComma }) : "—"}
               </div>
             </a>
 
@@ -637,7 +745,7 @@ function CompanyMap({
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 rounded-md bg-[#820251] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#700246]"
                 >
-                  🚗 Ехать
+                  🚗 {mapText.drive}
                 </a>
                 <a
                   href={buildYandexRouteUrl(
@@ -649,7 +757,7 @@ function CompanyMap({
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 rounded-md border border-[#820251]/40 bg-white px-3 py-1.5 text-xs font-semibold text-[#820251] hover:bg-[#820251]/5"
                 >
-                  🚶 Идти
+                  🚶 {mapText.walk}
                 </a>
               </div>
             )}
@@ -659,12 +767,12 @@ function CompanyMap({
           <div className="text-center py-2">
             <div className="text-sm text-gray-500">
               {hasMoreLoadedCompanies
-                ? `Прокрутите ниже, чтобы показать ещё ${nextLoadBatchCount} компаний`
-                : `...и ещё ${hiddenTotalCount} компаний`}
+                ? mapText.scrollMore.replace("{count}", String(nextLoadBatchCount))
+                : mapText.andMore.replace("{count}", String(hiddenTotalCount))}
             </div>
             <div className="mt-1 text-xs text-gray-400">
-              Показано {shownCompanyCount} из {effectiveTotalCompanies}
-              {hasServerUnloadedRemainder ? ` (загружено ${companies.length})` : ""}
+              {mapText.shown} {shownCompanyCount} {mapText.of} {effectiveTotalCompanies}
+              {hasServerUnloadedRemainder ? ` (${mapText.loaded} ${companies.length})` : ""}
             </div>
           </div>
         )}

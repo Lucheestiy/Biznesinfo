@@ -33,7 +33,7 @@ export default function Footer() {
               </a>
             </p>
             <p className="text-sm mt-2">
-              Тел:{" "}
+              {t("footer.phone")}:{" "}
               <a
                 href="tel:+375000000"
                 className="hover:text-white transition-colors"

@@ -17,6 +17,7 @@ import { companySlugForUrl } from "@/lib/biznesinfo/slug";
 
 const PAGE_SIZE = 10;
 const SEARCH_REQUEST_DEBOUNCE_MS = 120;
+const PHONE_HINT_HIDE_MS = 1100;
 const EMPTY_LOGO_HINTS = [
   "/images/logo/no-logo",
   "/images/logo/no_logo",
@@ -49,7 +50,7 @@ function normalizeBusinessFormat(raw: string | null): SearchBusinessFormat {
 
 function SearchResults() {
   const searchParams = useSearchParams();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { selectedRegion, setSelectedRegion, regionName } = useRegion();
   const router = useRouter();
 
@@ -60,6 +61,7 @@ function SearchResults() {
   const regionFromUrl = searchParams.get("region") || "";
   const supplyTypeFromUrl = normalizeSupplyType(searchParams.get("supply_type"));
   const businessFormatFromUrl = normalizeBusinessFormat(searchParams.get("business_format"));
+  const strictServiceFromUrl = searchParams.get("strict_service") === "1";
 
   const [companyDraft, setCompanyDraft] = useState(query);
   const [serviceDraft, setServiceDraft] = useState(serviceQuery);
@@ -72,9 +74,11 @@ function SearchResults() {
   const [debouncedSupplyTypeDraft, setDebouncedSupplyTypeDraft] = useState<SearchSupplyType>(supplyTypeFromUrl);
   const [debouncedBusinessFormatDraft, setDebouncedBusinessFormatDraft] = useState<SearchBusinessFormat>(businessFormatFromUrl);
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
+  const [servicePhoneHintVisible, setServicePhoneHintVisible] = useState(false);
   const cityInputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<number | null>(null);
   const searchDebounceRef = useRef<number | null>(null);
+  const servicePhoneHintTimeoutRef = useRef<number | null>(null);
 
   const inputClassName =
     "w-full rounded-2xl bg-white text-[#820251] font-medium text-[15px] placeholder:text-gray-500/60 placeholder:font-normal px-4 pr-24 py-3.5 shadow-sm border border-gray-200 focus:outline-none focus:ring-2 focus:ring-yellow-300/70 focus:border-[#820251]/30 focus:placeholder:text-gray-500/60";
@@ -112,6 +116,14 @@ function SearchResults() {
     };
   }, [companyDraft, serviceDraft, cityDraft, supplyTypeDraft, businessFormatDraft]);
 
+  useEffect(() => {
+    return () => {
+      if (servicePhoneHintTimeoutRef.current) {
+        window.clearTimeout(servicePhoneHintTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // If region is present in URL, it becomes the source of truth.
   useEffect(() => {
     if (!regionFromUrl || city.trim()) return;
@@ -139,6 +151,7 @@ function SearchResults() {
       region?: string | null;
       supply_type?: SearchSupplyType;
       business_format?: SearchBusinessFormat;
+      strict_service?: boolean;
     },
   ) => {
     const params = new URLSearchParams();
@@ -148,6 +161,7 @@ function SearchResults() {
     const nextRegion = overrides?.region ?? selectedRegion;
     const nextSupplyType = overrides?.supply_type ?? supplyTypeDraft;
     const nextBusinessFormat = overrides?.business_format ?? businessFormatDraft;
+    const nextStrictService = overrides?.strict_service ?? strictServiceFromUrl;
 
     if (nextQ) params.set("q", nextQ);
     if (nextService) params.set("service", nextService);
@@ -155,6 +169,7 @@ function SearchResults() {
     if (!nextCity && nextRegion) params.set("region", nextRegion);
     if (nextSupplyType !== "any") params.set("supply_type", nextSupplyType);
     if (nextBusinessFormat !== "any") params.set("business_format", nextBusinessFormat);
+    if (nextStrictService) params.set("strict_service", "1");
 
     const qs = params.toString();
     const url = qs ? `/search?${qs}` : "/search";
@@ -181,6 +196,17 @@ function SearchResults() {
         router.push(fallbackUrl);
       }
     }, 220);
+  };
+
+  const showServicePhoneHint = () => {
+    setServicePhoneHintVisible(true);
+    if (servicePhoneHintTimeoutRef.current) {
+      window.clearTimeout(servicePhoneHintTimeoutRef.current);
+    }
+    servicePhoneHintTimeoutRef.current = window.setTimeout(() => {
+      setServicePhoneHintVisible(false);
+      servicePhoneHintTimeoutRef.current = null;
+    }, PHONE_HINT_HIDE_MS);
   };
 
   const [data, setData] = useState<BiznesinfoSearchResponse | null>(null);
@@ -233,6 +259,7 @@ function SearchResults() {
     city,
     supplyTypeFromUrl,
     businessFormatFromUrl,
+    strictServiceFromUrl,
   ]);
 
   const effectiveQuery = debouncedCompanyDraft;
@@ -266,6 +293,8 @@ function SearchResults() {
     if (region) params.set("region", region);
     if (supplyType !== "any") params.set("supply_type", supplyType);
     if (businessFormat !== "any") params.set("business_format", businessFormat);
+    if (strictServiceFromUrl) params.set("strict_service", "1");
+    params.set("lang", language);
     params.set("offset", String((currentPage - 1) * PAGE_SIZE));
     params.set("limit", String(PAGE_SIZE));
     const controller = new AbortController();
@@ -298,7 +327,9 @@ function SearchResults() {
     effectiveCity,
     effectiveSupplyType,
     effectiveBusinessFormat,
+    strictServiceFromUrl,
     selectedRegion,
+    language,
   ]);
 
   const totalPages = data ? Math.ceil((data.total || 0) / PAGE_SIZE) : 0;
@@ -334,6 +365,16 @@ function SearchResults() {
   const highlightCompanyTokens = useMemo(() => tokenizeHighlightQuery(effectiveQuery), [effectiveQuery]);
   const highlightServiceTokens = useMemo(() => tokenizeHighlightQuery(effectiveServiceQuery), [effectiveServiceQuery]);
   const highlightLocationTokens = useMemo(() => tokenizeHighlightQuery(effectiveCity), [effectiveCity]);
+  const displayQuery = useMemo(() => {
+    const localized = String(data?.query_display || "").trim();
+    if (localized && !isLoading) return localized;
+    return effectiveQuery;
+  }, [data?.query_display, effectiveQuery, isLoading]);
+  const displayServiceQuery = useMemo(() => {
+    const localized = String(data?.service_display || "").trim();
+    if (localized && !isLoading) return localized;
+    return effectiveServiceQuery;
+  }, [data?.service_display, effectiveServiceQuery, isLoading]);
   const highlightNameTokens = useMemo(() => {
     return highlightCompanyTokens.length > 0 ? highlightCompanyTokens : highlightServiceTokens;
   }, [highlightCompanyTokens, highlightServiceTokens]);
@@ -437,6 +478,31 @@ function SearchResults() {
                   placeholder={t("search.servicePlaceholder")}
                   className={inputClassName}
                 />
+                <span
+                  className={`absolute top-1/2 -translate-y-1/2 ${serviceDraft.length > 0 ? "right-24" : "right-14"} z-10 flex items-center`}
+                >
+                  {servicePhoneHintVisible && (
+                    <span className="absolute right-full mr-2 whitespace-nowrap rounded-lg bg-[#820251] px-2 py-1 text-[11px] font-semibold text-white shadow-lg">
+                      Поиск по номеру телефона
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    title="Можно искать по номеру телефона"
+                    aria-label="Можно искать по номеру телефона"
+                    onClick={showServicePhoneHint}
+                    className="w-8 h-8 rounded-lg bg-[#820251]/10 text-[#820251] border border-[#820251]/20 hover:bg-[#820251]/15 active:bg-[#820251]/20 transition-colors flex items-center justify-center"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3 5a2 2 0 012-2h2.2a1 1 0 01.98.804l.57 2.61a1 1 0 01-.29.95l-1.2 1.2a15.05 15.05 0 006.66 6.66l1.2-1.2a1 1 0 01.95-.29l2.61.57a1 1 0 01.804.98V19a2 2 0 01-2 2h-1C9.72 21 3 14.28 3 6V5z"
+                      />
+                    </svg>
+                  </button>
+                </span>
                 {serviceDraft.length > 0 && (
                   <button
                     type="button"
@@ -603,14 +669,14 @@ function SearchResults() {
                 {effectiveQuery && (
                   <>
                     {t("search.companyPlaceholder")}:{" "}
-                    <span className="font-bold text-[#820251]">«{effectiveQuery}»</span>
+                    <span className="font-bold text-[#820251]">«{displayQuery}»</span>
                   </>
                 )}
                 {effectiveQuery && effectiveServiceQuery && <span className="text-gray-400"> · </span>}
                 {effectiveServiceQuery && (
                   <>
                     {t("search.servicePlaceholder")}:{" "}
-                    <span className="font-bold text-[#820251]">«{effectiveServiceQuery}»</span>
+                    <span className="font-bold text-[#820251]">«{displayServiceQuery}»</span>
                   </>
                 )}
                 {(effectiveQuery || effectiveServiceQuery) && effectiveCity && <span className="text-gray-400"> · </span>}
@@ -622,8 +688,31 @@ function SearchResults() {
                 {selectedRegion && !effectiveCity && <span className="font-bold text-[#820251]"> — {regionName}</span>}
               </p>
               <p className="text-sm text-gray-500 mt-1">
-                {t("search.found")}: {isLoading ? "…" : formatCompanyCount(data?.total ?? 0)}
+                {t("search.found")}: {isLoading ? "…" : formatCompanyCount(data?.total ?? 0, language)}
               </p>
+
+              {data?.spell_correction?.applied && data.spell_correction.field === "service" && (
+                <div className="mt-3 rounded-xl border border-amber-300/60 bg-amber-50/80 px-3 py-2 text-sm text-amber-900">
+                  <p>
+                    Показаны результаты для{" "}
+                    <span className="font-bold">«{data.spell_correction.corrected}»</span>.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const original = data.spell_correction?.original || "";
+                      setServiceDraft(original);
+                      navigateToSearch("push", {
+                        service: original,
+                        strict_service: true,
+                      });
+                    }}
+                    className="mt-1 font-semibold underline decoration-dotted hover:text-[#820251]"
+                  >
+                    Искать точно как введено: «{data.spell_correction.original}»
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

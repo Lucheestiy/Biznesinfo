@@ -5,6 +5,7 @@ import {
   filterOutLiquidatedByKartoteka,
 } from "@/lib/biznesinfo/kartoteka";
 import type { BiznesinfoRubricResponse } from "@/lib/biznesinfo/types";
+import { localizeCompanySummaries, normalizeUiLanguage } from "@/lib/biznesinfo/translation";
 
 export const runtime = "nodejs";
 
@@ -41,6 +42,7 @@ function filterRubricCompaniesByPrimaryProfile(data: BiznesinfoRubricResponse): 
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const language = normalizeUiLanguage(searchParams.get("lang") || searchParams.get("language"));
   const slug = (searchParams.get("slug") || "").trim();
   if (!slug) {
     return NextResponse.json({ error: "missing_slug" }, { status: 400 });
@@ -64,6 +66,7 @@ export async function GET(request: Request) {
     // Keep rubric responses fast: hide already known liquidated companies synchronously,
     // and refresh Kartoteka status for the current page in background.
     const filtered = await filterOutKnownLiquidatedByKartoteka(relevanceFiltered.items || []);
+    const localizedCompanies = await localizeCompanySummaries(filtered.items, language);
     void filterOutLiquidatedByKartoteka(relevanceFiltered.items || []).catch(() => {
       // non-blocking warm-up for future requests
     });
@@ -74,7 +77,7 @@ export async function GET(request: Request) {
         ...data.rubric,
         count: Math.max(0, (data.rubric?.count || 0) - relevanceFiltered.removed - filtered.removed),
       },
-      companies: filtered.items,
+      companies: localizedCompanies,
       page: {
         ...data.page,
         total: Math.max(0, data.page.total - relevanceFiltered.removed - filtered.removed),

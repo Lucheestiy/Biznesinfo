@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
 import { regions } from "@/data/regions";
+import { localizeCatalogCategoryName } from "@/lib/biznesinfo/catalog-localization";
 import type { BiznesinfoCatalogResponse } from "@/lib/biznesinfo/types";
 import { formatCompanyCount } from "@/lib/utils/plural";
 
@@ -16,7 +17,7 @@ interface PageProps {
 
 export default function RegionPage({ params }: PageProps) {
   const { slug } = use(params);
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { setSelectedRegion } = useRegion();
   const [catalog, setCatalog] = useState<BiznesinfoCatalogResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -91,7 +92,7 @@ export default function RegionPage({ params }: PageProps) {
               <div>
                 <h1 className="text-3xl font-bold">{regionData.name}</h1>
                 <p className="text-pink-200 mt-1">
-                  {t("search.found")}: {isLoading ? "…" : formatCompanyCount(catalog?.stats?.companies_total ?? 0)}
+                  {t("search.found")}: {isLoading ? "…" : formatCompanyCount(catalog?.stats?.companies_total ?? 0, language)}
                 </p>
               </div>
             </div>
@@ -144,10 +145,12 @@ export default function RegionPage({ params }: PageProps) {
                   href={`/catalog/${cat.slug}`}
                   className="bg-white p-5 rounded-lg shadow-sm hover:shadow-md transition-all border border-gray-100 hover:border-[#820251] flex justify-between items-center group"
                 >
-                  <span className="flex items-center gap-3">
-                    <span className="text-2xl">{cat.icon || "🏢"}</span>
-                    <span className="font-medium text-gray-700 group-hover:text-[#820251]">{cat.name}</span>
-                  </span>
+                    <span className="flex items-center gap-3 min-w-0">
+                      <span className="text-2xl">{cat.icon || "🏢"}</span>
+                      <span className="font-medium text-gray-700 group-hover:text-[#820251]">
+                        {localizeCatalogCategoryName(language, cat.slug, cat.name)}
+                      </span>
+                    </span>
                   <span className="text-sm text-gray-400 bg-gray-100 px-2 py-1 rounded">
                     {cat.company_count}
                   </span>

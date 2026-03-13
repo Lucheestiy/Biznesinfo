@@ -174,8 +174,18 @@ export interface BiznesinfoSuggestResponse {
 
 export interface BiznesinfoSearchResponse {
   query: string;
+  query_display?: string;
+  service_display?: string;
   total: number;
   companies: BiznesinfoCompanySummary[];
+  spell_correction?: {
+    field: "service";
+    mode: "soft";
+    applied: boolean;
+    original: string;
+    corrected: string;
+    strict: boolean;
+  };
   ab_test?: {
     enabled: boolean;
     variant: "control" | "treatment";

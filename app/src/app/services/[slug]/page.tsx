@@ -9,11 +9,13 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { services } from "@/components/ServicesBlock";
 
 // Article content for each service
-const serviceArticles: Record<string, {
+type ServiceArticle = {
   benefits: string[];
   details: string[];
   features: string[];
-}> = {
+};
+
+const serviceArticlesRu: Record<string, ServiceArticle> = {
   "portal-placement": {
     benefits: [
       "Повышение видимости вашей компании в интернете",
@@ -205,12 +207,204 @@ const serviceArticles: Record<string, {
   },
 };
 
+const serviceArticlesEn: Record<string, ServiceArticle> = {
+  "portal-placement": {
+    benefits: [
+      "Increase your company's visibility online",
+      "Attract target clients through the AI assistant",
+      "Automatic processing of incoming leads from potential clients",
+      "Placement in relevant rubrics and categories",
+      "SEO optimization of your company profile",
+    ],
+    details: [
+      "Our interactive business portal is a modern platform where clients can find your company through smart search and the AI assistant. Unlike traditional directories, our portal actively helps users find exactly the services they need.",
+      "The AI assistant analyzes user requests and automatically routes leads to suitable companies. This means you receive high-intent inquiries from people who are already interested in your services.",
+      "Your company profile includes all key information: service descriptions, contacts, photos, customer reviews, and more.",
+    ],
+    features: [
+      "Detailed company profile with photos and description",
+      "AI assistant integration for lead delivery",
+      "Views and inquiries analytics",
+      "Ability to publish promotions and special offers",
+      "Mobile-friendly experience on all devices",
+    ],
+  },
+  "marketing-moves": {
+    benefits: [
+      "Increase sales by up to 40% through precise targeting",
+      "Stand out from competitors with clear positioning",
+      "Build a loyal customer base",
+      "Optimize your advertising budget",
+      "Measurable results for every campaign",
+    ],
+    details: [
+      "Marketing tactics are a set of strategic decisions focused on increasing your company's sales. We analyze your target audience, competitors, and market to design an effective promotion strategy.",
+      "Our specialists help you build a sales funnel, set up customer acquisition and retention systems, and automate marketing workflows.",
+      "We use proven tools and methods that deliver measurable outcomes. Every campaign is supported by detailed analytics and reporting.",
+    ],
+    features: [
+      "Target audience and competitor analysis",
+      "Unique value proposition development",
+      "Sales funnel design",
+      "A/B testing of advertising materials",
+      "Monthly reporting and strategy adjustments",
+    ],
+  },
+  "lead-generation": {
+    benefits: [
+      "Steady flow of qualified leads",
+      "Lower customer acquisition cost",
+      "High-quality leads ready to buy",
+      "Transparent analytics for each channel",
+      "Scalable, repeatable results",
+    ],
+    details: [
+      "Lead generation is a systematic process of attracting potential clients through optimized ad channels. We build a comprehensive setup that works 24/7 and consistently brings you new leads.",
+      "We use a multichannel approach: search ads, social media targeting, email marketing, SEO, and content marketing. Each channel is continuously optimized for maximum efficiency.",
+      "All incoming leads are qualified so your team receives contacts that are genuinely interested and ready to collaborate.",
+    ],
+    features: [
+      "End-to-end ad campaign setup",
+      "High-converting landing page creation",
+      "CRM integration",
+      "Automated lead qualification",
+      "Retargeting and warm audience nurturing",
+    ],
+  },
+  "process-automation": {
+    benefits: [
+      "Reduce routine tasks by up to 80%",
+      "Faster lead processing speed",
+      "Fewer operational errors",
+      "Free up team time for high-value work",
+      "Higher conversion through faster response",
+    ],
+    details: [
+      "Business process automation reduces team workload and increases overall efficiency. We analyze your current workflows and identify where automation creates the biggest impact.",
+      "We implement modern tools: automated sales funnels, trigger-based communications, chatbots for standard requests, and automatic lead distribution across managers.",
+      "After implementation, you receive detailed documentation and team training on how to use the new tools effectively.",
+    ],
+    features: [
+      "Audit of current business processes",
+      "Automated funnel architecture design",
+      "Trigger workflow setup",
+      "Integration with existing systems",
+      "Team onboarding and technical support",
+    ],
+  },
+  "crm-systems": {
+    benefits: [
+      "All clients and deals in one place",
+      "Complete interaction history for each client",
+      "Automatic reminders for tasks and follow-ups",
+      "Real-time sales analytics",
+      "Better control of sales team performance",
+    ],
+    details: [
+      "A CRM system is the central hub for managing clients and sales. We help you select and implement the best-fit solution for your business: Bitrix24, AmoCRM, or alternatives.",
+      "We tailor the system to your workflow: pipeline stages, client cards, automation rules, and integrations with telephony, messengers, and email.",
+      "We also train your team and provide technical support during and after implementation.",
+    ],
+    features: [
+      "Best-fit CRM selection for your business",
+      "Pipeline and deal stage configuration",
+      "Telephony and messenger integrations",
+      "Automated tasks and reminders setup",
+      "Reports and dashboard creation",
+    ],
+  },
+  "website-creation": {
+    benefits: [
+      "Professional website built to drive sales",
+      "Responsive design for all devices",
+      "High loading speed",
+      "SEO optimization from day one",
+      "Convenient content management",
+    ],
+    details: [
+      "We build modern websites that support your business goals: corporate sites, high-converting landing pages, and online stores. Every project is tailored to your niche and audience.",
+      "We use reliable technologies and frameworks to ensure stability, security, and easy future scaling.",
+      "The package includes basic SEO setup, analytics configuration, and team onboarding for site management.",
+    ],
+    features: [
+      "Unique design aligned with your brand",
+      "Mobile adaptation",
+      "Payment system integrations",
+      "CRM and analytics integration",
+      "Support and iterative improvements",
+    ],
+  },
+  "seo-promotion": {
+    benefits: [
+      "Organic traffic without permanent ad spend",
+      "Higher rankings in Yandex and Google",
+      "Relevant visitors ready to buy",
+      "Long-term return on investment",
+      "Improved brand awareness",
+    ],
+    details: [
+      "SEO promotion is a comprehensive set of actions to optimize your website for search engines. We move websites to top positions in Yandex and Google for target queries and attract organic traffic.",
+      "Our approach includes technical optimization, content improvements, link growth, and behavioral factor enhancement. Every step is documented and aligned with you.",
+      "You receive monthly reports on rankings, traffic, and achieved performance.",
+    ],
+    features: [
+      "Full website SEO audit",
+      "Keyword research and clustering",
+      "Technical optimization",
+      "Content writing and optimization",
+      "Off-page SEO work",
+    ],
+  },
+  "context-ads": {
+    benefits: [
+      "Fast launch and first leads the same day",
+      "Precise targeting of your ideal audience",
+      "Flexible budget management",
+      "Measurable ROI for every campaign",
+      "Scalable winning campaigns",
+    ],
+    details: [
+      "Context ads are the fastest way to attract clients online. We set up advertising in Yandex Direct, Google Ads, and social platforms (VK, Telegram, Meta*).",
+      "We build effective campaigns end-to-end: from competitor analysis and keyword research to ad copy and landing pages. Campaigns are continuously optimized to reduce cost per lead.",
+      "Transparent reporting: you always see spend, number of leads, and the cost of each lead.",
+    ],
+    features: [
+      "Yandex Direct and Google Ads setup",
+      "Targeted social media advertising",
+      "Conversion-focused ad copy creation",
+      "Retargeting setup",
+      "Weekly optimization and reporting",
+    ],
+  },
+  "ai-bots": {
+    benefits: [
+      "24/7 lead handling without manual effort",
+      "Instant answers to common questions",
+      "Reduce support workload by up to 70%",
+      "Higher conversion through fast response",
+      "Automated lead capture and qualification",
+    ],
+    details: [
+      "AI bots and chatbots are smart assistants for Telegram, WhatsApp, your website, and other channels. They answer client questions, collect requests, book services, and more.",
+      "We build bots powered by modern AI technologies that understand natural language and can maintain meaningful conversations. Bots integrate with your CRM and other systems.",
+      "After launch, bots continue to improve based on real dialogues, becoming smarter and more effective over time.",
+    ],
+    features: [
+      "Custom bot development for your goals",
+      "Integration with Telegram, WhatsApp, and website",
+      "Connection to CRM and data sources",
+      "Training on your FAQs and scenarios",
+      "Conversation analytics and continuous optimization",
+    ],
+  },
+};
+
 export default function ServicePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   const service = services.find(s => s.slug === slug);
-  const article = serviceArticles[slug];
+  const article = (language === "en" ? serviceArticlesEn[slug] : undefined) ?? serviceArticlesRu[slug];
 
   if (!service || !article) {
     notFound();
@@ -333,7 +527,7 @@ export default function ServicePage({ params }: { params: Promise<{ slug: string
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <a
-                  href="https://mail.yandex.ru/compose?to=surdoe@yandex.ru&subject=Заявка на услугу: "
+                  href={`https://mail.yandex.ru/compose?to=surdoe@yandex.ru&subject=${encodeURIComponent(`${t("services.article.cta.mailSubject")} ${t(service.nameKey)}`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center gap-2 bg-yellow-400 text-[#820251] px-8 py-4 rounded-xl font-bold hover:bg-yellow-300 transition-colors shadow-lg hover:shadow-xl"

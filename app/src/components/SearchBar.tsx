@@ -22,6 +22,7 @@ interface SearchSuggestion {
 }
 
 const LOGO_PROXY_VERSION = "3";
+const PHONE_HINT_HIDE_MS = 1100;
 
 export default function SearchBar({ variant = "hero" }: SearchBarProps) {
   const { t } = useLanguage();
@@ -36,9 +37,11 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
   const [activeInput, setActiveInput] = useState<"company" | "service">("company");
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [keywordsQuery, setKeywordsQuery] = useState("");
+  const [phoneHintTarget, setPhoneHintTarget] = useState<"mobile" | "desktop" | null>(null);
   const companyInputRef = useRef<HTMLInputElement>(null);
   const keywordsInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+  const phoneHintTimeoutRef = useRef<number | null>(null);
 
   const activeInputRef = activeInput === "company" ? companyInputRef : keywordsInputRef;
 
@@ -132,6 +135,14 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
     return () => document.removeEventListener("click", handleClickOutside);
   }, [activeInputRef]);
 
+  useEffect(() => {
+    return () => {
+      if (phoneHintTimeoutRef.current) {
+        window.clearTimeout(phoneHintTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleSearch = (e?: React.FormEvent | React.MouseEvent) => {
     e?.preventDefault();
     setShowSuggestions(false);
@@ -163,6 +174,19 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      if (showSuggestions && suggestions.length > 0 && selectedIndex >= 0) {
+        e.preventDefault();
+        router.push(suggestions[selectedIndex].url);
+        setShowSuggestions(false);
+        return;
+      }
+
+      e.preventDefault();
+      handleSearch();
+      return;
+    }
+
     if (!showSuggestions || suggestions.length === 0) return;
 
     if (e.key === "ArrowDown") {
@@ -171,10 +195,6 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setSelectedIndex((prev) => (prev > 0 ? prev - 1 : -1));
-    } else if (e.key === "Enter" && selectedIndex >= 0) {
-      e.preventDefault();
-      router.push(suggestions[selectedIndex].url);
-      setShowSuggestions(false);
     } else if (e.key === "Escape") {
       setShowSuggestions(false);
     }
@@ -189,6 +209,15 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
     const normalized = (icon || "").trim();
     if (!normalized) return false;
     return normalized.startsWith("/") || /^https?:\/\//iu.test(normalized);
+  };
+
+  const shouldProxyAbsoluteIcon = (iconUrl: string): boolean => {
+    try {
+      const host = new URL(iconUrl).hostname.toLowerCase();
+      return host === "ibiz.by" || host.endsWith(".ibiz.by");
+    } catch {
+      return false;
+    }
   };
 
   const renderSuggestionIcon = (suggestion: SearchSuggestion, size: "mobile" | "desktop") => {
@@ -209,7 +238,10 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
           return `/api/biznesinfo/logo?id=${encodeURIComponent(companyId)}&path=${encodeURIComponent(icon)}&v=${LOGO_PROXY_VERSION}`;
         }
         if (/^https?:\/\//iu.test(icon)) {
-          return `/api/biznesinfo/logo?u=${encodeURIComponent(icon)}&v=${LOGO_PROXY_VERSION}`;
+          if (shouldProxyAbsoluteIcon(icon)) {
+            return `/api/biznesinfo/logo?u=${encodeURIComponent(icon)}&v=${LOGO_PROXY_VERSION}`;
+          }
+          return icon;
         }
         return icon;
       })();
@@ -234,6 +266,51 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
     return <span className={`${size === "desktop" ? "text-2xl" : "text-xl"} flex-shrink-0`}>{icon || "🏢"}</span>;
   };
 
+  const renderPhoneSearchHint = (size: "mobile" | "desktop") => {
+    const wrapperClass = size === "mobile"
+      ? "mx-1 w-6 h-6 rounded-full bg-[#820251]/10 text-[#820251] border border-[#820251]/20 flex items-center justify-center shrink-0"
+      : "mx-2 w-7 h-7 rounded-full bg-[#820251]/10 text-[#820251] border border-[#820251]/20 flex items-center justify-center shrink-0";
+    const iconClass = size === "mobile" ? "w-3.5 h-3.5" : "w-4 h-4";
+    const isVisible = phoneHintTarget === size;
+
+    const showPhoneHint = () => {
+      setPhoneHintTarget(size);
+      if (phoneHintTimeoutRef.current) {
+        window.clearTimeout(phoneHintTimeoutRef.current);
+      }
+      phoneHintTimeoutRef.current = window.setTimeout(() => {
+        setPhoneHintTarget(null);
+        phoneHintTimeoutRef.current = null;
+      }, PHONE_HINT_HIDE_MS);
+    };
+
+    return (
+      <span className="relative flex items-center shrink-0">
+        {isVisible && (
+          <span className="absolute right-full mr-2 top-1/2 -translate-y-1/2 whitespace-nowrap text-[11px] font-semibold bg-[#820251] text-white px-2 py-1 rounded-lg shadow-lg z-20">
+            Поиск по номеру телефона
+          </span>
+        )}
+        <button
+          type="button"
+          className={wrapperClass}
+          title="Можно искать по номеру телефона"
+          aria-label="Можно искать по номеру телефона"
+          onClick={showPhoneHint}
+        >
+          <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M3 5a2 2 0 012-2h2.2a1 1 0 01.98.804l.57 2.61a1 1 0 01-.29.95l-1.2 1.2a15.05 15.05 0 006.66 6.66l1.2-1.2a1 1 0 01.95-.29l2.61.57a1 1 0 01.804.98V19a2 2 0 01-2 2h-1C9.72 21 3 14.28 3 6V5z"
+            />
+          </svg>
+        </button>
+      </span>
+    );
+  };
+
   if (variant === "compact") {
     return (
       <form onSubmit={handleSearch} className="flex items-center gap-2">
@@ -246,6 +323,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
             placeholder={t("search.placeholder")}
             value={companyQuery}
             onChange={(e) => setCompanyQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
             className="portal-dialog-typography search-input search-input-on-dark w-full p-2 pr-10 bg-white/10 text-white border border-white/30 rounded-lg focus:outline-none focus:border-white/60 focus:ring-1 focus:ring-white/40"
           />
         </div>
@@ -259,6 +337,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
           placeholder={t("search.keywordsPlaceholder")}
           value={keywordsQuery}
           onChange={(e) => setKeywordsQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
           className="portal-dialog-typography p-2 text-gray-600 border border-gray-300 bg-white rounded-lg focus:outline-none focus:border-[#820251] max-w-[150px]"
         />
 
@@ -289,6 +368,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
             placeholder={t("search.keywordsPlaceholder")}
             value={keywordsQuery}
             onChange={(e) => setKeywordsQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
             className="portal-dialog-typography search-input search-input-on-dark w-full p-2 pr-10 bg-white/10 text-white border border-white/30 rounded-lg focus:outline-none focus:border-white/60 focus:ring-1 focus:ring-white/40"
           />
         </div>
@@ -424,6 +504,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
               autoComplete="off"
               className="portal-dialog-typography flex-grow min-w-0 py-3.5 px-3 text-gray-600 focus:outline-none text-base bg-transparent"
             />
+            {renderPhoneSearchHint("mobile")}
             <button
               type="button"
               onClick={handleSearch}
@@ -490,6 +571,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
               placeholder={t("filter.locationLabel")}
               value={cityQuery}
               onChange={(e) => setCityQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
               className="portal-dialog-typography flex-grow min-w-0 py-3.5 px-3 text-gray-600 focus:outline-none text-base bg-transparent"
             />
             <button
@@ -614,6 +696,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
                 autoComplete="off"
                 className="portal-dialog-typography search-input-hero flex-grow py-5 px-4 text-[#4b5563] focus:outline-none text-lg bg-transparent"
               />
+              {renderPhoneSearchHint("desktop")}
             </div>
           </div>
 
@@ -676,6 +759,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
                 placeholder={t("filter.locationLabel")}
                 value={cityQuery}
                 onChange={(e) => setCityQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
                 className="portal-dialog-typography search-input-hero flex-grow py-5 px-4 text-[#4b5563] focus:outline-none text-lg bg-transparent"
               />
             </div>
@@ -754,7 +838,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
               <h3 className="font-bold text-lg md:text-xl mb-1 flex items-center gap-2 group-hover/consult:text-yellow-300 transition-colors">
                 {t("ai.title")}
                 <span className="text-xs bg-gradient-to-r from-yellow-300 to-yellow-500 text-[#820251] px-2.5 py-1 rounded-full font-bold uppercase
-                  shadow-[0_0_10px_rgba(250,204,21,0.4)] animate-pulse">New</span>
+                  shadow-[0_0_10px_rgba(250,204,21,0.4)] animate-pulse">{t("ai.newBadge") || "New"}</span>
               </h3>
               <p className="text-pink-100 text-sm md:text-base leading-relaxed group-hover/consult:text-white transition-colors">
                 {t("ai.shortDesc")}

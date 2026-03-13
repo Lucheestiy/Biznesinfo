@@ -2,6 +2,8 @@
  * Russian plural forms helper
  * 1 компания, 2 компании, 5 компаний
  */
+export type CompanyCountLanguage = "ru" | "en" | "be" | "zh";
+
 export function pluralize(n: number, forms: [string, string, string]): string {
   const absN = Math.abs(n);
   const mod10 = absN % 10;
@@ -22,6 +24,20 @@ export function pluralize(n: number, forms: [string, string, string]): string {
 /**
  * Format number with proper Russian pluralization
  */
-export function formatCompanyCount(n: number): string {
-  return `${n} ${pluralize(n, ["компания", "компании", "компаний"])}`;
+export function formatCompanyCount(n: number, language: CompanyCountLanguage = "ru"): string {
+  const count = Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
+
+  if (language === "zh") {
+    return `${count}家公司`;
+  }
+
+  if (language === "en") {
+    return `${count} ${count === 1 ? "company" : "companies"}`;
+  }
+
+  if (language === "be") {
+    return `${count} ${pluralize(count, ["кампанія", "кампаніі", "кампаній"])}`;
+  }
+
+  return `${count} ${pluralize(count, ["компания", "компании", "компаний"])}`;
 }

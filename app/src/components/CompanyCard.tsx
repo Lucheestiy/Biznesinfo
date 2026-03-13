@@ -7,6 +7,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useFavorites } from "@/contexts/FavoritesContext";
 import AIAssistant from "./AIAssistant";
 import MessageModal from "./MessageModal";
+import { localizeCatalogCategoryName, localizeCatalogRubricName } from "@/lib/biznesinfo/catalog-localization";
 import type { BiznesinfoCompanySummary } from "@/lib/biznesinfo/types";
 import { BIZNESINFO_CATEGORY_ICONS } from "@/lib/biznesinfo/icons";
 import { companySlugForUrl } from "@/lib/biznesinfo/slug";
@@ -99,6 +100,25 @@ function logoProxyUrl(companyId: string, rawLogoUrl: string): string {
   if (!pathname.startsWith("/images/")) return "";
 
   return `/api/biznesinfo/logo?id=${encodeURIComponent(companyId)}&path=${encodeURIComponent(pathname)}&v=${LOGO_PROXY_VERSION}`;
+}
+
+function resolveLogoSrc(companyId: string, rawLogoUrl: string): string {
+  const logoUrl = (rawLogoUrl || "").trim();
+  if (!logoUrl) return "";
+
+  if (logoUrl.startsWith("/api/biznesinfo/logo")) return logoUrl;
+
+  if (logoUrl.startsWith("/")) {
+    if (!logoUrl.startsWith("/images/")) return logoUrl;
+    return logoProxyUrl(companyId, logoUrl);
+  }
+
+  if (/^https?:\/\//iu.test(logoUrl)) {
+    // Preserve existing proxy path for ibiz /images/*, otherwise use direct external URL.
+    return logoProxyUrl(companyId, logoUrl) || logoUrl;
+  }
+
+  return "";
 }
 
 function displayUrl(raw: string): string {
@@ -396,7 +416,7 @@ function SearchCompanyCard({
   highlightServiceTokens = [],
   highlightLocationTokens = [],
 }: CompanyCardProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const router = useRouter();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [logoFailed, setLogoFailed] = useState(false);
@@ -409,12 +429,9 @@ function SearchCompanyCard({
   const icon = company.primary_category_slug ? BIZNESINFO_CATEGORY_ICONS[company.primary_category_slug] || "🏢" : "🏢";
   const logoUrl = (company.logo_url || "").trim();
   const logoSrc = useMemo(() => {
-    if (!logoUrl) return "";
-    if (logoUrl.startsWith("/api/biznesinfo/logo")) return logoUrl;
-    if (logoUrl.startsWith("/") && !logoUrl.startsWith("/images/")) return logoUrl;
-    return logoProxyUrl(company.id, logoUrl);
+    return resolveLogoSrc(company.id, logoUrl);
   }, [company.id, logoUrl]);
-  const showLogo = Boolean(logoUrl) && !logoFailed;
+  const showLogo = Boolean(logoSrc) && !logoFailed;
 
   const initials = useMemo(() => {
     const name = company.name || "";
@@ -451,11 +468,26 @@ function SearchCompanyCard({
   }, [company.name]);
 
   const industryText = useMemo(() => {
-    const rubric = (company.primary_rubric_name || "").trim();
-    const category = (company.primary_category_name || "").trim();
+    const rubric = localizeCatalogRubricName(
+      language,
+      company.primary_rubric_slug || "",
+      (company.primary_rubric_name || "").trim(),
+    );
+    const category = localizeCatalogCategoryName(
+      language,
+      company.primary_category_slug || "",
+      (company.primary_category_name || "").trim(),
+    );
     if (showCategory) return rubric || category;
     return category || rubric;
-  }, [company.primary_category_name, company.primary_rubric_name, showCategory]);
+  }, [
+    company.primary_category_name,
+    company.primary_category_slug,
+    company.primary_rubric_name,
+    company.primary_rubric_slug,
+    language,
+    showCategory,
+  ]);
 
   const shortDescription = useMemo(() => {
     const tokens = highlightServiceTokens || [];
@@ -671,7 +703,7 @@ function SearchCompanyCard({
 }
 
 function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const router = useRouter();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [messageModalOpen, setMessageModalOpen] = useState(false);
@@ -698,14 +730,20 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
   const workStatus = useMemo(() => getWorkStatus(company.work_hours), [company.work_hours]);
 
   const icon = company.primary_category_slug ? BIZNESINFO_CATEGORY_ICONS[company.primary_category_slug] || "🏢" : "🏢";
+  const primaryRubricText = useMemo(
+    () =>
+      localizeCatalogRubricName(
+        language,
+        company.primary_rubric_slug || "",
+        (company.primary_rubric_name || "").trim(),
+      ),
+    [company.primary_rubric_name, company.primary_rubric_slug, language],
+  );
   const logoUrl = (company.logo_url || "").trim();
   const logoSrc = useMemo(() => {
-    if (!logoUrl) return "";
-    if (logoUrl.startsWith("/api/biznesinfo/logo")) return logoUrl;
-    if (logoUrl.startsWith("/") && !logoUrl.startsWith("/images/")) return logoUrl;
-    return logoProxyUrl(company.id, logoUrl);
+    return resolveLogoSrc(company.id, logoUrl);
   }, [company.id, logoUrl]);
-  const showLogo = Boolean(logoUrl) && !logoFailed;
+  const showLogo = Boolean(logoSrc) && !logoFailed;
   
   // Generate initials for companies without logo
   const initials = useMemo(() => {
@@ -842,9 +880,9 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
               <h3 className="font-bold text-white text-lg leading-tight">
                 {company.name}
               </h3>
-              {showCategory && company.primary_rubric_name && (
+              {showCategory && primaryRubricText && (
                 <span className="inline-block mt-2 text-xs text-pink-200 bg-white/10 px-2 py-1 rounded">
-                  {company.primary_rubric_name}
+                  {primaryRubricText}
                 </span>
               )}
             </div>

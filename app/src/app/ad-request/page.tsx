@@ -9,6 +9,8 @@ import Link from "next/link";
 export default function AdRequestPage() {
   const { t } = useLanguage();
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [formData, setFormData] = useState({
     companyName: "",
     contactPerson: "",
@@ -17,11 +19,29 @@ export default function AdRequestPage() {
     message: "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Here would be the API call to submit the request to AI assistant
-    console.log("Ad request submitted:", formData);
-    setSubmitted(true);
+    if (isSubmitting) return;
+
+    setSubmitError("");
+    setIsSubmitting(true);
+    try {
+      const response = await fetch("/api/ad-request/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        const message = typeof payload?.message === "string" ? payload.message : "REQUEST_FAILED";
+        throw new Error(message);
+      }
+      setSubmitted(true);
+    } catch {
+      setSubmitError("Не удалось отправить заявку. Попробуйте еще раз или напишите на surdoe@yandex.ru.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -152,11 +172,18 @@ export default function AdRequestPage() {
                     </p>
                   </div>
 
+                  {submitError ? (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {submitError}
+                    </div>
+                  ) : null}
+
                   <button
                     type="submit"
-                    className="w-full bg-[#820251] text-white py-4 rounded-lg font-semibold hover:bg-[#6a0143] transition-colors"
+                    disabled={isSubmitting}
+                    className="w-full bg-[#820251] text-white py-4 rounded-lg font-semibold hover:bg-[#6a0143] transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                   >
-                    Отправить заявку
+                    {isSubmitting ? "Отправляем..." : "Отправить заявку"}
                   </button>
                 </form>
               </div>

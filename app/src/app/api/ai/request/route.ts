@@ -2190,7 +2190,7 @@ function looksLikeGreetingOrCapabilitiesRequest(message: string): boolean {
 }
 
 function looksLikeCapabilitiesQuestionText(text: string): boolean {
-  return /(что\s+умеешь|что\s+можешь|чем\s+поможешь|чем\s+можешь\s+помочь|какие\s+возможност|ты\s+как|кто\s+ты|ты\s+кто)/u
+  return /(что\s+(?:ты\s+)?умеешь|что\s+(?:ты\s+)?можешь|чем\s+(?:ты\s+)?поможешь|чем\s+(?:ты\s+)?можешь\s+помочь|какие\s+возможност|ты\s+как|кто\s+ты|ты\s+кто)/u
     .test(text);
 }
 
@@ -6257,7 +6257,6 @@ function buildSanatoriumClarifyingReply(params: { locationHint?: string | null }
   ].join("\n");
 }
 
-const PORTAL_CARD_FOLLOW_UP_QUESTION = "Если нужно, следующим сообщением дам смежные рубрики и подрубрики по вашему запросу.";
 const PORTAL_FILTER_GUIDANCE_TEXT =
   "Чтобы получить максимально точный результат по подбору компаний, используйте фильтр: поисковую строку для фильтрации по региону и фильтрацию по товарам либо услугам.";
 
@@ -6296,7 +6295,7 @@ function appendPortalCardFollowUpQuestion(text: string): string {
   if (replyContainsRubricAdvice(source) || /\/\s*catalog\s*\/[a-z0-9-]+/iu.test(source)) return source;
   if (looksLikeClarifyingQuestionFlowReply(source)) return source;
   if (hasNoResultsDisclosure(source)) return source;
-  return `${source}\n\n${PORTAL_CARD_FOLLOW_UP_QUESTION}`.replace(/\n{3,}/gu, "\n\n").trim();
+  return source;
 }
 
 function replaceDeprecatedClarifyingQuestionFlow(text: string): string {
@@ -17125,6 +17124,7 @@ function buildAssistantSystemPrompt(): string {
     "",
     "Диалог и стиль:",
     "- Отвечай на языке пользователя (русский/белорусский), деловым и понятным стилем.",
+    "- Приветствуя пользователя или отвечая на общие вопросы о твоих возможностях, перечисли, что можешь: подобрать поставщиков товара/услуги, дать релевантную рубрику каталога, а также помочь составить текст запроса или коммерческое предложение.",
     "- Для общих запросов сразу направляй в релевантную рубрику/подрубрику; уточняющие вопросы задавай только когда пользователь явно просит детализацию.",
     "- Не задавай бюджет/цену как обязательный стартовый вопрос, если в карточках нет цен.",
     "- После подбора предложи следующий шаг: короткий текст запроса, сообщение для мессенджера или точечные уточнения.",
