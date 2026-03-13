@@ -1,7 +1,7 @@
 import { Pool, type PoolClient } from "pg";
 
 import { getDbPool } from "@/lib/auth/db";
-import { normalizeCityForFilter } from "@/lib/utils/location";
+import { buildCompanySuggestSubtitle, normalizeCityForFilter } from "@/lib/utils/location";
 import { canonicalizeSemanticToken, tokenizeSemanticText } from "@/lib/search/semantic";
 
 import type {
@@ -27,6 +27,7 @@ import { BIZNESINFO_WEBSITE_OVERRIDES } from "./websiteOverrides";
 
 const BIZNESINFO_SCHEMA_MIGRATION_ID = "20260217_01_biznesinfo_catalog_pg_primary";
 const BIZNESINFO_SCHEMA_MIGRATION_ID_COMPANIES_SERVICES = "20260217_02_companies_services";
+const BIZNESINFO_SCHEMA_MIGRATION_ID_COMPANIES_ADDRESS = "20260311_01_companies_address";
 
 const BIZNESINFO_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS biznesinfo_catalog_schema_migrations (
@@ -114,6 +115,7 @@ const BIZNESINFO_COMPANIES_SERVICES_SQL = `
     description TEXT NOT NULL DEFAULT '',
     region TEXT NOT NULL DEFAULT '',
     city TEXT NOT NULL DEFAULT '',
+    address TEXT NOT NULL DEFAULT '',
     postal_code TEXT NOT NULL DEFAULT '',
     lat DOUBLE PRECISION,
     lng DOUBLE PRECISION,
@@ -146,6 +148,18 @@ const BIZNESINFO_COMPANIES_SERVICES_SQL = `
     ON services(company_id);
   CREATE INDEX IF NOT EXISTS services_title_idx
     ON services(title);
+`;
+
+const BIZNESINFO_COMPANIES_ADDRESS_SQL = `
+  ALTER TABLE companies
+    ADD COLUMN IF NOT EXISTS address TEXT NOT NULL DEFAULT '';
+
+  UPDATE companies AS c
+  SET address = COALESCE(NULLIF(btrim(bc.payload->>'address'), ''), c.address)
+  FROM biznesinfo_companies AS bc
+  WHERE bc.id = c.id
+    AND btrim(COALESCE(c.address, '')) = ''
+    AND btrim(COALESCE(bc.payload->>'address', '')) <> '';
 `;
 
 const DASH_VARIANTS_RE = /[-‐‑‒–—―]/gu;
@@ -1033,6 +1047,7 @@ type PreparedCompanyImportRecord = {
   description: string;
   region: string;
   city: string;
+  address: string;
   postalCode: string;
   lat: number | null;
   lng: number | null;
@@ -1094,6 +1109,7 @@ function prepareCompanyImportRecord(rawCompany: BiznesinfoCompany): PreparedComp
     description: String(company.description || company.about || "").trim(),
     region: normalizeRegionForStorage(company),
     city: String(company.city || "").trim(),
+    address: String(company.address || "").replace(/\s+/gu, " ").trim(),
     postalCode: extractPostalCode(company.address || "", company.city || "", company.region || ""),
     lat,
     lng,
@@ -1133,6 +1149,7 @@ async function applyBiznesinfoSchema(): Promise<void> {
 
     await applyCatalogMigration(client, BIZNESINFO_SCHEMA_MIGRATION_ID, BIZNESINFO_SCHEMA_SQL);
     await applyCatalogMigration(client, BIZNESINFO_SCHEMA_MIGRATION_ID_COMPANIES_SERVICES, BIZNESINFO_COMPANIES_SERVICES_SQL);
+    await applyCatalogMigration(client, BIZNESINFO_SCHEMA_MIGRATION_ID_COMPANIES_ADDRESS, BIZNESINFO_COMPANIES_ADDRESS_SQL);
 
     await client.query("COMMIT");
   } catch (error) {
@@ -1182,6 +1199,7 @@ export type BiznesinfoSearchItem = {
   description: string;
   region: string;
   city: string;
+  address: string;
   status: string;
   logo_url: string;
   createdAt: string;
@@ -1199,6 +1217,7 @@ export type BiznesinfoSearchIndexCompany = {
   categoryNames: string[];
   region: string;
   city: string;
+  address: string;
   status: string;
   logo_url: string;
   logo_rank: number;
@@ -1220,6 +1239,7 @@ type BiznesinfoSearchIndexDbRow = {
   description: string | null;
   region: string | null;
   city: string | null;
+  address: string | null;
   status: string | null;
   logo_url: string | null;
   created_at: Date | string | null;
@@ -1477,6 +1497,7 @@ function mapSearchIndexDbRow(row: BiznesinfoSearchIndexDbRow): BiznesinfoSearchI
     categoryNames,
     region: normalizeSearchText(row.region || ""),
     city: normalizeSearchText(row.city || ""),
+    address: normalizeSearchText(row.address || ""),
     status: normalizeSearchText(row.status || "active") || "active",
     logo_url: logoUrl,
     logo_rank: computeLogoRankFromUrl(logoUrl),
@@ -1506,6 +1527,7 @@ export async function biznesinfoGetSearchItemsByIds(ids: string[]): Promise<Bizn
     description: string | null;
     region: string | null;
     city: string | null;
+    address: string | null;
     status: string | null;
     logo_url: string | null;
     created_at: Date | string | null;
@@ -1519,6 +1541,7 @@ export async function biznesinfoGetSearchItemsByIds(ids: string[]): Promise<Bizn
         description,
         region,
         city,
+        address,
         status,
         logo_url,
         created_at,
@@ -1540,6 +1563,7 @@ export async function biznesinfoGetSearchItemsByIds(ids: string[]): Promise<Bizn
       description: normalizeSearchText(row.description || ""),
       region: normalizeSearchText(row.region || ""),
       city: normalizeSearchText(row.city || ""),
+      address: normalizeSearchText(row.address || ""),
       status: normalizeSearchText(row.status || ""),
       logo_url: normalizeSearchText(row.logo_url || ""),
       createdAt: toIsoString(row.created_at),
@@ -1573,6 +1597,7 @@ export async function biznesinfoListCompaniesForSearchIndex(ids?: string[]): Pro
         c.description,
         c.region,
         c.city,
+        c.address,
         c.status,
         c.logo_url,
         c.created_at,
@@ -1627,6 +1652,7 @@ export async function biznesinfoListCompaniesForSearchIndex(ids?: string[]): Pro
         c.description,
         c.region,
         c.city,
+        c.address,
         c.status,
         c.logo_url,
         c.created_at,
@@ -1662,6 +1688,7 @@ export async function biznesinfoListCompaniesForSearchIndexBatch(
           c.description,
           c.region,
           c.city,
+          c.address,
           c.status,
           c.logo_url,
           c.created_at,
@@ -1716,6 +1743,7 @@ export async function biznesinfoListCompaniesForSearchIndexBatch(
           c.description,
           c.region,
           c.city,
+          c.address,
           c.status,
           c.logo_url,
           c.created_at,
@@ -1736,6 +1764,7 @@ export async function biznesinfoListCompaniesForSearchIndexBatch(
           c.description,
           c.region,
           c.city,
+          c.address,
           c.status,
           c.logo_url,
           c.created_at,
@@ -1789,6 +1818,7 @@ export async function biznesinfoListCompaniesForSearchIndexBatch(
           c.description,
           c.region,
           c.city,
+          c.address,
           c.status,
           c.logo_url,
           c.created_at,
@@ -1831,13 +1861,13 @@ export async function upsertCompaniesAndServicesBatch(companies: BiznesinfoCompa
         `
           INSERT INTO companies (
             id, name, normalized_name, description,
-            region, city, postal_code, lat, lng,
+            region, city, address, postal_code, lat, lng,
             logo_url, status, created_at, updated_at
           )
           VALUES (
             $1, $2, $3, $4,
-            $5, $6, $7, $8, $9,
-            $10, $11, now(), now()
+            $5, $6, $7, $8, $9, $10,
+            $11, $12, now(), now()
           )
           ON CONFLICT (id)
           DO UPDATE SET
@@ -1846,6 +1876,7 @@ export async function upsertCompaniesAndServicesBatch(companies: BiznesinfoCompa
             description = EXCLUDED.description,
             region = EXCLUDED.region,
             city = EXCLUDED.city,
+            address = EXCLUDED.address,
             postal_code = EXCLUDED.postal_code,
             lat = EXCLUDED.lat,
             lng = EXCLUDED.lng,
@@ -1860,6 +1891,7 @@ export async function upsertCompaniesAndServicesBatch(companies: BiznesinfoCompa
           company.description,
           company.region,
           company.city,
+          company.address,
           company.postalCode,
           company.lat,
           company.lng,
@@ -2223,6 +2255,132 @@ async function getCompanyRowsByIds(ids: string[]): Promise<Array<{ id: string; r
   );
 
   return result.rows;
+}
+
+function normalizePhoneDigits(raw: string): string {
+  return String(raw || "").replace(/[^\d]+/gu, "");
+}
+
+function buildPhoneSearchPatterns(rawPhone: string): string[] {
+  const digits = normalizePhoneDigits(rawPhone);
+  if (digits.length < 7) return [];
+
+  const variants = new Set<string>([digits]);
+  if (digits.startsWith("375") && digits.length >= 11) {
+    const local = digits.slice(3);
+    if (local) {
+      variants.add(local);
+      variants.add(`0${local}`);
+    }
+  }
+  if (digits.startsWith("80") && digits.length >= 10) {
+    variants.add(digits.slice(1));
+  }
+  if (digits.startsWith("0") && digits.length >= 9) {
+    variants.add(`375${digits.slice(1)}`);
+  }
+
+  return Array.from(variants)
+    .map((value) => value.trim())
+    .filter((value) => value.length >= 7)
+    .map((value) => `%${value}%`);
+}
+
+export async function biznesinfoSearchCompaniesByPhone(params: {
+  phone: string;
+  offset?: number;
+  limit?: number;
+}): Promise<{ items: BiznesinfoCompanySummary[]; total: number }> {
+  await ensureBiznesinfoPgSchema();
+  const phonePatterns = buildPhoneSearchPatterns(params.phone || "");
+  if (phonePatterns.length === 0) {
+    return { items: [], total: 0 };
+  }
+
+  const safeOffset = Number.isFinite(params.offset) ? Math.max(0, Number(params.offset)) : 0;
+  const safeLimit = Number.isFinite(params.limit) ? Math.max(1, Math.min(200, Number(params.limit))) : 24;
+  const pool = getCatalogDbPool();
+
+  const whereSql = `
+    (
+      EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements_text(COALESCE(c.payload->'phones', '[]'::jsonb)) AS p(phone)
+        WHERE regexp_replace(COALESCE(p.phone, ''), '[^0-9]+', '', 'g') LIKE ANY($1::text[])
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(COALESCE(c.payload->'phones_ext', '[]'::jsonb)) AS pe(item)
+        WHERE regexp_replace(COALESCE(pe.item->>'number', ''), '[^0-9]+', '', 'g') LIKE ANY($1::text[])
+      )
+    )
+  `;
+
+  const totalRes = await pool.query<{ total: string }>(
+    `
+      SELECT COUNT(*)::text AS total
+      FROM biznesinfo_companies c
+      WHERE ${whereSql}
+    `,
+    [phonePatterns],
+  );
+
+  const idsRes = await pool.query<{ id: string }>(
+    `
+      SELECT c.id
+      FROM biznesinfo_companies c
+      WHERE ${whereSql}
+      ORDER BY c.name ASC, c.id ASC
+      OFFSET $2
+      LIMIT $3
+    `,
+    [phonePatterns, safeOffset, safeLimit],
+  );
+
+  const ids = idsRes.rows.map((row) => String(row.id || "").trim()).filter(Boolean);
+  const items = await biznesinfoGetCompaniesSummaryByIds(ids);
+  const total = Number.parseInt(String(totalRes.rows[0]?.total || "0"), 10) || 0;
+  return { items, total };
+}
+
+export async function biznesinfoCountCompaniesByLocation(params: {
+  city?: string | null;
+  region?: string | null;
+}): Promise<number> {
+  await ensureBiznesinfoPgSchema();
+  const pool = getCatalogDbPool();
+
+  const city = normalizeToken(params.city || "");
+  const regionKeys = regionAliasKeys(params.region || null);
+
+  const where: string[] = [];
+  const values: Array<string | string[]> = [];
+  let idx = 1;
+
+  if (city) {
+    where.push(`lower(trim(COALESCE(c.city, ''))) = $${idx}`);
+    values.push(city);
+    idx += 1;
+  }
+
+  if (regionKeys.length > 0) {
+    where.push(`lower(trim(COALESCE(c.region, ''))) = ANY($${idx}::text[])`);
+    values.push(regionKeys);
+    idx += 1;
+  }
+
+  if (where.length === 0) return 0;
+
+  const totalRes = await pool.query<{ total: string }>(
+    `
+      SELECT COUNT(*)::text AS total
+      FROM companies c
+      WHERE ${where.join(" AND ")}
+    `,
+    values,
+  );
+
+  return Number.parseInt(String(totalRes.rows[0]?.total || "0"), 10) || 0;
 }
 
 export async function biznesinfoGetCompaniesSummaryByIds(ids: string[]): Promise<BiznesinfoCompanySummary[]> {
@@ -2824,12 +2982,14 @@ export async function biznesinfoSuggestFromPg(params: {
       name: string;
       address: string;
       city: string;
+      logo_url: string;
       primary_category_slug: string | null;
     }>(
       `
         SELECT id, name,
           COALESCE(payload->>'address', '') AS address,
           COALESCE(payload->>'city', '') AS city,
+          COALESCE(payload->>'logo_url', '') AS logo_url,
           primary_category_slug
         FROM biznesinfo_companies
         ${whereSql}
@@ -2841,13 +3001,17 @@ export async function biznesinfoSuggestFromPg(params: {
 
     for (const company of companiesRes.rows) {
       if (suggestions.length >= safeLimit) break;
+      const normalizedLogoUrl = normalizeSearchText(company.logo_url || "");
+      const hasCompanyLogo = computeLogoRankFromUrl(normalizedLogoUrl) > 1;
       suggestions.push({
         type: "company",
         id: company.id,
         name: company.name,
         url: `/company/${companySlugForUrl(company.id)}`,
-        icon: company.primary_category_slug ? BIZNESINFO_CATEGORY_ICONS[company.primary_category_slug] || null : null,
-        subtitle: company.address || company.city || "",
+        icon: hasCompanyLogo
+          ? normalizedLogoUrl
+          : (company.primary_category_slug ? BIZNESINFO_CATEGORY_ICONS[company.primary_category_slug] || null : null),
+        subtitle: buildCompanySuggestSubtitle(company.city || "", company.address || ""),
       });
     }
   }

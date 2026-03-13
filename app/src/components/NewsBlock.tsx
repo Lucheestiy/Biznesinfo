@@ -40,7 +40,7 @@ export default function NewsBlock() {
         if (isMounted && data.news) {
           setNews(data.news);
         }
-      } catch (err) {
+      } catch {
         if (isMounted) {
           setError("Не удалось загрузить новости");
         }
@@ -72,7 +72,7 @@ export default function NewsBlock() {
 
   if (loading) {
     return (
-      <div id="news" className="container mx-auto py-12 px-4">
+      <div id="news" className="container mx-auto pt-6 pb-12 px-4">
         <h2 className="text-2xl font-bold text-gray-800 mb-2 flex items-center gap-2">
           <span className="w-1 h-8 bg-[#820251] rounded"></span>
           Новости партнёров
@@ -98,7 +98,7 @@ export default function NewsBlock() {
   }
 
   return (
-    <div id="news" className="container mx-auto py-12 px-4">
+    <div id="news" className="container mx-auto pt-6 pb-12 px-4">
       <h2 className="text-2xl font-bold text-gray-800 mb-2 flex items-center gap-2">
         <span className="w-1 h-8 bg-[#820251] rounded"></span>
         Новости партнёров
@@ -179,12 +179,12 @@ export default function NewsBlock() {
       </div>
 
       {/* Source attribution */}
-      <div className="mt-6 text-center">
+      <div className="mt-6 flex justify-center">
         <a
           href="https://www.belta.by"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sm text-gray-500 hover:text-[#820251] transition-colors"
+          className="block w-full max-w-[290px] text-center text-sm text-gray-500 hover:text-[#820251] transition-colors"
         >
           Источник: БелТА — Белорусское телеграфное агентство
         </a>

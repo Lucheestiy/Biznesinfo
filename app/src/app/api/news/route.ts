@@ -14,14 +14,26 @@ interface NewsItem {
 let cachedNews: NewsItem[] = [];
 let lastFetch = 0;
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+const RSS_TIMEOUT_MS = 2500;
+const IMAGE_TIMEOUT_MS = 1200;
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 async function fetchImageFromPage(url: string): Promise<string | null> {
   try {
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; NewsBot/1.0)",
       },
-    });
+    }, IMAGE_TIMEOUT_MS);
     if (!response.ok) return null;
 
     const html = await response.text();
@@ -55,12 +67,12 @@ async function fetchRSS(): Promise<NewsItem[]> {
   }
 
   try {
-    const response = await fetch("https://www.belta.by/rss/all", {
+    const response = await fetchWithTimeout("https://www.belta.by/rss/all", {
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; NewsBot/1.0)",
       },
       next: { revalidate: 600 },
-    });
+    }, RSS_TIMEOUT_MS);
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);

@@ -138,6 +138,17 @@ export default function SubcategoryPage({ params }: PageProps) {
 
   const totalPages = data ? Math.ceil((data.page?.total || 0) / PAGE_SIZE) : 0;
 
+  useEffect(() => {
+    if (!data) return;
+    if (totalPages <= 0) {
+      if (currentPage !== 1) setCurrentPage(1);
+      return;
+    }
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [data, currentPage, totalPages]);
+
   const sortedCompanies = useMemo(() => {
     const items = (data?.companies || []).map((company, index) => ({
       company,
@@ -243,7 +254,7 @@ export default function SubcategoryPage({ params }: PageProps) {
                   aria-label={t("search.find")}
                   className={inputButtonClassName}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </button>
@@ -278,7 +289,7 @@ export default function SubcategoryPage({ params }: PageProps) {
                   aria-label={t("search.find")}
                   className={inputButtonClassName}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </button>
@@ -404,7 +415,7 @@ export default function SubcategoryPage({ params }: PageProps) {
                 onClick={navigateToSearch}
                 className={inputButtonClassName}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </button>

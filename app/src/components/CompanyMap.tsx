@@ -16,6 +16,8 @@ interface Company {
 
 interface CompanyMapProps {
   userLocation: { lat: number; lng: number };
+  searchCenter: { lat: number; lng: number };
+  searchCenterLabel?: string | null;
   searchQuery?: string;
   radius: number;
   onRadiusChange?: (_radius: number) => void;
@@ -96,6 +98,19 @@ function formatDistanceKm(distanceMeters: number): string {
   return `${(distanceMeters / 1000).toFixed(1).replace(".", ",")} км`;
 }
 
+type RouteMode = "drive" | "walk";
+
+function buildYandexRouteUrl(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+  mode: RouteMode,
+): string {
+  const rtt = mode === "walk" ? "pd" : "auto";
+  const fromPoint = `${from.lat},${from.lng}`;
+  const toPoint = `${to.lat},${to.lng}`;
+  return `https://yandex.ru/maps/?rtext=${encodeURIComponent(`${fromPoint}~${toPoint}`)}&rtt=${rtt}&z=14`;
+}
+
 function sortableDistanceValue(distance: number): number {
   return Number.isFinite(distance) ? distance : Number.POSITIVE_INFINITY;
 }
@@ -113,6 +128,11 @@ function parseRadiusKmInput(raw: string): number | null {
   const parsed = Number(normalized);
   if (!Number.isFinite(parsed) || parsed <= 0) return null;
   return parsed;
+}
+
+function arePointsEqual(a: { lat: number; lng: number }, b: { lat: number; lng: number }): boolean {
+  const epsilon = 0.00001;
+  return Math.abs(a.lat - b.lat) <= epsilon && Math.abs(a.lng - b.lng) <= epsilon;
 }
 
 function spreadDuplicateCompanyPoints(companies: Company[]): Array<{ company: Company; geometry: [number, number] }> {
@@ -184,6 +204,8 @@ function CompanyListLogo(props: { companyId: string; logoUrl: string; alt: strin
 
 function CompanyMap({ 
   userLocation, 
+  searchCenter,
+  searchCenterLabel,
   searchQuery = "", 
   radius, 
   onRadiusChange 
@@ -213,7 +235,7 @@ function CompanyMap({
     setSearchError(null);
 
     try {
-      const url = `/api/biznesinfo/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=${radius}&q=${encodeURIComponent(searchQuery)}&limit=${MAP_FETCH_LIMIT}`;
+      const url = `/api/biznesinfo/nearby?lat=${encodeURIComponent(String(searchCenter.lat))}&lng=${encodeURIComponent(String(searchCenter.lng))}&radius=${radius}&q=${encodeURIComponent(searchQuery)}&limit=${MAP_FETCH_LIMIT}`;
       const res = await fetch(url, { signal: controller.signal, cache: "no-store" });
       if (!res.ok) {
         throw new Error(`nearby_status:${res.status}`);
@@ -246,7 +268,7 @@ function CompanyMap({
         setLoading(false);
       }
     }
-  }, [userLocation, radius, searchQuery]);
+  }, [searchCenter, radius, searchQuery]);
 
   useEffect(() => {
     fetchNearbyCompanies();
@@ -319,6 +341,19 @@ function CompanyMap({
     () => `${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}`,
     [userLocation.lat, userLocation.lng],
   );
+  const searchCenterCoordinatesText = useMemo(
+    () => `${searchCenter.lat.toFixed(6)}, ${searchCenter.lng.toFixed(6)}`,
+    [searchCenter.lat, searchCenter.lng],
+  );
+  const mapCenterKey = useMemo(
+    () => `${searchCenter.lat.toFixed(6)}:${searchCenter.lng.toFixed(6)}`,
+    [searchCenter.lat, searchCenter.lng],
+  );
+  const showSearchCenterPlacemark = useMemo(
+    () => !arePointsEqual(userLocation, searchCenter),
+    [userLocation, searchCenter],
+  );
+  const searchCenterText = (searchCenterLabel || "").trim() || `Координаты: ${searchCenterCoordinatesText}`;
   const userAddressText = userAddress || (loadingUserAddress ? "Определяем адрес..." : `Координаты: ${userCoordinatesText}`);
   const userBalloonHtml = `
     <div style="padding:8px;max-width:260px;">
@@ -488,8 +523,9 @@ function CompanyMap({
         </div>
         <YMaps query={{ apikey: process.env.NEXT_PUBLIC_YANDEX_MAPS_API_KEY || "" }}>
           <YandexMap
+            key={mapCenterKey}
             defaultState={{
-              center: [userLocation.lat, userLocation.lng],
+              center: [searchCenter.lat, searchCenter.lng],
               zoom: 11,
             }}
             modules={[
@@ -501,7 +537,7 @@ function CompanyMap({
           >
             {/* User location circle */}
             <Circle
-              geometry={[[userLocation.lat, userLocation.lng], radius]}
+              geometry={[[searchCenter.lat, searchCenter.lng], radius]}
               options={{
                 fillColor: "#82025120",
                 strokeColor: "#820251",
@@ -529,6 +565,22 @@ function CompanyMap({
                 hideIconOnBalloonOpen: false,
               }}
             />
+            {showSearchCenterPlacemark && (
+              <Placemark
+                geometry={[searchCenter.lat, searchCenter.lng]}
+                modules={["geoObject.addon.hint", "geoObject.addon.balloon"]}
+                properties={{
+                  hintContent: `Центр поиска: ${searchCenterText}`,
+                  balloonContentHeader: "Центр поиска",
+                  balloonContentBody: escapeHtml(searchCenterText),
+                }}
+                options={{
+                  preset: "islands#violetDotIcon",
+                  zIndex: 4900,
+                  hideIconOnBalloonOpen: false,
+                }}
+              />
+            )}
 
             {/* Company placemarks: one marker per company */}
             {placemarkCompanies.map(({ company, geometry }) => {
@@ -556,22 +608,52 @@ function CompanyMap({
       {/* Company list below map */}
       <div className="mt-4 space-y-2 max-h-64 overflow-y-auto" onScroll={handleListScroll}>
         {visibleCompanies.map((company) => (
-          <a
+          <div
             key={company.id}
-            href={`/company/${company.id}`}
-            className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-[#820251]/30 hover:bg-gray-50 transition-colors"
+            className="p-3 rounded-lg border border-gray-100 hover:border-[#820251]/30 hover:bg-gray-50 transition-colors"
           >
-            <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-              <CompanyListLogo companyId={company.id} logoUrl={company.logo_url} alt={company.name} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-medium text-gray-900 truncate">{company.name}</div>
-              <div className="text-sm text-gray-500 truncate">{company.address}</div>
-            </div>
-            <div className="text-sm text-[#820251] font-medium whitespace-nowrap">
-              {Number.isFinite(company.distance) ? formatDistanceKm(company.distance) : "—"}
-            </div>
-          </a>
+            <a href={`/company/${company.id}`} className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <CompanyListLogo companyId={company.id} logoUrl={company.logo_url} alt={company.name} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-gray-900 truncate">{company.name}</div>
+                <div className="text-sm text-gray-500 truncate">{company.address}</div>
+              </div>
+              <div className="text-sm text-[#820251] font-medium whitespace-nowrap">
+                {Number.isFinite(company.distance) ? formatDistanceKm(company.distance) : "—"}
+              </div>
+            </a>
+
+            {Number.isFinite(company._geo?.lat) && Number.isFinite(company._geo?.lng) && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 pl-13">
+                <a
+                  href={buildYandexRouteUrl(
+                    userLocation,
+                    { lat: company._geo!.lat, lng: company._geo!.lng },
+                    "drive",
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-md bg-[#820251] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#700246]"
+                >
+                  🚗 Ехать
+                </a>
+                <a
+                  href={buildYandexRouteUrl(
+                    userLocation,
+                    { lat: company._geo!.lat, lng: company._geo!.lng },
+                    "walk",
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-md border border-[#820251]/40 bg-white px-3 py-1.5 text-xs font-semibold text-[#820251] hover:bg-[#820251]/5"
+                >
+                  🚶 Идти
+                </a>
+              </div>
+            )}
+          </div>
         ))}
         {hiddenTotalCount > 0 && (
           <div className="text-center py-2">

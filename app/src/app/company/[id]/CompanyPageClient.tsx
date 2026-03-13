@@ -544,7 +544,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
   const headerDescription = hasHeaderOverride
     ? headerDescriptionSource
     : truncateDescription(headerDescriptionSource, 250);
-  const secondaryLabel = primaryRubric?.name || primaryCategory?.name || "";
+  const secondaryLabel = primaryCategory?.name || primaryRubric?.name || "";
   const isMsu23 = (() => {
     const keys = [id, company.source_id]
       .filter(Boolean)
@@ -562,6 +562,8 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
   const categoryLink = primaryCategory ? `/catalog/${primaryCategory.slug}` : "/#catalog";
   const rubricSubSlug = primaryRubric ? primaryRubric.slug.split("/").slice(1).join("/") : "";
   const rubricLink = primaryCategory && rubricSubSlug ? `/catalog/${primaryCategory.slug}/${rubricSubSlug}` : categoryLink;
+  const breadcrumbCategoryLabel = (primaryCategory?.name || primaryRubric?.category_name || "").trim();
+  const breadcrumbRubricLabel = (primaryRubric?.name || "").trim();
   const rubricPlacements = useMemo(() => {
     const entries = company.rubrics || [];
     const seen = new Set<string>();
@@ -639,50 +641,26 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
         <div className="bg-white border-b border-gray-200">
           <div className="container mx-auto px-4 py-3">
             <div className="flex items-center gap-2 text-sm text-gray-600 flex-wrap">
-              <Link href="/" className="hover:text-[#820251]">{t("common.home")}</Link>
-              <span>/</span>
-              <Link href="/#catalog" className="hover:text-[#820251]">{t("nav.catalog")}</Link>
-              {primaryCategory && (
+              {breadcrumbCategoryLabel ? (
                 <>
-                  <span>/</span>
-                  <Link href={categoryLink} className="hover:text-[#820251]">{primaryCategory.name}</Link>
+                  <Link href={categoryLink} className="hover:text-[#820251]">
+                    {breadcrumbCategoryLabel}
+                  </Link>
+                  {breadcrumbRubricLabel && (
+                    <>
+                      <span>/</span>
+                      <Link href={rubricLink} className="text-[#820251] font-medium hover:text-[#7a0150]">
+                        {breadcrumbRubricLabel}
+                      </Link>
+                    </>
+                  )}
                 </>
+              ) : (
+                <Link href="/#catalog" className="hover:text-[#820251]">{t("nav.catalog")}</Link>
               )}
-              {primaryRubric && (
-                <>
-                  <span>/</span>
-                  <Link href={rubricLink} className="hover:text-[#820251]">{primaryRubric.name}</Link>
-                </>
-              )}
-              <span>/</span>
-              <span className="text-[#820251] font-medium">{company.name}</span>
             </div>
           </div>
         </div>
-
-        {rubricPlacements.length > 0 && (
-          <div className="bg-white border-b border-gray-200">
-            <div className="container mx-auto px-4 py-3">
-              <div className="rounded-xl border border-[#820251]/15 bg-[#820251]/[0.04] p-3 md:p-4">
-                <h2 className="text-sm font-semibold text-[#820251] mb-2">Рубрики размещения</h2>
-                <div className="flex flex-wrap gap-2">
-                  {rubricPlacements.map((rubric) => (
-                    <Link
-                      key={rubric.key}
-                      href={rubric.href}
-                      className="inline-flex flex-col rounded-lg border border-[#820251]/20 bg-white px-3 py-2 text-left hover:border-[#820251]/50 hover:bg-[#820251]/[0.06] transition-colors"
-                    >
-                      <span className="text-sm font-semibold text-[#820251] leading-tight">{rubric.name}</span>
-                      {rubric.categoryName && (
-                        <span className="text-xs text-gray-500 leading-tight">{rubric.categoryName}</span>
-                      )}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Header */}
         <div className={`relative overflow-hidden ${isMsu23 ? "min-h-[260px] md:min-h-[340px]" : ""}`}>
@@ -755,9 +733,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                 </div>
                 {showHeaderDescriptionForHeader && (
                   <p
-                    className={`text-white/90 text-sm md:text-base max-w-4xl leading-relaxed mt-4 drop-shadow ${
-                      isMsu23 ? "line-clamp-2" : hasHeaderOverride ? "" : "line-clamp-3"
-                    }`}
+                    className="text-white/90 text-sm md:text-base max-w-4xl leading-relaxed mt-4 drop-shadow"
                   >
                     {headerDescriptionForHeader}
                   </p>
@@ -849,9 +825,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                 </div>
                 {showHeaderDescriptionForHeader && (
                   <p
-                    className={`text-white/90 text-sm md:text-base max-w-4xl mx-auto leading-relaxed text-left ${
-                      isMsu23 ? "line-clamp-2" : hasHeaderOverride ? "" : "line-clamp-3"
-                    }`}
+                    className="text-white/90 text-sm md:text-base max-w-4xl mx-auto leading-relaxed text-left"
                   >
                     {headerDescriptionForHeader}
                   </p>
@@ -1229,7 +1203,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                   )}
 
                   {company.work_hours &&
-                    (company.work_hours.work_time || company.work_hours.break_time || company.work_hours.status) && (
+                    (company.work_hours.work_time || company.work_hours.break_time) && (
                       <div>
                         <div className="text-gray-500 text-sm mb-1">{t("company.workHours")}</div>
                         <div className="text-gray-700 space-y-1">
@@ -1246,7 +1220,6 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                             </div>
                           )}
                           {company.work_hours.break_time && <div>Перерыв: {company.work_hours.break_time}</div>}
-                          {company.work_hours.status && <div className="text-sm text-gray-500">{company.work_hours.status}</div>}
                         </div>
                       </div>
                     )}
@@ -1325,7 +1298,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                             <img
                               src={getOptimizedLocalImageSrc(service.image_url, 384) || service.image_url}
                               alt={service.name}
-                              className="w-full h-full object-cover"
+                              className="w-full h-full object-contain bg-white"
                               loading="lazy"
                             />
                           </div>
@@ -1463,6 +1436,29 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
               lng={hasGeo ? lng : null}
             />
           </div>
+
+          {/* Rubric placements (bottom) */}
+          {rubricPlacements.length > 0 && (
+            <div className="mt-8">
+              <div className="rounded-xl border border-[#820251]/15 bg-[#820251]/[0.04] p-3 md:p-4">
+                <h2 className="text-sm font-semibold text-[#820251] mb-2">Рубрики размещения</h2>
+                <div className="flex flex-wrap gap-2">
+                  {rubricPlacements.map((rubric) => (
+                    <Link
+                      key={rubric.key}
+                      href={rubric.href}
+                      className="inline-flex flex-col rounded-lg border border-[#820251]/20 bg-white px-3 py-2 text-left hover:border-[#820251]/50 hover:bg-[#820251]/[0.06] transition-colors"
+                    >
+                      <span className="text-sm font-semibold text-[#820251] leading-tight">{rubric.name}</span>
+                      {rubric.categoryName && (
+                        <span className="text-xs text-gray-500 leading-tight">{rubric.categoryName}</span>
+                      )}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Back link */}
           <div className="mt-8">

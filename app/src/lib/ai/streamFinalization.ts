@@ -11,7 +11,9 @@ const TEMPLATE_BLOCK_MARKER =
 const CLARIFYING_REPLY_MARKER =
   /(для\s+того\s+чтобы\s+помочь\s+вам,\s*мне\s+нужно\s+уточнить\s+несколько\s+вопрос|чтобы\s+подобрать\s+точнее,\s*уточните,\s*пожалуйста|в\s+каком\s+городе\/регионе\s+ищете)/iu;
 const SHORTLIST_REPLY_MARKER =
-  /(\/\s*company\s*\/|подобрал\p{L}*\s+компан\p{L}*|короткий\s+прозрачный\s+ranking|первичн\p{L}*\s+подбор|(?:^|\n)\s*\d+\.\s+)/iu;
+  /(\/\s*company\s*\/|\/\s*catalog\s*\/|подобрал\p{L}*\s+компан\p{L}*|короткий\s+прозрачный\s+ranking|первичн\p{L}*\s+подбор|(?:^|\n)\s*\d+\.\s+)/iu;
+const CAPABILITIES_REPLY_MARKER =
+  /(что\s+ты\s+уме\p{L}*|что\s+я\s+уме\p{L}*|чем\s+може\p{L}*\s+помоч\p{L}*|я\s+уме\p{L}*|могу\s+помочь|мои\s+возможност\p{L}*)/iu;
 
 function normalizeComparisonText(raw: string): string {
   return String(raw || "")
@@ -74,12 +76,20 @@ export function shouldApplyFinalAssistantText(params: {
   const streamedLooksLikeTemplateBlock = TEMPLATE_BLOCK_MARKER.test(streamedRaw);
   const finalLooksLikeClarifyingReply = CLARIFYING_REPLY_MARKER.test(finalRaw);
   const streamedLooksLikeShortlist = SHORTLIST_REPLY_MARKER.test(streamedRaw);
+  const finalLooksLikeShortlist = SHORTLIST_REPLY_MARKER.test(finalRaw);
+  const streamedLooksLikeCapabilities = CAPABILITIES_REPLY_MARKER.test(streamedRaw);
   const streamedLooksComplete = /[.!?…]$/u.test(streamedRaw) || streamedRaw.length >= 120;
 
   // If stream contains a shortlist but final payload contains clarifying questions,
   // prefer final payload: this is usually the server quality-gate correction.
   if (finalLooksLikeClarifyingReply && streamedLooksLikeShortlist) {
     return true;
+  }
+
+  // Keep stable UX for "what can you do" prompts:
+  // if stream already produced capabilities answer, don't overwrite it with late shortlist payload.
+  if (streamedLooksLikeCapabilities && finalLooksLikeShortlist && overlap < 0.72) {
+    return false;
   }
 
   const hardDivergence = overlap < 0.32 && prefix < 0.2 && lengthRatio < 0.68;

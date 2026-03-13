@@ -180,12 +180,6 @@ export default function ServicesBlock() {
               </a>
             </div>
 
-            {/* Sparkles */}
-            <div className="absolute -top-2 -left-2 w-4 h-4 text-yellow-400 animate-ping opacity-75">✦</div>
-            <div className="absolute -bottom-1 -right-1 w-3 h-3 text-yellow-300 animate-ping opacity-60" style={{animationDelay: '0.5s'}}>✦</div>
-            <div className="absolute top-1/2 -right-3 w-3 h-3 text-yellow-400 animate-ping opacity-50" style={{animationDelay: '1s'}}>✦</div>
-            <div className="absolute -top-1 right-1/4 w-3 h-3 text-yellow-300 animate-ping opacity-60" style={{animationDelay: '0.3s'}}>✦</div>
-            <div className="absolute -bottom-2 left-1/4 w-4 h-4 text-yellow-400 animate-ping opacity-50" style={{animationDelay: '0.8s'}}>✦</div>
           </div>
         </div>
       </div>

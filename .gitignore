@@ -33,3 +33,11 @@ public/data/biznesinfo/companies.jsonl
 public/data/biznesinfo/*.csv
 public/data/biznesinfo/*.tmp
 public/data/biznesinfo/*.backup-*.jsonl
+
+# Secrets & Temp
+secrets/
+.tmp-logos/
+.trash/
+.cli-bridge*/
+nginx/conf.d/.htpasswd
+

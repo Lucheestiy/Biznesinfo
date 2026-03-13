@@ -131,6 +131,58 @@ function normalizeWebsiteHref(raw: string): string | null {
   }
 }
 
+function getWorkStatusDotClass(workStatus: { isOpen: boolean }): string {
+  if (workStatus.isOpen) return "bg-green-700 shadow-[0_0_8px_rgba(21,128,61,0.35)]";
+  return "bg-red-600 shadow-[0_0_8px_rgba(220,38,38,0.35)]";
+}
+
+function getWorkStatus(workHours: { work_time?: string; break_time?: string } | null | undefined): { isOpen: boolean } | null {
+  if (!workHours?.work_time) return null;
+
+  const workTime = workHours.work_time.trim();
+  if (!workTime) return null;
+  const workTimeLower = workTime.toLowerCase();
+
+  if (
+    workTimeLower.includes("круглосуточ") ||
+    workTimeLower.includes("24/7") ||
+    workTimeLower.includes("24х7") ||
+    workTimeLower.includes("24x7")
+  ) {
+    return { isOpen: true };
+  }
+
+  const timeMatch = workTime.match(/(\d{1,2})[.:,](\d{2})\s*[-–—]\s*(\d{1,2})[.:,](\d{2})/);
+  if (!timeMatch) return null;
+
+  const openHour = Number.parseInt(timeMatch[1], 10);
+  const openMin = Number.parseInt(timeMatch[2], 10);
+  const closeHour = Number.parseInt(timeMatch[3], 10);
+  const closeMin = Number.parseInt(timeMatch[4], 10);
+
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
+  const minskDate = new Date(utcMs + 3 * 60 * 60 * 1000);
+  const currentMins = minskDate.getUTCHours() * 60 + minskDate.getUTCMinutes();
+  const openMins = openHour * 60 + openMin;
+  const closeMins = closeHour * 60 + closeMin;
+
+  let isOpen: boolean;
+  if (closeMins > openMins) isOpen = currentMins >= openMins && currentMins < closeMins;
+  else isOpen = currentMins >= openMins || currentMins < closeMins;
+
+  if (isOpen && workHours.break_time) {
+    const breakMatch = workHours.break_time.match(/(\d{1,2})[.:,](\d{2})\s*[-–—]\s*(\d{1,2})[.:,](\d{2})/);
+    if (breakMatch) {
+      const breakStartMins = Number.parseInt(breakMatch[1], 10) * 60 + Number.parseInt(breakMatch[2], 10);
+      const breakEndMins = Number.parseInt(breakMatch[3], 10) * 60 + Number.parseInt(breakMatch[4], 10);
+      if (currentMins >= breakStartMins && currentMins < breakEndMins) isOpen = false;
+    }
+  }
+
+  return { isOpen };
+}
+
 function normalizeWhitespace(text: string): string {
   return (text || "").replace(/\s+/g, " ").trim();
 }
@@ -641,9 +693,9 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
     return (company.phones || []).map((number) => ({ number, labels: [] as string[] }));
   }, [company.phones, company.phones_ext]);
 
-  const workStatus = (company.work_hours?.status || "").trim();
   const workTime = (company.work_hours?.work_time || "").trim();
-  const workHoursText = [workStatus, workTime && !workStatus.includes(workTime) ? workTime : ""].filter(Boolean).join(" • ");
+  const workBreakTime = (company.work_hours?.break_time || "").trim();
+  const workStatus = useMemo(() => getWorkStatus(company.work_hours), [company.work_hours]);
 
   const icon = company.primary_category_slug ? BIZNESINFO_CATEGORY_ICONS[company.primary_category_slug] || "🏢" : "🏢";
   const logoUrl = (company.logo_url || "").trim();
@@ -815,12 +867,24 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
             <span className="text-gray-700 leading-tight">{company.address || company.city}</span>
           </div>
 
-          {(company.work_hours?.status || company.work_hours?.work_time) && (
+          {(workTime || workBreakTime) && (
             <div className="flex items-start gap-2 mb-3 text-sm">
               <span className="text-[#820251] mt-0.5">⏰</span>
-              <span className="text-gray-700 leading-tight line-clamp-2">
-                {workHoursText}
-              </span>
+              <div className="text-gray-700 leading-tight">
+                {workTime && (
+                  <div className="flex items-center gap-2">
+                    {workStatus && (
+                      <span
+                        className={`inline-block w-2.5 h-2.5 rounded-full ${getWorkStatusDotClass(workStatus)}`}
+                        role="img"
+                        aria-label={workStatus.isOpen ? "Открыто" : "Закрыто"}
+                      />
+                    )}
+                    <span>{workTime}</span>
+                  </div>
+                )}
+                {workBreakTime && <div>Перерыв: {workBreakTime}</div>}
+              </div>
             </div>
           )}
 

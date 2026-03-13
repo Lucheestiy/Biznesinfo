@@ -17,9 +17,21 @@ import { companySlugForUrl } from "@/lib/biznesinfo/slug";
 
 const PAGE_SIZE = 10;
 const SEARCH_REQUEST_DEBOUNCE_MS = 120;
+const EMPTY_LOGO_HINTS = [
+  "/images/logo/no-logo",
+  "/images/logo/no_logo",
+  "/images/logo/noimage",
+  "/images/logo/no-image",
+];
 
 type SearchSupplyType = "any" | "delivery" | "pickup";
 type SearchBusinessFormat = "any" | "b2b" | "b2c";
+
+function hasCompanyLogo(logoUrl: string): boolean {
+  const normalized = (logoUrl || "").trim().toLowerCase();
+  if (!normalized) return false;
+  return !EMPTY_LOGO_HINTS.some((hint) => normalized.includes(hint));
+}
 
 function normalizeSupplyType(raw: string | null): SearchSupplyType {
   const value = String(raw || "").trim().toLowerCase();
@@ -291,9 +303,32 @@ function SearchResults() {
 
   const totalPages = data ? Math.ceil((data.total || 0) / PAGE_SIZE) : 0;
 
+  useEffect(() => {
+    if (!data) return;
+    if (totalPages <= 0) {
+      if (currentPage !== 1) setCurrentPage(1);
+      return;
+    }
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [data, currentPage, totalPages]);
+
   const companies = useMemo(() => {
-    // Keep backend ranking order as-is; don't promote cards by visual completeness/logo.
-    return data?.companies || [];
+    const items = (data?.companies || []).map((company, index) => ({
+      company,
+      index,
+      hasLogo: hasCompanyLogo(company.logo_url || ""),
+    }));
+
+    // User rule: in search, show cards with real logos first,
+    // then cards with initials placeholder; keep relative order inside each group.
+    items.sort((a, b) => {
+      if (a.hasLogo !== b.hasLogo) return a.hasLogo ? -1 : 1;
+      return a.index - b.index;
+    });
+
+    return items.map((item) => item.company);
   }, [data]);
 
   const highlightCompanyTokens = useMemo(() => tokenizeHighlightQuery(effectiveQuery), [effectiveQuery]);
@@ -354,6 +389,9 @@ function SearchResults() {
                 </label>
                 <input
                   id="search-company"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={companyDraft}
                   onChange={(e) => setCompanyDraft(e.target.value)}
                   inputMode="search"
@@ -377,7 +415,7 @@ function SearchResults() {
                   aria-label={t("search.find")}
                   className={inputButtonClassName}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </button>
@@ -390,6 +428,9 @@ function SearchResults() {
                 </label>
                 <input
                   id="search-service"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={serviceDraft}
                   onChange={(e) => setServiceDraft(e.target.value)}
                   inputMode="search"
@@ -413,7 +454,7 @@ function SearchResults() {
                   aria-label={t("search.find")}
                   className={inputButtonClassName}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </button>
@@ -504,6 +545,9 @@ function SearchResults() {
               <input
                 id="filter-location"
                 ref={cityInputRef}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 value={cityDraft}
                 onChange={(e) => {
                   const next = e.target.value;
@@ -541,7 +585,7 @@ function SearchResults() {
                 onClick={() => navigateToSearch("push")}
                 className={inputButtonClassName}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </button>

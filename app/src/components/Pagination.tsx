@@ -3,13 +3,21 @@ import { useLanguage } from "@/contexts/LanguageContext";
 interface PaginationProps {
   currentPage: number;
   totalPages: number;
-  onPageChange: (page: number) => void;
+  onPageChange: (_page: number) => void;
 }
 
 export default function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) {
   const { t } = useLanguage();
 
   if (totalPages <= 1) return null;
+
+  const handlePageChange = (nextPage: number) => {
+    if (nextPage < 1 || nextPage > totalPages || nextPage === currentPage) return;
+    onPageChange(nextPage);
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    }
+  };
 
   const pages: (number | "...")[] = [];
 
@@ -33,7 +41,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
     <nav className="flex items-center justify-center gap-2 mt-10" aria-label="Pagination">
       {/* Previous button */}
       <button
-        onClick={() => onPageChange(currentPage - 1)}
+        onClick={() => handlePageChange(currentPage - 1)}
         disabled={currentPage === 1}
         className="px-4 py-2 rounded-lg text-sm font-medium transition-colors
           disabled:opacity-50 disabled:cursor-not-allowed
@@ -50,7 +58,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
         ) : (
           <button
             key={page}
-            onClick={() => onPageChange(page)}
+            onClick={() => handlePageChange(page)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
               ${currentPage === page
                 ? "bg-[#820251] text-white"
@@ -64,7 +72,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
 
       {/* Next button */}
       <button
-        onClick={() => onPageChange(currentPage + 1)}
+        onClick={() => handlePageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
         className="px-4 py-2 rounded-lg text-sm font-medium transition-colors
           disabled:opacity-50 disabled:cursor-not-allowed

@@ -8,6 +8,7 @@ import type { BiznesinfoCompany } from "./types";
 export const EXCLUDED_BIZNESINFO_COMPANY_IDS: string[] = [
   // Manual removals from public catalog.
   "biznesinfo-1002",
+  "biznesinfo-720685",
 ];
 
 // Manual fallback list by UNP (if an external registry result should be pinned locally).

@@ -92,6 +92,48 @@ function looksLikeOutreachIntent(text: string): boolean {
     .test(String(text || ""));
 }
 
+function looksLikeOutreachHowToIntent(text: string): boolean {
+  const value = String(text || "").trim();
+  if (!value) return false;
+  const normalized = value.toLowerCase();
+  if (!/(заявк|запрос|коммерческ|предложен)/iu.test(normalized)) return false;
+
+  // Drafting request should still go through anti-spam targeting guard.
+  if (/(состав(?:ь|ьте)|напиш(?:и|ите)|подготов(?:ь|ьте)|шаблон|template|draft|тема|subject|body|текст\s+письм|сообщени\p{L}*\s+для\s+мессенджер)/iu.test(normalized)) {
+    return false;
+  }
+
+  return /(как|каким\s+образом|куда|где|пошаг|инструкц|что\s+нужн\p{L}*|как\s+именно|нужн\p{L}*\s+отправ\p{L}*\s+заявк|надо\s+отправ\p{L}*\s+заявк|хоч\p{L}*\s+отправ\p{L}*\s+заявк)/iu
+    .test(normalized);
+}
+
+function looksLikeOutreachDraftIntent(text: string): boolean {
+  const value = String(text || "").trim();
+  if (!value) return false;
+  const normalized = value.toLowerCase();
+
+  const hasOutreachContext = /(заявк|запрос|rfq|request\s+for\s+quote|supplier\s+request|кп|коммерческ|предложен|письм|сообщени|outreach)/iu
+    .test(normalized);
+  if (!hasOutreachContext) return false;
+
+  // Draft/template asks should not require a fixed company target.
+  return /(состав(?:ь|ьте|ить)|напиш(?:и|ите|у)|подготов(?:ь|ьте|ить)|шаблон|template|draft|тема|subject|body|текст\s+письм|сообщени\p{L}*\s+для\s+мессенджер|готов(?:ый|ое)\s+текст|кп|коммерческ\p{L}*\s+предложен)/iu
+    .test(normalized);
+}
+
+function looksLikeExplicitCompanyTargetInText(text: string): boolean {
+  const value = String(text || "").trim();
+  if (!value) return false;
+
+  if (/\/company\/[A-Za-z0-9_-]{1,128}/iu.test(value)) return true;
+  if (/#([A-Za-z0-9_-]{3,128})/u.test(value)) return true;
+
+  if (/(?:компан(?:ия|ии)\s*(?:называется|это|:|-)\s*)([^\n,.]{3,})/iu.test(value)) return true;
+  if (/(?:компан(?:ия|ии)\s+["«][^"»]{2,}["»])/iu.test(value)) return true;
+
+  return false;
+}
+
 function normalizeAssistantMessageForCompare(text: string): string {
   return String(text || "").toLowerCase().replace(/\s+/gu, " ").trim();
 }
@@ -208,6 +250,7 @@ export default function AssistantClient({
   const [quota, setQuota] = useState<{ used: number; limit: number; day: string } | null>(initialUsage ?? null);
   const [quotaResetting, setQuotaResetting] = useState(false);
   const [quotaResetMessage, setQuotaResetMessage] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [copied, setCopied] = useState<{ id: string; kind: AssistantCopyKind } | null>(null);
   const [openActionsId, setOpenActionsId] = useState<string | null>(null);
   const [feedbackOpenId, setFeedbackOpenId] = useState<string | null>(null);
@@ -226,11 +269,16 @@ export default function AssistantClient({
   const [shortlistCompaniesLoading, setShortlistCompaniesLoading] = useState(false);
   const [chatStateReady, setChatStateReady] = useState(false);
   const [newDialogModalOpen, setNewDialogModalOpen] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(false);
+  const [voiceRecording, setVoiceRecording] = useState(false);
+  const [voiceInterim, setVoiceInterim] = useState("");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const draftRef = useRef<HTMLTextAreaElement | null>(null);
   const copiedTimeoutRef = useRef<number | null>(null);
   const sendingRef = useRef(false);
+  const recognitionRef = useRef<any>(null);
 
   const canChat = user.plan === "paid" || user.plan === "partner";
   const planLabel = useMemo(() => formatPlanLabel(user.plan), [user.plan]);
@@ -262,6 +310,105 @@ export default function AssistantClient({
     } catch {
       // ignore malformed referrer
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    setVoiceSupported(Boolean(ctor));
+  }, []);
+
+  const stopVoiceInput = (abort = false) => {
+    const recognition = recognitionRef.current;
+    if (!recognition) return;
+    try {
+      if (abort) recognition.abort();
+      else recognition.stop();
+    } catch {
+      // ignore
+    }
+    recognitionRef.current = null;
+    setVoiceRecording(false);
+    setVoiceInterim("");
+  };
+
+  const startVoiceInput = () => {
+    if (sending) return;
+    if (typeof window === "undefined") return;
+    const Ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!Ctor) {
+      setVoiceError("Голосовой ввод не поддерживается в этом браузере.");
+      return;
+    }
+
+    setVoiceError(null);
+    setVoiceInterim("");
+
+    try {
+      const recognition = new Ctor();
+      recognition.lang = "ru-RU";
+      recognition.interimResults = true;
+      recognition.continuous = true;
+      recognition.maxAlternatives = 1;
+
+      let finalChunk = "";
+
+      recognition.onstart = () => {
+        setVoiceRecording(true);
+        setVoiceError(null);
+      };
+
+      recognition.onresult = (event: any) => {
+        let interimChunk = "";
+        for (let i = event.resultIndex; i < event.results.length; i += 1) {
+          const result = event.results[i];
+          const text = String(result?.[0]?.transcript || "").trim();
+          if (!text) continue;
+          if (result.isFinal) finalChunk += `${text} `;
+          else interimChunk += `${text} `;
+        }
+
+        const finalText = finalChunk.trim();
+        if (finalText) {
+          setDraft((prev) => {
+            const base = prev.trim();
+            return base ? `${base} ${finalText}`.trim() : finalText;
+          });
+          finalChunk = "";
+        }
+        setVoiceInterim(interimChunk.trim());
+      };
+
+      recognition.onerror = (event: any) => {
+        const code = String(event?.error || "");
+        if (code === "aborted" || code === "no-speech") {
+          setVoiceError(null);
+          return;
+        }
+        if (code === "not-allowed" || code === "service-not-allowed") {
+          setVoiceError("Доступ к микрофону запрещен. Разрешите микрофон в браузере.");
+          return;
+        }
+        setVoiceError("Не удалось распознать речь. Попробуйте еще раз.");
+      };
+
+      recognition.onend = () => {
+        recognitionRef.current = null;
+        setVoiceRecording(false);
+        setVoiceInterim("");
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch {
+      setVoiceRecording(false);
+      setVoiceInterim("");
+      setVoiceError("Не удалось запустить голосовой ввод.");
+    }
+  };
+
+  useEffect(() => {
+    return () => stopVoiceInput(true);
   }, []);
 
   const backToCompanyHref = useMemo(() => {
@@ -482,6 +629,25 @@ export default function AssistantClient({
       setError(t("common.networkError") || "Ошибка сети");
     } finally {
       setQuotaResetting(false);
+    }
+  };
+
+  const logoutFromAssistant = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    setError(null);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // ignore network errors and continue local sign-out flow
+    } finally {
+      try {
+        window.sessionStorage.removeItem(chatStorageKey);
+      } catch {
+        // ignore storage write errors
+      }
+      router.replace("/login");
+      router.refresh();
     }
   };
 
@@ -874,14 +1040,19 @@ export default function AssistantClient({
     if (!text) return;
     if (!canChat) return;
     if (sendingRef.current) return;
+    if (voiceRecording) stopVoiceInput();
 
     const outreachIntent = looksLikeOutreachIntent(text);
-    const hasExplicitTarget = Boolean(companyContext?.companyName || resolvedSendCompanyId);
-    if (outreachIntent && !hasExplicitTarget) {
+    const outreachHowToIntent = looksLikeOutreachHowToIntent(text);
+    const outreachDraftIntent = looksLikeOutreachDraftIntent(text);
+    const hasTextTarget = looksLikeExplicitCompanyTargetInText(text);
+    const hasExplicitTarget = Boolean(companyContext?.companyName || resolvedSendCompanyId || hasTextTarget);
+    const requiresExplicitCompanyTarget = outreachIntent && !outreachHowToIntent && !outreachDraftIntent;
+    if (requiresExplicitCompanyTarget && !hasExplicitTarget) {
       setError("Чтобы избежать спама, выберите конкретную компанию перед отправкой запроса.");
       return;
     }
-    if (outreachIntent && !companyContext?.companyId && !manualTargetCompanyId && shortlistCompanyIds.length > 1) {
+    if (requiresExplicitCompanyTarget && !companyContext?.companyId && !manualTargetCompanyId && shortlistCompanyIds.length > 1 && !hasTextTarget) {
       setError("Чтобы избежать спама, отправка запроса доступна только в одну выбранную компанию.");
       return;
     }
@@ -922,7 +1093,7 @@ export default function AssistantClient({
       };
       if (conversationId) requestBody.conversationId = conversationId;
       if (resolvedSendCompanyId) requestBody.companyId = resolvedSendCompanyId;
-      if (!resolvedSendCompanyId && shortlistCompanyIds.length > 0) requestBody.companyIds = shortlistCompanyIds;
+      if (!resolvedSendCompanyId && shortlistCompanyIds.length > 0 && !hasTextTarget) requestBody.companyIds = shortlistCompanyIds;
 
       const res = await fetch("/api/ai/request?stream=1", {
         method: "POST",
@@ -1140,6 +1311,14 @@ export default function AssistantClient({
     abortRef.current = null;
   };
 
+  const handleBackNavigation = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/");
+  };
+
   return (
     <div className="min-h-screen flex flex-col font-sans bg-gray-100">
       <Header />
@@ -1148,6 +1327,17 @@ export default function AssistantClient({
         <div className="bg-white border-b border-gray-200">
           <div className="container mx-auto px-4 py-3">
             <div className="flex items-center gap-2 text-sm text-gray-600">
+              <button
+                type="button"
+                onClick={handleBackNavigation}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 hover:border-[#820251] hover:text-[#820251] transition-colors"
+                aria-label={t("common.back") || "Назад"}
+                title={t("common.back") || "Назад"}
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
               <Link href="/" className="hover:text-[#820251]">
                 {t("common.home")}
               </Link>
@@ -1480,6 +1670,9 @@ export default function AssistantClient({
                           <textarea
                             id="assistant-request-input"
                             ref={draftRef}
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            spellCheck={false}
                             value={draft}
                             onChange={(e) => setDraft(e.target.value)}
                             onKeyDown={(e) => {
@@ -1495,6 +1688,33 @@ export default function AssistantClient({
                             className="w-full min-h-[112px] max-h-[260px] resize-y overflow-y-auto rounded-2xl border-0 bg-transparent px-3 sm:px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-0"
                             disabled={sending}
                           />
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          {voiceSupported && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (voiceRecording) stopVoiceInput();
+                                else startVoiceInput();
+                              }}
+                              disabled={sending}
+                              className={`inline-flex items-center justify-center rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                voiceRecording
+                                  ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
+                                  : "border-[#820251]/30 bg-white text-[#820251] hover:bg-[#820251]/10"
+                              } disabled:opacity-60 disabled:cursor-not-allowed`}
+                            >
+                              {voiceRecording ? "Остановить запись" : "Голосовой ввод"}
+                            </button>
+                          )}
+                          {voiceInterim && (
+                            <span className="text-xs text-gray-600">
+                              Распознаю: {voiceInterim}
+                            </span>
+                          )}
+                          {voiceError && (
+                            <span className="text-xs text-red-700">{voiceError}</span>
+                          )}
                         </div>
                       </div>
                       <button
@@ -1542,6 +1762,9 @@ export default function AssistantClient({
                               </label>
                               <input
                                 type="text"
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellCheck={false}
                                 value={rfqForm.companyTarget}
                                 onChange={(e) => setRfqForm((prev) => ({ ...prev, companyTarget: e.target.value }))}
                                 placeholder={t("ai.rfq.companyPlaceholder") || "Например: 12345 или /company/12345"}
@@ -1552,6 +1775,9 @@ export default function AssistantClient({
                               <label className="block text-xs text-gray-600 mb-1">{t("ai.rfq.what") || "Что нужно"}</label>
                               <input
                                 type="text"
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellCheck={false}
                                 value={rfqForm.what}
                                 onChange={(e) => setRfqForm((prev) => ({ ...prev, what: e.target.value }))}
                                 placeholder={t("ai.rfq.whatPlaceholder") || "Например: упаковочная плёнка / бухгалтерские услуги"}
@@ -1564,6 +1790,9 @@ export default function AssistantClient({
                               </label>
                               <input
                                 type="text"
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellCheck={false}
                                 value={rfqForm.qty}
                                 onChange={(e) => setRfqForm((prev) => ({ ...prev, qty: e.target.value }))}
                                 placeholder={t("ai.rfq.qtyPlaceholder") || "Например: 500 шт / 3 месяца / 2 объекта"}
@@ -1576,6 +1805,9 @@ export default function AssistantClient({
                               </label>
                               <input
                                 type="text"
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellCheck={false}
                                 value={rfqForm.location}
                                 onChange={(e) => setRfqForm((prev) => ({ ...prev, location: e.target.value }))}
                                 placeholder={t("ai.rfq.locationPlaceholder") || "Например: Минск / Минская область"}
@@ -1586,6 +1818,9 @@ export default function AssistantClient({
                               <label className="block text-xs text-gray-600 mb-1">{t("ai.rfq.deadline") || "Дедлайн"}</label>
                               <input
                                 type="text"
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellCheck={false}
                                 value={rfqForm.deadline}
                                 onChange={(e) => setRfqForm((prev) => ({ ...prev, deadline: e.target.value }))}
                                 placeholder={t("ai.rfq.deadlinePlaceholder") || "Например: до 15 марта"}
@@ -1598,6 +1833,9 @@ export default function AssistantClient({
                               {t("ai.rfq.notes") || "Требования / примечания"}
                             </label>
                             <textarea
+                              autoCapitalize="none"
+                              autoCorrect="off"
+                              spellCheck={false}
                               value={rfqForm.notes}
                               onChange={(e) => setRfqForm((prev) => ({ ...prev, notes: e.target.value }))}
                               placeholder={t("ai.rfq.notesPlaceholder") || "Например: доставка, сертификаты, условия оплаты…"}
@@ -1670,6 +1908,16 @@ export default function AssistantClient({
                       )}
                     </div>
                   )}
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={() => void logoutFromAssistant()}
+                      disabled={loggingOut}
+                      className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {loggingOut ? (t("common.loading") || "Загрузка...") : (t("auth.logout") || "Выйти")}
+                    </button>
+                  </div>
                 </div>
               </div>
 	            </div>

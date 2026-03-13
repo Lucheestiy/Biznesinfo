@@ -3,6 +3,8 @@ const ADDRESS_MARKERS_RE =
 
 const STREET_LIKE_SINGLE_TOKEN_RE =
   /(?:ская|ский|ской|ского|скую|ские|ская|ная|ной|ного|ную|ный|ная|ое|ого|евская|овская|инская|енская|анская|ская)$/iu;
+const STREET_PERSON_SINGLE_TOKEN_RE =
+  /(?:ей|ого|ова|ева|ина|ына|ича|вича)$/iu;
 
 const SETTLEMENT_PREFIXES = new Set([
   "г",
@@ -27,18 +29,25 @@ const BELARUS_CITY_ALIAS_TO_CANONICAL: Record<string, string> = {
   "минск": "Минск",
   "минске": "Минск",
   "минска": "Минск",
+  "minsk": "Минск",
   "брест": "Брест",
   "бресте": "Брест",
   "бреста": "Брест",
+  "brest": "Брест",
   "гродно": "Гродно",
   "гродне": "Гродно",
   "гродна": "Гродно",
+  "grodno": "Гродно",
+  "hrodna": "Гродно",
   "витебск": "Витебск",
   "витебске": "Витебск",
   "витебска": "Витебск",
+  "vitebsk": "Витебск",
   "гомель": "Гомель",
   "гомеле": "Гомель",
   "гомеля": "Гомель",
+  "gomel": "Гомель",
+  "homel": "Гомель",
   "могилев": "Могилев",
   "могилеве": "Могилев",
   "могилева": "Могилев",
@@ -47,7 +56,114 @@ const BELARUS_CITY_ALIAS_TO_CANONICAL: Record<string, string> = {
   "могилёве": "Могилев",
   "могилёва": "Могилев",
   "могилёву": "Могилев",
+  "mogilev": "Могилев",
+  "mohilev": "Могилев",
 };
+
+const BELARUS_REGION_ALIAS_TO_CANONICAL: Record<string, string> = {
+  "minsk": "Минск",
+  "minsk-region": "Минская область",
+  "minsk region": "Минская область",
+  "минская область": "Минская область",
+  "brest": "Брестская область",
+  "brest-region": "Брестская область",
+  "brest region": "Брестская область",
+  "брестская область": "Брестская область",
+  "vitebsk": "Витебская область",
+  "vitebsk-region": "Витебская область",
+  "vitebsk region": "Витебская область",
+  "витебская область": "Витебская область",
+  "gomel": "Гомельская область",
+  "gomel-region": "Гомельская область",
+  "gomel region": "Гомельская область",
+  "гомельская область": "Гомельская область",
+  "grodno": "Гродненская область",
+  "grodno-region": "Гродненская область",
+  "grodno region": "Гродненская область",
+  "гродненская область": "Гродненская область",
+  "mogilev": "Могилевская область",
+  "mogilev-region": "Могилевская область",
+  "mogilev region": "Могилевская область",
+  "могилевская область": "Могилевская область",
+  "могилёвская область": "Могилевская область",
+};
+
+function normalizeGeoLabelKey(raw: string): string {
+  return (raw || "")
+    .toLowerCase()
+    .replace(/ё/gu, "е")
+    .replace(/_/gu, "-")
+    .replace(/[«»"'“”„()]/gu, " ")
+    .replace(/[.,;:!?/\\]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+export function localizeBelarusGeoLabel(raw: string): string {
+  const trimmed = (raw || "").trim();
+  if (!trimmed) return "";
+
+  const normalizedKey = normalizeGeoLabelKey(trimmed);
+  if (!normalizedKey) return trimmed;
+
+  const regionLabel = BELARUS_REGION_ALIAS_TO_CANONICAL[normalizedKey];
+  if (regionLabel) return regionLabel;
+
+  const cityLabel = canonicalBelarusCityFromTail(trimmed);
+  if (cityLabel) return cityLabel;
+
+  return trimmed;
+}
+
+function escapeRegExp(raw: string): string {
+  return String(raw || "").replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+function stripPostalPrefix(raw: string): string {
+  return String(raw || "")
+    .replace(/^\s*\d{6}\s*,?\s*/u, "")
+    .trim();
+}
+
+function stripCityPrefixFromAddress(rawAddress: string, cityLabel: string): string {
+  let address = stripPostalPrefix(rawAddress);
+  if (!address) return "";
+
+  const city = localizeBelarusGeoLabel(cityLabel || "").trim();
+  if (!city) return address;
+
+  const variants = Array.from(
+    new Set([
+      city,
+      city.toLowerCase(),
+      city.replace(/ё/gu, "е"),
+      city.toLowerCase().replace(/ё/gu, "е"),
+    ].filter(Boolean)),
+  );
+
+  for (const variant of variants) {
+    const re = new RegExp(`^(?:г\\.?\\s*)?${escapeRegExp(variant)}\\s*,?\\s*`, "iu");
+    address = address.replace(re, "").trim();
+  }
+
+  return address.replace(/^,\s*/u, "").replace(/\s+/gu, " ").trim();
+}
+
+export function buildCompanySuggestSubtitle(cityRaw: string, addressRaw: string): string {
+  const city = localizeBelarusGeoLabel(cityRaw || "").trim();
+  const address = stripCityPrefixFromAddress(addressRaw || "", city);
+
+  if (city && address) {
+    const cityNorm = city.toLowerCase().replace(/ё/gu, "е");
+    const addressNorm = address.toLowerCase().replace(/ё/gu, "е");
+    if (cityNorm === addressNorm) return city;
+    return `${city}, ${address}`;
+  }
+
+  if (city) return city;
+  if (address) return address;
+  return "";
+}
 
 function canonicalBelarusCityFromTail(rawTail: string): string | null {
   const cleaned = (rawTail || "")
@@ -179,7 +295,8 @@ export function isAddressLikeLocationQuery(raw: string): boolean {
 
   const token = parts[0];
   if (token.length < 5) return false;
-  return STREET_LIKE_SINGLE_TOKEN_RE.test(token);
+  if (canonicalBelarusCityFromTail(token)) return false;
+  return STREET_LIKE_SINGLE_TOKEN_RE.test(token) || STREET_PERSON_SINGLE_TOKEN_RE.test(token);
 }
 
 const LOCATION_SEARCH_STOP_WORDS = new Set([

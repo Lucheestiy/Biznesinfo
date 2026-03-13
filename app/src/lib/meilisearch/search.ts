@@ -7,6 +7,7 @@ import type {
   BiznesinfoSuggestResponse,
 } from "../biznesinfo/types";
 import {
+  biznesinfoCountCompaniesByLocation,
   biznesinfoGetCompaniesSummaryByIds,
   biznesinfoGetSearchItemsByIds,
   type BiznesinfoSearchItem,
@@ -18,6 +19,11 @@ import {
   semanticOverlapScore,
   tokenizeSemanticText,
 } from "../search/semantic";
+import {
+  buildCompanySuggestSubtitle,
+  isAddressLikeLocationQuery,
+  normalizeLocationQueryForSearch,
+} from "../utils/location";
 
 type BiznesinfoSearchFlowResponse = BiznesinfoSearchResponse & {
   items: BiznesinfoCompanySummary[];
@@ -116,6 +122,12 @@ const COMMODITY_CANONICAL_TOKENS = new Set<string>([
   "хлеб",
 ]);
 const COMMODITY_ENTITY_TOKEN_RE = /^(комбинат|завод|фабрик\p{L}*|ферма|агрокомбинат\p{L}*)$/iu;
+const EMPTY_LOGO_HINTS = [
+  "/images/logo/no-logo",
+  "/images/logo/no_logo",
+  "/images/logo/noimage",
+  "/images/logo/no-image",
+];
 const COMPANY_NAME_QUERY_STOP_TOKENS = new Set<string>([
   "ооо",
   "оао",
@@ -379,6 +391,27 @@ function buildSearchFilter(params: MeiliSearchParams): string[] {
   }
 
   return filter;
+}
+
+function hasCompanyLogo(logoUrl: string): boolean {
+  const normalized = normalizeText(logoUrl).toLowerCase();
+  if (!normalized) return false;
+  return !EMPTY_LOGO_HINTS.some((hint) => normalized.includes(hint));
+}
+
+function prioritizeCompaniesWithLogos(companies: BiznesinfoCompanySummary[]): BiznesinfoCompanySummary[] {
+  const ranked = (companies || []).map((company, index) => ({
+    company,
+    index,
+    hasLogo: hasCompanyLogo(company.logo_url || ""),
+  }));
+
+  ranked.sort((a, b) => {
+    if (a.hasLogo !== b.hasLogo) return a.hasLogo ? -1 : 1;
+    return a.index - b.index;
+  });
+
+  return ranked.map((item) => item.company);
 }
 
 function buildSort(params: MeiliSearchParams): string[] {
@@ -1512,13 +1545,189 @@ function applyCommodityRelevanceGuard(
   return base.map((item) => item.company);
 }
 
+type AddressHouseIntent = {
+  raw: string;
+  normalized: string;
+  streetTokens: string[];
+  houseTokens: string[];
+};
+
+function tokenizeAddressComparable(raw: string): string[] {
+  const cleaned = normalizeText(raw)
+    .toLowerCase()
+    .replace(/ё/gu, "е")
+    .replace(/[«»"'“”„]/gu, " ")
+    .replace(/[^\p{L}\p{N}/-]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+  if (!cleaned) return [];
+  return cleaned
+    .split(" ")
+    .map((token) => token.replace(/^[-/]+|[-/]+$/gu, "").trim())
+    .filter(Boolean);
+}
+
+function normalizeAddressToken(token: string): string {
+  return String(token || "")
+    .toLowerCase()
+    .replace(/ё/gu, "е")
+    .replace(/[«»"'“”„]/gu, "")
+    .replace(/[^\p{L}\p{N}/-]+/gu, "")
+    .trim();
+}
+
+function matchesStreetAddressToken(addressToken: string, queryToken: string): boolean {
+  if (!addressToken || !queryToken) return false;
+  if (addressToken === queryToken) return true;
+  if (queryToken.length >= 4 && addressToken.startsWith(queryToken)) return true;
+  if (addressToken.length >= 5 && queryToken.startsWith(addressToken)) return true;
+  return false;
+}
+
+function matchesHouseAddressToken(addressToken: string, queryToken: string): boolean {
+  if (!addressToken || !queryToken) return false;
+  if (addressToken === queryToken) return true;
+
+  const queryDigits = queryToken.replace(/[^\d]+/gu, "");
+  if (!queryDigits) return false;
+  const escapedDigits = queryDigits.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  if (queryToken === queryDigits) {
+    // Accept "14", "14а", "14a", "14-1", "14/1", but not "140".
+    return new RegExp(`^${escapedDigits}(?:[a-zа-я]|[-/]\\d+[a-zа-я]?)?$`, "iu").test(addressToken);
+  }
+
+  return false;
+}
+
+function extractHouseCandidatesAfterStreet(
+  rawAddress: string,
+  streetTokens: string[],
+): string[] {
+  const address = normalizeText(rawAddress)
+    .toLowerCase()
+    .replace(/ё/gu, "е")
+    .trim();
+  if (!address) return [];
+  if (streetTokens.length === 0) return [];
+
+  const out: string[] = [];
+  for (const streetToken of streetTokens) {
+    if (!streetToken) continue;
+    let cursor = 0;
+    while (cursor < address.length) {
+      const idx = address.indexOf(streetToken, cursor);
+      if (idx < 0) break;
+      const tail = address.slice(idx + streetToken.length, idx + streetToken.length + 80);
+      const match = tail.match(/(?:дом|д\.?)?\s*[,/-]*\s*(\d+[a-zа-я]?(?:[-/]\d+[a-zа-я]?)?)/iu);
+      if (match?.[1]) {
+        const normalized = normalizeAddressToken(match[1]);
+        if (normalized) out.push(normalized);
+      }
+      cursor = idx + streetToken.length;
+    }
+  }
+
+  return Array.from(new Set(out));
+}
+
+function buildAddressHouseIntentFromParams(params: MeiliSearchParams): AddressHouseIntent | null {
+  const candidates = [
+    normalizeText(params.service || ""),
+    normalizeText(params.query || ""),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (!isAddressLikeLocationQuery(candidate)) continue;
+    const normalized = normalizeLocationQueryForSearch(candidate);
+    if (!normalized) continue;
+    const tokens = tokenizeAddressComparable(normalized).map((token) => normalizeAddressToken(token)).filter(Boolean);
+    if (tokens.length === 0) continue;
+
+    const houseTokens = tokens.filter((token) => /\d/u.test(token));
+    if (houseTokens.length === 0) continue;
+
+    const streetTokens = tokens.filter((token) => !/\d/u.test(token) && token.length >= 3);
+    return {
+      raw: candidate,
+      normalized,
+      streetTokens,
+      houseTokens,
+    };
+  }
+
+  return null;
+}
+
+function buildAddressIntentFromCity(rawCity: string): AddressHouseIntent | null {
+  const candidate = normalizeText(rawCity || "");
+  if (!candidate) return null;
+  if (!isAddressLikeLocationQuery(candidate)) return null;
+
+  const normalized = normalizeLocationQueryForSearch(candidate);
+  if (!normalized) return null;
+
+  const tokens = tokenizeAddressComparable(normalized).map((token) => normalizeAddressToken(token)).filter(Boolean);
+  if (tokens.length === 0) return null;
+
+  const streetTokens = tokens.filter((token) => !/\d/u.test(token) && token.length >= 3);
+  if (streetTokens.length === 0) return null;
+
+  const houseTokens = tokens.filter((token) => /\d/u.test(token));
+  return {
+    raw: candidate,
+    normalized,
+    streetTokens,
+    houseTokens,
+  };
+}
+
+function applyAddressHouseRelevanceGuard(
+  companies: BiznesinfoCompanySummary[],
+  intent: AddressHouseIntent | null,
+): BiznesinfoCompanySummary[] {
+  if (!intent) return companies;
+
+  return companies.filter((company) => {
+    const addressTokens = tokenizeAddressComparable(company.address || "").map((token) => normalizeAddressToken(token));
+    if (addressTokens.length === 0) return false;
+
+    const streetMatches = intent.streetTokens.filter((streetToken) =>
+      addressTokens.some((addressToken) => matchesStreetAddressToken(addressToken, streetToken)),
+    ).length;
+    if (intent.streetTokens.length > 0 && streetMatches < Math.min(intent.streetTokens.length, 2)) {
+      return false;
+    }
+
+    if (intent.houseTokens.length === 0) {
+      return intent.streetTokens.length > 0;
+    }
+
+    if (intent.streetTokens.length > 0) {
+      const houseAfterStreet = extractHouseCandidatesAfterStreet(company.address || "", intent.streetTokens);
+      if (houseAfterStreet.length > 0) {
+        return intent.houseTokens.every((houseToken) =>
+          houseAfterStreet.some((candidate) => matchesHouseAddressToken(candidate, houseToken)),
+        );
+      }
+    }
+
+    // Fallback for uncommon address formats without obvious "street -> house" sequence.
+    return intent.houseTokens.every((houseToken) =>
+      addressTokens.some((addressToken) => matchesHouseAddressToken(addressToken, houseToken)),
+    );
+  });
+}
+
 export async function meiliSearch(params: MeiliSearchParams): Promise<BiznesinfoSearchFlowResponse> {
   const index = getCompaniesIndex();
   const { page, limit, offset } = parsePagination(params);
-  const query = composeSearchQuery(params);
+  const cityFilter = normalizeText(params.city || "");
+  const cityLooksLikeAddress = isAddressLikeLocationQuery(cityFilter);
+  const locationQuery = cityLooksLikeAddress ? normalizeLocationQueryForSearch(cityFilter) : "";
+  const query = [composeSearchQuery(params), locationQuery].filter(Boolean).join(" ").trim();
   const queryFieldValue = normalizeText(params.query || "");
   const serviceFieldValue = normalizeText(params.service || "");
-  const cityFilter = normalizeText(params.city || "");
+  const strictCityFilter = cityLooksLikeAddress ? "" : cityFilter;
   const regionFilter = normalizeText(params.region || "");
   const supplyType = normalizeSupplyType(params.supplyType);
   const businessFormat = normalizeBusinessFormat(params.businessFormat);
@@ -1530,8 +1739,10 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
     productQueryForRetrieval || productQuery,
     productQueryTokens,
   );
-  const companyNameOnlyQuery = isCompanyNameOnlyQuery(params);
-  const filter = buildSearchFilter(params);
+  const cityAddressIntent = buildAddressIntentFromCity(cityFilter);
+  const addressHouseIntent = buildAddressHouseIntentFromParams(params);
+  const companyNameOnlyQuery = isCompanyNameOnlyQuery(params) && !cityLooksLikeAddress;
+  const filter = buildSearchFilter({ ...params, city: strictCityFilter || null });
   const sort = buildSort(params);
   const shouldUsePostFilterWindow = Boolean(productQuery) || companyNameOnlyQuery || hasUxPostFilters;
   const useHybridRetrieval =
@@ -1642,7 +1853,37 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
     ids.push(id);
   }
 
+  const isLocationOnlySearch =
+    !queryFieldValue &&
+    !serviceFieldValue &&
+    !productQuery &&
+    !companyNameOnlyQuery &&
+    !hasUxPostFilters &&
+    !addressHouseIntent &&
+    !cityAddressIntent &&
+    Boolean(cityFilter || regionFilter);
+
   if (ids.length === 0) {
+    let total = 0;
+    if (rawHits.length === 0) {
+      const estimatedTotalHits = Number(fused.estimatedTotalHits || 0);
+      let exactLocationTotal: number | null = null;
+      if (isLocationOnlySearch) {
+        try {
+          exactLocationTotal = await biznesinfoCountCompaniesByLocation({
+            city: cityFilter || null,
+            region: regionFilter || null,
+          });
+        } catch {
+          exactLocationTotal = null;
+        }
+      }
+
+      total = exactLocationTotal != null
+        ? Math.max(estimatedTotalHits, exactLocationTotal)
+        : estimatedTotalHits;
+    }
+
     const zeroResults = buildZeroResultsPayload({
       filteredCompanies: [],
       baseCompanies: [],
@@ -1656,7 +1897,7 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
     });
     return {
       query: queryFieldValue,
-      total: 0,
+      total: Math.max(0, total),
       companies: [],
       items: [],
       page,
@@ -1690,14 +1931,17 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
     ? applyCompanyNameRelevanceGuard(hydrated, params.query || "")
     : hydrated;
   const guarded = applyCommodityRelevanceGuard(nameGuarded, productQuery);
-  const facets = buildUxFacets(guarded);
-  const uxFiltered = applyUxCompanyFilters(guarded, {
+  const addressHouseGuarded = applyAddressHouseRelevanceGuard(guarded, addressHouseIntent);
+  const addressGuarded = applyAddressHouseRelevanceGuard(addressHouseGuarded, cityAddressIntent);
+  const facets = buildUxFacets(addressGuarded);
+  const uxFiltered = applyUxCompanyFilters(addressGuarded, {
     supplyType,
     businessFormat,
   });
+  const logoPrioritized = prioritizeCompaniesWithLogos(uxFiltered);
   const zeroResults = buildZeroResultsPayload({
-    filteredCompanies: uxFiltered,
-    baseCompanies: guarded,
+    filteredCompanies: logoPrioritized,
+    baseCompanies: addressGuarded,
     queryText: productQuery || query || serviceFieldValue || queryFieldValue,
     queryFieldValue,
     serviceFieldValue,
@@ -1708,7 +1952,7 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
   });
   const start = Math.max(0, offset - windowOffset);
   const end = start + limit;
-  const companies = uxFiltered.slice(start, end);
+  const companies = logoPrioritized.slice(start, end);
   const rankingExplain = companies.slice(0, 10).map((company, idx) => {
     const explainItem = rerankExplainById.get(company.id);
     const reasons =
@@ -1744,13 +1988,27 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
   });
   const observedReachableTotal = windowOffset + uxFiltered.length;
   const estimatedTotalHits = Number(fused.estimatedTotalHits || 0);
-  const total = Math.max(
-    offset + companies.length,
-    Math.min(
-      estimatedTotalHits > 0 ? estimatedTotalHits : observedReachableTotal,
-      observedReachableTotal,
-    ),
-  );
+  const estimatedOrObservedTotal = estimatedTotalHits > 0 ? estimatedTotalHits : observedReachableTotal;
+  let exactLocationTotal: number | null = null;
+  if (isLocationOnlySearch) {
+    try {
+      exactLocationTotal = await biznesinfoCountCompaniesByLocation({
+        city: cityFilter || null,
+        region: regionFilter || null,
+      });
+    } catch {
+      exactLocationTotal = null;
+    }
+  }
+
+  const total = exactLocationTotal != null
+    ? Math.max(offset + companies.length, exactLocationTotal)
+    : isLocationOnlySearch
+      ? Math.max(offset + companies.length, estimatedOrObservedTotal)
+      : Math.max(
+        offset + companies.length,
+        Math.min(estimatedOrObservedTotal, observedReachableTotal),
+      );
 
   if (shouldLogSearchPerf() || meiliDurationMs > MEILI_TARGET_MS || dbDurationMs > DB_TARGET_MS) {
     const status =
@@ -1844,13 +2102,14 @@ export async function meiliSuggest(params: {
   for (const id of ids) {
     const item = byId.get(id);
     if (!item) continue;
+    const logoUrl = (item.logo_url || "").trim();
     suggestions.push({
       type: "company",
       id: item.id,
       name: item.name,
       url: `/company/${companySlugForUrl(item.id)}`,
-      icon: null,
-      subtitle: [item.city, item.region].filter(Boolean).join(", "),
+      icon: hasCompanyLogo(logoUrl) ? logoUrl : "🏢",
+      subtitle: buildCompanySuggestSubtitle(item.city || "", item.address || ""),
     });
   }
 

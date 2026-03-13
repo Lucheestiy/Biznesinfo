@@ -34,12 +34,25 @@ function normalizeFavoritesList(rawIds: string[]): string[] {
   return out;
 }
 
+function areSameFavorites(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
 export function FavoritesProvider({ children }: { children: ReactNode }) {
   const { enabled, user, loading: authLoading } = useAuth();
   const [favorites, setFavorites] = useState<string[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const didMigrateRef = useRef(false);
+  const favoritesRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    favoritesRef.current = favorites;
+  }, [favorites]);
 
   useEffect(() => {
     const stored = localStorage.getItem(FAVORITES_STORAGE_KEY);
@@ -76,26 +89,31 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
         const serverFavs = normalizeFavoritesList(
           Array.isArray(data?.favorites) ? data.favorites.filter((v: any) => typeof v === "string") : [],
         );
+        const localFavs = favoritesRef.current;
 
         // If server empty but local has items, migrate local -> server once.
-        if (!didMigrateRef.current && serverFavs.length === 0 && favorites.length > 0) {
+        if (!didMigrateRef.current && serverFavs.length === 0 && localFavs.length > 0) {
           const putRes = await fetch("/api/user/favorites", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ favorites: normalizeFavoritesList(favorites) }),
+            body: JSON.stringify({ favorites: normalizeFavoritesList(localFavs) }),
           });
           const putData = await putRes.json().catch(() => ({}));
           if (putRes.ok) {
             const updated = normalizeFavoritesList(
-              Array.isArray(putData?.favorites) ? putData.favorites : favorites,
+              Array.isArray(putData?.favorites) ? putData.favorites : localFavs,
             );
             didMigrateRef.current = true;
-            if (!cancelled) setFavorites(updated);
+            if (!cancelled) {
+              setFavorites((prev) => (areSameFavorites(prev, updated) ? prev : updated));
+            }
             return;
           }
         }
 
-        if (!cancelled) setFavorites(serverFavs);
+        if (!cancelled) {
+          setFavorites((prev) => (areSameFavorites(prev, serverFavs) ? prev : serverFavs));
+        }
       } catch {
         // ignore
       } finally {
@@ -107,7 +125,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [enabled, user, authLoading, isInitialized, favorites]);
+  }, [enabled, user, authLoading, isInitialized]);
 
   useEffect(() => {
     if (isInitialized) {

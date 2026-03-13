@@ -105,7 +105,7 @@ export default function LoginClient({ nextPath }: { nextPath?: string | null }) 
             </form>
 
             <div className="mt-6 text-sm text-gray-600">
-              <Link href="/register" className="text-[#820251] hover:underline">
+              <Link href="/add-company" className="text-[#820251] hover:underline">
                 {t("auth.createAccount") || "Создать аккаунт"}
               </Link>
             </div>

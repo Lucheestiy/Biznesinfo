@@ -9,7 +9,6 @@ import SearchBar from "@/components/SearchBar";
 import ServicesBlock from "@/components/ServicesBlock";
 import NewsBlock from "@/components/NewsBlock";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { regions } from "@/data/regions";
 import type { BiznesinfoCatalogResponse } from "@/lib/biznesinfo/types";
 
 export default function Home() {
@@ -47,21 +46,8 @@ export default function Home() {
         {/* Hero Section with Search */}
         <div className="bg-gradient-to-br from-[#a0006d] to-[#a0006d] text-white pt-4 pb-12 md:py-16">
           <div className="container mx-auto px-4 text-center">
-            {/* Add company link at top */}
-            <div className="mb-4 md:mb-6">
-              <Link
-                href="/add-company"
-                className="inline-flex items-center gap-2 text-yellow-400 hover:text-white hover:scale-110 hover:underline underline-offset-4 transition-all duration-200 cursor-pointer text-lg"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                <span className="font-semibold">{t("nav.addCompany")} ({t("about.submitRequest")})</span>
-              </Link>
-            </div>
-
             {/* Interactive title and subtitle with single running border */}
-            <div className="relative mb-5 md:mb-8 max-w-2xl mx-auto group cursor-default">
+            <div className="relative mb-3 md:mb-8 max-w-2xl mx-auto group cursor-default">
               {/* Animated border */}
               <div className="absolute inset-0 rounded-xl p-[2px] overflow-hidden">
                 <div
@@ -73,12 +59,12 @@ export default function Home() {
                 <div className="absolute inset-[2px] bg-gradient-to-br from-[#a0006d] to-[#a0006d] rounded-[10px]" />
               </div>
 
-              <div className="relative px-4 py-3 md:px-6 md:py-4 text-center">
-                <h1 className="text-3xl md:text-4xl font-bold text-white mb-2 md:mb-3
+              <div className="relative px-4 py-2 md:px-6 md:py-4 text-center">
+                <h1 className="text-3xl md:text-5xl font-bold text-white mb-2 md:mb-3
                   group-hover:text-yellow-100 transition-colors duration-300">
                   {t("hero.title")}
                 </h1>
-                <p className="text-base md:text-xl leading-snug md:leading-normal text-pink-100
+                <p className="text-base md:text-2xl leading-snug md:leading-normal text-pink-100
                   group-hover:text-white transition-colors duration-300
                   drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]
                   group-hover:drop-shadow-[0_0_15px_rgba(255,255,255,0.4)]">
@@ -88,12 +74,14 @@ export default function Home() {
             </div>
 
             {/* Search Box - Split into two fields */}
-            <Suspense fallback={<div className="h-[200px]" />}>
-              <SearchBar variant="hero" />
-            </Suspense>
+            <div className="relative z-[120]">
+              <Suspense fallback={<div className="h-[200px]" />}>
+                <SearchBar variant="hero" />
+              </Suspense>
+            </div>
 
             {/* Quick Stats - Interactive */}
-            <div className="flex justify-center mt-10">
+            <div className="relative z-10 flex justify-center mt-10">
               <div className="relative group cursor-pointer">
                 {/* Animated border */}
                 <div className="absolute inset-0 rounded-2xl p-[3px] overflow-hidden">
@@ -132,21 +120,73 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Map Search Button */}
-            <div className="flex justify-center mt-6">
-              <Link
-                href="/map"
-                className="inline-flex items-center gap-3 bg-white/10 hover:bg-white/20 text-white border-2 border-yellow-400/50 hover:border-yellow-400 px-6 py-3 rounded-xl font-semibold transition-all duration-300 hover:scale-105 group"
-              >
-                <svg className="w-6 h-6 text-yellow-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="9" strokeWidth={2} />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h18M12 3c2.4 2.3 4 5.5 4 9s-1.6 6.7-4 9m0-18c-2.4 2.3-4 5.5-4 9s1.6 6.7 4 9" />
-                </svg>
-                <span className="group-hover:text-yellow-100">Искать на карте рядом со мной</span>
-                <svg className="w-5 h-5 text-yellow-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </Link>
+            {/* Quick Action Buttons */}
+            <div className="relative z-10 mt-6 flex flex-col items-center gap-3">
+              <div className="relative group/add-company">
+                <Link
+                  href="/add-company"
+                  className="relative inline-flex items-center gap-3 px-6 py-3 rounded-xl font-semibold text-white
+                    bg-gradient-to-r from-[#820251] via-[#a80368] to-[#820251]
+                    border-2 border-yellow-400/70 hover:border-yellow-300
+                    shadow-[0_10px_28px_rgba(130,2,81,0.35)]
+                    group-hover/add-company:shadow-[0_14px_36px_rgba(130,2,81,0.45)]
+                    transition-all duration-300 group-hover/add-company:scale-[1.03]"
+                >
+                  <svg className="w-6 h-6 text-yellow-400 group-hover/add-company:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v12m6-6H6" />
+                  </svg>
+                  <span className="group-hover/add-company:text-yellow-100">{t("nav.addCompany")} ({t("about.submitRequest")})</span>
+                  <svg className="w-5 h-5 text-yellow-400 group-hover/add-company:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </Link>
+              </div>
+
+              <div className="flex flex-wrap justify-center gap-3">
+                <div className="relative group/map">
+                  <Link
+                    href="/map"
+                    className="relative inline-flex items-center gap-3 px-6 py-3 rounded-xl font-semibold text-white
+                      bg-gradient-to-r from-[#820251] via-[#a80368] to-[#820251]
+                      border-2 border-yellow-400/70 hover:border-yellow-300
+                      shadow-[0_10px_28px_rgba(130,2,81,0.35)]
+                      group-hover/map:shadow-[0_14px_36px_rgba(130,2,81,0.45)]
+                      transition-all duration-300 group-hover/map:scale-[1.03]"
+                  >
+                    <svg className="w-6 h-6 text-yellow-400 group-hover/map:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="9" strokeWidth={2} />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h18M12 3c2.4 2.3 4 5.5 4 9s-1.6 6.7-4 9m0-18c-2.4 2.3-4 5.5-4 9s1.6 6.7 4 9" />
+                    </svg>
+                    <span className="group-hover/map:text-yellow-100">Искать на карте рядом со мной</span>
+                    <svg className="w-5 h-5 text-yellow-400 group-hover/map:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </Link>
+                </div>
+
+                <div className="relative group/employee">
+                  <Link
+                    href="/search?service=%D0%BF%D0%BE%D0%B4%D0%B1%D0%BE%D1%80%20%D0%BF%D0%B5%D1%80%D1%81%D0%BE%D0%BD%D0%B0%D0%BB%D0%B0"
+                    className="relative inline-flex items-center gap-3 px-6 py-3 rounded-xl font-semibold text-white
+                      bg-gradient-to-r from-[#820251] via-[#a80368] to-[#820251]
+                      border-2 border-yellow-400/70 hover:border-yellow-300
+                      shadow-[0_10px_28px_rgba(130,2,81,0.35)]
+                      group-hover/employee:shadow-[0_14px_36px_rgba(130,2,81,0.45)]
+                      transition-all duration-300 group-hover/employee:scale-[1.03]"
+                  >
+                    <svg className="w-6 h-6 text-yellow-400 group-hover/employee:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <circle cx="9" cy="8" r="3" strokeWidth={2} />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.8 18c.4-2.5 2.5-4 5.2-4 1.8 0 3.3.7 4.2 2" />
+                      <circle cx="17" cy="17" r="3" strokeWidth={2} />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.2 19.2L21 21" />
+                    </svg>
+                    <span className="group-hover/employee:text-yellow-100">Поиск сотрудников</span>
+                    <svg className="w-5 h-5 text-yellow-400 group-hover/employee:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -155,12 +195,12 @@ export default function Home() {
         <ServicesBlock />
 
         {/* News Section - 6 blocks */}
-        <div className="bg-white py-12 border-y border-gray-200">
+        <div className="bg-white border-y border-gray-200">
           <NewsBlock />
         </div>
 
         {/* AI Assistant Section */}
-        <div id="about" className="bg-gradient-to-b from-gray-50 via-gray-100 to-gray-50 py-16">
+        <div id="about" className="bg-gradient-to-b from-gray-50 via-gray-100 to-gray-50 pt-4 pb-16 md:py-16">
           <div className="container mx-auto px-4">
             {/* AI Assistant explanation - full width, beautiful module */}
             <div className="w-full relative group/ai cursor-pointer"
@@ -227,36 +267,18 @@ export default function Home() {
                       <span className="ml-3 text-xs bg-gradient-to-r from-yellow-300 to-yellow-500 text-[#a0006d] px-3 py-1.5 rounded-full font-bold uppercase align-middle
                         shadow-[0_0_15px_rgba(250,204,21,0.5)] animate-pulse">New</span>
                     </h3>
-                    <p className="text-pink-100 text-lg md:text-xl mb-4 group-hover/ai:text-white transition-colors duration-300 leading-relaxed">
-                      {t("about.aiExplanation")}
-                    </p>
                     <p className="text-yellow-400 font-semibold text-base md:text-lg
                       drop-shadow-[0_0_10px_rgba(250,204,21,0.6)]
                       animate-[pulse_2s_ease-in-out_infinite]">
                       {t("about.aiPlatform")}
                     </p>
-
-                    {/* Click indicator */}
-                    <div className="mt-6 inline-flex items-center gap-2 text-white/80 group-hover/ai:text-yellow-300 transition-colors">
-                      <span className="text-sm font-medium">{t("ai.clickToOpen") || "Нажмите, чтобы открыть"}</span>
-                      <svg className="w-5 h-5 animate-[bounceX_1s_ease-in-out_infinite]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                      </svg>
-                    </div>
                   </div>
 
                 </div>
 
-                {/* Enhanced Sparkles */}
-                <div className="absolute top-4 left-4 text-yellow-400 animate-ping opacity-75 text-lg">✦</div>
-                <div className="absolute bottom-4 right-4 text-yellow-300 animate-ping opacity-60 text-base" style={{animationDelay: '0.5s'}}>✦</div>
-                <div className="absolute top-1/2 right-6 text-yellow-400 animate-ping opacity-50 text-sm" style={{animationDelay: '1s'}}>✦</div>
-                <div className="absolute top-6 right-1/4 text-yellow-300 animate-ping opacity-60 text-sm" style={{animationDelay: '0.3s'}}>✦</div>
-                <div className="absolute bottom-1/3 left-6 text-yellow-400 animate-ping opacity-50 text-base" style={{animationDelay: '0.7s'}}>✦</div>
-                <div className="absolute top-1/3 left-1/3 text-white/40 animate-ping opacity-40 text-xs" style={{animationDelay: '0.9s'}}>✦</div>
-                <div className="absolute bottom-6 left-1/3 text-yellow-200 animate-ping opacity-50 text-sm" style={{animationDelay: '1.2s'}}>✦</div>
               </div>
             </div>
+
           </div>
         </div>
       </main>

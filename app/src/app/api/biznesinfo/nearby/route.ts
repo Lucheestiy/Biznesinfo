@@ -3,6 +3,7 @@ import { getCompaniesIndex, isMeiliHealthy } from "@/lib/meilisearch";
 import { isExcludedBiznesinfoCompany } from "@/lib/biznesinfo/exclusions";
 import { isLiquidatedByKartoteka } from "@/lib/biznesinfo/kartoteka";
 import { biznesinfoGetCompanyCardsByIds } from "@/lib/biznesinfo/postgres";
+import { isAddressLikeLocationQuery, normalizeLocationQueryForSearch } from "@/lib/utils/location";
 
 export const runtime = "nodejs";
 
@@ -387,11 +388,121 @@ function strictTokenMatch(fieldToken: string, queryToken: string): boolean {
   return false;
 }
 
-function hitMatchesStrictQuery(hit: any, queryTokens: string[]): boolean {
+function tokenizeAddressComparable(raw: string): string[] {
+  const cleaned = String(raw || "")
+    .toLowerCase()
+    .replace(/ё/gu, "е")
+    .replace(/[«»"'“”„]/gu, " ")
+    .replace(/[^\p{L}\p{N}/-]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+  if (!cleaned) return [];
+  return cleaned
+    .split(" ")
+    .map((token) => token.replace(/^[-/]+|[-/]+$/gu, "").trim())
+    .filter(Boolean);
+}
+
+function normalizeAddressToken(token: string): string {
+  return String(token || "")
+    .toLowerCase()
+    .replace(/ё/gu, "е")
+    .replace(/[«»"'“”„]/gu, "")
+    .replace(/[^\p{L}\p{N}/-]+/gu, "")
+    .trim();
+}
+
+function matchesStreetAddressToken(addressToken: string, queryToken: string): boolean {
+  if (!addressToken || !queryToken) return false;
+  if (addressToken === queryToken) return true;
+  if (queryToken.length >= 4 && addressToken.startsWith(queryToken)) return true;
+  if (addressToken.length >= 5 && queryToken.startsWith(addressToken)) return true;
+  return false;
+}
+
+function matchesHouseAddressToken(addressToken: string, queryToken: string): boolean {
+  if (!addressToken || !queryToken) return false;
+  if (addressToken === queryToken) return true;
+
+  const queryDigits = queryToken.replace(/[^\d]+/gu, "");
+  if (!queryDigits) return false;
+  const escapedDigits = queryDigits.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  if (queryToken === queryDigits) {
+    // Accept "14", "14а", "14a", "14-1", "14/1", but not "140".
+    return new RegExp(`^${escapedDigits}(?:[a-zа-я]|[-/]\\d+[a-zа-я]?)?$`, "iu").test(addressToken);
+  }
+
+  return false;
+}
+
+function extractHouseCandidatesAfterStreet(rawAddress: string, streetTokens: string[]): string[] {
+  const address = String(rawAddress || "")
+    .toLowerCase()
+    .replace(/ё/gu, "е")
+    .trim();
+  if (!address || streetTokens.length === 0) return [];
+
+  const out: string[] = [];
+  for (const streetToken of streetTokens) {
+    if (!streetToken) continue;
+    let cursor = 0;
+    while (cursor < address.length) {
+      const idx = address.indexOf(streetToken, cursor);
+      if (idx < 0) break;
+      const tail = address.slice(idx + streetToken.length, idx + streetToken.length + 80);
+      const match = tail.match(/(?:дом|д\.?)?\s*[,/-]*\s*(\d+[a-zа-я]?(?:[-/]\d+[a-zа-я]?)?)/iu);
+      if (match?.[1]) {
+        const normalized = normalizeAddressToken(match[1]);
+        if (normalized) out.push(normalized);
+      }
+      cursor = idx + streetToken.length;
+    }
+  }
+
+  return Array.from(new Set(out));
+}
+
+function hitMatchesAddressHouseQuery(address: string, query: string): boolean {
+  const queryTokens = tokenizeAddressComparable(query).map((token) => normalizeAddressToken(token)).filter(Boolean);
+  if (queryTokens.length === 0) return true;
+  const houseTokens = queryTokens.filter((token) => /\d/u.test(token));
+  if (houseTokens.length === 0) return true;
+  const streetTokens = queryTokens.filter((token) => !/\d/u.test(token) && token.length >= 3);
+
+  const addressTokens = tokenizeAddressComparable(address).map((token) => normalizeAddressToken(token)).filter(Boolean);
+  if (addressTokens.length === 0) return false;
+
+  const streetMatches = streetTokens.filter((streetToken) =>
+    addressTokens.some((addressToken) => matchesStreetAddressToken(addressToken, streetToken)),
+  ).length;
+  if (streetTokens.length > 0 && streetMatches < Math.min(streetTokens.length, 2)) {
+    return false;
+  }
+
+  if (streetTokens.length > 0) {
+    const houseAfterStreet = extractHouseCandidatesAfterStreet(address, streetTokens);
+    if (houseAfterStreet.length > 0) {
+      return houseTokens.every((houseToken) =>
+        houseAfterStreet.some((candidate) => matchesHouseAddressToken(candidate, houseToken)),
+      );
+    }
+  }
+
+  return houseTokens.every((houseToken) =>
+    addressTokens.some((addressToken) => matchesHouseAddressToken(addressToken, houseToken)),
+  );
+}
+
+function hitMatchesStrictQuery(
+  hit: any,
+  queryTokens: string[],
+  options?: { requireAllTokens?: boolean },
+): boolean {
   if (queryTokens.length === 0) return true;
 
   const searchableSource = [
     hit?.name || "",
+    hit?.address || "",
     ...(hit?.keywords || []),
     ...(hit?.rubric_names || []),
     ...(hit?.category_names || []),
@@ -405,6 +516,8 @@ function hitMatchesStrictQuery(hit: any, queryTokens: string[]): boolean {
   const matchedTokens = queryTokens.filter((queryToken) =>
     fieldTokens.some((fieldToken) => strictTokenMatch(fieldToken, queryToken)),
   ).length;
+  const requireAllTokens = Boolean(options?.requireAllTokens);
+  if (requireAllTokens) return matchedTokens >= queryTokens.length;
 
   const requiredMatches =
     queryTokens.length <= 2
@@ -498,17 +611,24 @@ export async function GET(request: Request) {
 
     const index = getCompaniesIndex();
     const rawQuery = query.trim();
-    const normalizedQuery = normalizeNearbyQuery(rawQuery);
-    const contextOnlyQuery = isContextOnlyNearbyQuery(rawQuery);
-    const searchQuery = normalizedQuery || (contextOnlyQuery ? "" : rawQuery);
-    const applyMilkFilter = shouldApplyMilkFilter(searchQuery);
-    const applyCheeseFilter = shouldApplyCheeseFilter(searchQuery);
+    const isAddressQuery = isAddressLikeLocationQuery(rawQuery);
+    const normalizedAddressQuery = isAddressQuery ? normalizeLocationQueryForSearch(rawQuery) : "";
+    const normalizedQuery = isAddressQuery ? "" : normalizeNearbyQuery(rawQuery);
+    const contextOnlyQuery = isAddressQuery ? false : isContextOnlyNearbyQuery(rawQuery);
+    const searchQuery = isAddressQuery
+      ? (normalizedAddressQuery || rawQuery)
+      : (normalizedQuery || (contextOnlyQuery ? "" : rawQuery));
+    const applyMilkFilter = !isAddressQuery && shouldApplyMilkFilter(searchQuery);
+    const applyCheeseFilter = !isAddressQuery && shouldApplyCheeseFilter(searchQuery);
     const applyKeywordFilter = applyMilkFilter || applyCheeseFilter;
     const strictQueryTokens = tokenizeForStrictMatch(searchQuery);
+    const addressQueryHasHouseToken = isAddressQuery && /\d/u.test(searchQuery);
     const queryTokenCount = tokenizeServiceQuery(searchQuery).length;
-    const queryMatchingStrategy = searchQuery ? (queryTokenCount > 1 ? "last" : "all") : undefined;
-    const queryServiceTokens = tokenizeServiceQuery(searchQuery);
-    const applyFoodVenueFilter = queryServiceTokens.length > 0 && hasFoodVenueToken(queryServiceTokens);
+    const queryMatchingStrategy = searchQuery
+      ? (isAddressQuery ? "all" : (queryTokenCount > 1 ? "last" : "all"))
+      : undefined;
+    const queryServiceTokens = isAddressQuery ? [] : tokenizeServiceQuery(searchQuery);
+    const applyFoodVenueFilter = !isAddressQuery && queryServiceTokens.length > 0 && hasFoodVenueToken(queryServiceTokens);
     const useStrictFoodVenueFilter =
       applyFoodVenueFilter &&
       queryServiceTokens.length > 0 &&
@@ -522,11 +642,16 @@ export async function GET(request: Request) {
         `_geoRadius(${lat}, ${lng}, ${safeRadius})`,
       ],
       matchingStrategy: queryMatchingStrategy,
-      attributesToSearchOn: searchQuery ? ["keywords", "rubric_names", "category_names", "name"] : undefined,
+      attributesToSearchOn: searchQuery
+        ? (isAddressQuery
+          ? ["address", "name", "keywords", "rubric_names", "category_names"]
+          : ["keywords", "rubric_names", "category_names", "name"])
+        : undefined,
       attributesToRetrieve: [
         "id",
         "unp",
         "name",
+        "address",
         "category_names",
         "rubric_names",
         "_geoDistance",
@@ -539,7 +664,11 @@ export async function GET(request: Request) {
     const filteredHits: any[] = [];
     for (const hit of result.hits as any[]) {
       if (isExcludedBiznesinfoCompany({ source_id: hit?.id || "", unp: hit?.unp || "" })) continue;
-      if (strictQueryTokens.length > 0 && !hitMatchesStrictQuery(hit, strictQueryTokens)) continue;
+      if (
+        strictQueryTokens.length > 0 &&
+        !hitMatchesStrictQuery(hit, strictQueryTokens, { requireAllTokens: addressQueryHasHouseToken })
+      ) continue;
+      if (isAddressQuery && addressQueryHasHouseToken && !hitMatchesAddressHouseQuery(hit?.address || "", searchQuery)) continue;
       if (applyFoodVenueFilter) {
         const matchesFoodVenue = useStrictFoodVenueFilter
           ? hitMatchesStrictFoodVenueIntent(hit)

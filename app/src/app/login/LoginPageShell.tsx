@@ -1,4 +1,5 @@
 import Link from "next/link";
+import PasswordField from "./PasswordField";
 
 function loginErrorMessage(code?: string | null): string | null {
   if (!code) return null;
@@ -24,13 +25,27 @@ export default function LoginPageShell({
   errorCode?: string | null;
 }) {
   const error = loginErrorMessage(errorCode);
-  const registerHref = nextPath === "/cabinet" ? "/register" : `/register?next=${encodeURIComponent(nextPath)}`;
+  const registerHref = "/add-company";
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800">
       <header className="bg-[#a0006d] text-white">
         <div className="max-w-xl mx-auto px-4 py-4">
-          <span className="text-2xl font-semibold tracking-tight">biznesinfo.by</span>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition-colors hover:bg-white/20"
+              aria-label="На главную"
+              title="На главную"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current stroke-2">
+                <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </Link>
+            <Link href="/" className="text-2xl font-semibold tracking-tight hover:opacity-90 transition-opacity">
+              biznesinfo.by
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -68,14 +83,7 @@ export default function LoginPageShell({
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
                 Пароль
               </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#a0006d]/30"
-              />
+              <PasswordField />
             </div>
 
             <div className="flex justify-end">

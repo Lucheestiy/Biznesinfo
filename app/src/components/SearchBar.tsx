@@ -6,7 +6,6 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
 import type { BiznesinfoSuggestResponse } from "@/lib/biznesinfo/types";
 import Rubricator from "./Rubricator";
-import { formatCompanyCount } from "@/lib/utils/plural";
 
 interface SearchBarProps {
   variant?: "hero" | "compact" | "compactKeywords";
@@ -14,12 +13,15 @@ interface SearchBarProps {
 
 interface SearchSuggestion {
   type: "company" | "category" | "subcategory" | "rubric";
+  companyId?: string;
   text: string;
   url: string;
   icon: string;
   subtitle?: string;
   count?: number;
 }
+
+const LOGO_PROXY_VERSION = "3";
 
 export default function SearchBar({ variant = "hero" }: SearchBarProps) {
   const { t } = useLanguage();
@@ -28,6 +30,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
   const searchParams = useSearchParams();
   const [companyQuery, setCompanyQuery] = useState("");
   const [serviceQuery, setServiceQuery] = useState("");
+  const [cityQuery, setCityQuery] = useState("");
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeInput, setActiveInput] = useState<"company" | "service">("company");
@@ -44,15 +47,17 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
     const urlQuery = searchParams.get("q") || "";
     const urlService = searchParams.get("service") || "";
     const urlKeywords = searchParams.get("keywords") || "";
+    const urlCity = searchParams.get("city") || "";
 
     setCompanyQuery(urlQuery);
     setServiceQuery(urlService);
     setKeywordsQuery(urlKeywords);
+    setCityQuery(variant === "hero" ? urlCity : "");
 
     if (urlQuery && companyInputRef.current) {
       companyInputRef.current.focus();
     }
-  }, [searchParams]);
+  }, [searchParams, variant]);
 
   // Update suggestions when query/region changes
   useEffect(() => {
@@ -89,6 +94,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
         const mapped: SearchSuggestion[] = (data.suggestions || [])
           .map((s) => ({
             type: s.type as "company" | "category" | "rubric",
+            companyId: s.type === "company" && "id" in s ? String(s.id || "").trim() : undefined,
             text: s.name,
             url: s.url,
             icon: s.icon || (s.type === "category" ? "📁" : s.type === "rubric" ? "📌" : "🏢"),
@@ -126,8 +132,8 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
     return () => document.removeEventListener("click", handleClickOutside);
   }, [activeInputRef]);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = (e?: React.FormEvent | React.MouseEvent) => {
+    e?.preventDefault();
     setShowSuggestions(false);
     const params = new URLSearchParams();
     // Company name search
@@ -146,7 +152,11 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
     if (keywords && service && keywords !== service) {
       params.set("keywords", keywords);
     }
-    if (selectedRegion) {
+    const location = variant === "hero" ? cityQuery.trim() : "";
+    if (location) {
+      params.set("city", location);
+    }
+    if (selectedRegion && !location) {
       params.set("region", selectedRegion);
     }
     router.push(`/search?${params.toString()}`);
@@ -175,12 +185,64 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
     router.push(url);
   };
 
+  const isImageIcon = (icon: string): boolean => {
+    const normalized = (icon || "").trim();
+    if (!normalized) return false;
+    return normalized.startsWith("/") || /^https?:\/\//iu.test(normalized);
+  };
+
+  const renderSuggestionIcon = (suggestion: SearchSuggestion, size: "mobile" | "desktop") => {
+    const icon = (suggestion.icon || "").trim();
+
+    if (icon && isImageIcon(icon)) {
+      const companyId = (() => {
+        const direct = String(suggestion.companyId || "").trim();
+        if (direct) return direct;
+        const url = String(suggestion.url || "").trim();
+        if (url.startsWith("/company/")) {
+          return decodeURIComponent(url.slice("/company/".length).split("?")[0] || "").trim();
+        }
+        return "";
+      })();
+      const src = (() => {
+        if (icon.startsWith("/images/") && companyId) {
+          return `/api/biznesinfo/logo?id=${encodeURIComponent(companyId)}&path=${encodeURIComponent(icon)}&v=${LOGO_PROXY_VERSION}`;
+        }
+        if (/^https?:\/\//iu.test(icon)) {
+          return `/api/biznesinfo/logo?u=${encodeURIComponent(icon)}&v=${LOGO_PROXY_VERSION}`;
+        }
+        return icon;
+      })();
+      const boxClassName = size === "desktop"
+        ? "w-11 h-11 rounded-xl border border-gray-200 bg-white/90 shadow-sm flex-shrink-0 overflow-hidden"
+        : "w-10 h-10 rounded-lg border border-gray-200 bg-white/90 shadow-sm flex-shrink-0 overflow-hidden";
+      return (
+        <span className={boxClassName}>
+          <img
+            src={src}
+            alt=""
+            loading="lazy"
+            className="w-full h-full object-contain bg-white"
+            onError={(e) => {
+              e.currentTarget.src = "/images/logo/no-logo.png";
+            }}
+          />
+        </span>
+      );
+    }
+
+    return <span className={`${size === "desktop" ? "text-2xl" : "text-xl"} flex-shrink-0`}>{icon || "🏢"}</span>;
+  };
+
   if (variant === "compact") {
     return (
       <form onSubmit={handleSearch} className="flex items-center gap-2">
         <div className="flex-grow relative">
           <input
             type="text"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             placeholder={t("search.placeholder")}
             value={companyQuery}
             onChange={(e) => setCompanyQuery(e.target.value)}
@@ -191,6 +253,9 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
         {/* Keywords input */}
         <input
           type="text"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           placeholder={t("search.keywordsPlaceholder")}
           value={keywordsQuery}
           onChange={(e) => setKeywordsQuery(e.target.value)}
@@ -199,7 +264,8 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
 
         {/* Search button - icon */}
         <button
-          type="submit"
+          type="button"
+          onClick={handleSearch}
           className="bg-[#820251] text-white p-2.5 rounded-lg hover:bg-[#6a0143] transition-colors shadow-md hover:shadow-lg active:scale-95"
           title={t("search.find")}
         >
@@ -217,6 +283,9 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
         <div className="flex-grow relative">
           <input
             type="text"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             placeholder={t("search.keywordsPlaceholder")}
             value={keywordsQuery}
             onChange={(e) => setKeywordsQuery(e.target.value)}
@@ -226,7 +295,8 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
 
         {/* Search button - icon */}
         <button
-          type="submit"
+          type="button"
+          onClick={handleSearch}
           className="bg-[#820251] text-white p-2.5 rounded-lg hover:bg-[#6a0143] transition-colors shadow-md hover:shadow-lg active:scale-95"
           title={t("search.find")}
         >
@@ -256,6 +326,9 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
               <input
                 ref={companyInputRef}
                 type="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder={t("search.placeholder")}
                 value={companyQuery}
                 onChange={(e) => {
@@ -269,12 +342,13 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
                 }}
                 onKeyDown={handleKeyDown}
                 autoComplete="off"
-                className="portal-dialog-typography search-input-mobile flex-grow py-3.5 px-3 text-gray-600 focus:outline-none text-base bg-transparent"
+                className="portal-dialog-typography search-input-mobile flex-grow min-w-0 py-3.5 px-3 text-gray-600 focus:outline-none text-base bg-transparent"
               />
               {/* Search button inside input */}
               <button
-                type="submit"
-                className="m-2 w-10 h-10 flex items-center justify-center bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-xl shadow-md
+                type="button"
+                onClick={handleSearch}
+                className="m-2 w-10 h-10 shrink-0 flex items-center justify-center bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-xl shadow-md
                   hover:shadow-[0_0_20px_rgba(255,255,255,0.6)] hover:scale-110
                   active:scale-95 transition-all duration-300 group/btn"
                 title={t("search.find")}
@@ -290,7 +364,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
           {showSuggestions && activeInput === "company" && suggestions.length > 0 && (
             <div
               ref={suggestionsRef}
-              className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-2xl shadow-2xl mt-2 z-50 max-h-[50vh] overflow-y-auto overscroll-contain"
+              className="mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl max-h-[50vh] overflow-y-auto overscroll-contain"
             >
               {suggestions.map((suggestion, idx) => (
                 <button
@@ -301,11 +375,13 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
                     idx === selectedIndex ? "bg-gray-100" : ""
                   } ${idx > 0 ? "border-t border-gray-100" : ""}`}
                 >
-                  <span className="text-xl flex-shrink-0">{suggestion.icon}</span>
+                  {renderSuggestionIcon(suggestion, "mobile")}
                   <div className="flex-grow min-w-0">
                     <div className="font-medium text-gray-800 truncate">{suggestion.text}</div>
                     {suggestion.subtitle && (
-                      <div className="text-sm text-gray-500 truncate">{suggestion.subtitle}</div>
+                      <div className={`text-sm text-gray-500 ${suggestion.type === "company" ? "break-words" : "truncate"}`}>
+                        {suggestion.subtitle}
+                      </div>
                     )}
                   </div>
                   <span className="text-xs px-2 py-1 rounded-full flex-shrink-0 bg-green-100 text-green-700">
@@ -330,6 +406,9 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
             <input
               ref={keywordsInputRef}
               type="text"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               placeholder={t("search.keywordsPlaceholder")}
               value={keywordsQuery}
               onChange={(e) => {
@@ -343,15 +422,27 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
               }}
               onKeyDown={handleKeyDown}
               autoComplete="off"
-              className="portal-dialog-typography flex-grow py-3.5 px-3 text-gray-600 focus:outline-none text-base bg-transparent"
+              className="portal-dialog-typography flex-grow min-w-0 py-3.5 px-3 text-gray-600 focus:outline-none text-base bg-transparent"
             />
+            <button
+              type="button"
+              onClick={handleSearch}
+              className="m-2 w-10 h-10 shrink-0 flex items-center justify-center bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-xl shadow-md
+                hover:shadow-[0_0_20px_rgba(255,255,255,0.6)] hover:scale-110
+                active:scale-95 transition-all duration-300 group/btn"
+              title={t("search.find")}
+            >
+              <svg className="w-5 h-5 transition-all duration-300 group-hover/btn:text-yellow-400 group-hover/btn:drop-shadow-[0_0_10px_rgba(255,255,255,0.9)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
           </div>
 
           {/* Autocomplete suggestions for mobile service input */}
           {showSuggestions && activeInput === "service" && suggestions.length > 0 && (
             <div
               ref={suggestionsRef}
-              className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-2xl shadow-2xl mt-2 z-50 max-h-[50vh] overflow-y-auto overscroll-contain"
+              className="mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl max-h-[50vh] overflow-y-auto overscroll-contain"
             >
               {suggestions.map((suggestion, idx) => (
                 <button
@@ -362,11 +453,13 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
                     idx === selectedIndex ? "bg-gray-100" : ""
                   } ${idx > 0 ? "border-t border-gray-100" : ""}`}
                 >
-                  <span className="text-xl flex-shrink-0">{suggestion.icon}</span>
+                  {renderSuggestionIcon(suggestion, "mobile")}
                   <div className="flex-grow min-w-0">
                     <div className="font-medium text-gray-800 truncate">{suggestion.text}</div>
                     {suggestion.subtitle && (
-                      <div className="text-sm text-gray-500 truncate">{suggestion.subtitle}</div>
+                      <div className={`text-sm text-gray-500 ${suggestion.type === "company" ? "break-words" : "truncate"}`}>
+                        {suggestion.subtitle}
+                      </div>
                     )}
                   </div>
                   <span className="text-xs px-2 py-1 rounded-full flex-shrink-0 bg-amber-100 text-amber-700">
@@ -376,6 +469,42 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Location input card - mobile */}
+        <div className="relative bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden
+          hover:shadow-xl hover:scale-[1.01]
+          transition-all duration-300">
+          <div className="flex items-center">
+            <div className="pl-4 text-[#820251]">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.243-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder={t("filter.locationLabel")}
+              value={cityQuery}
+              onChange={(e) => setCityQuery(e.target.value)}
+              className="portal-dialog-typography flex-grow min-w-0 py-3.5 px-3 text-gray-600 focus:outline-none text-base bg-transparent"
+            />
+            <button
+              type="button"
+              onClick={handleSearch}
+              className="m-2 w-10 h-10 shrink-0 flex items-center justify-center bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-xl shadow-md
+                hover:shadow-[0_0_20px_rgba(255,255,255,0.6)] hover:scale-110
+                active:scale-95 transition-all duration-300 group/btn"
+              title={t("search.find")}
+            >
+              <svg className="w-5 h-5 transition-all duration-300 group-hover/btn:text-yellow-400 group-hover/btn:drop-shadow-[0_0_10px_rgba(255,255,255,0.9)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -395,6 +524,9 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
               <input
                 ref={companyInputRef}
                 type="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder={t("search.companyPlaceholder")}
                 value={companyQuery}
                 onChange={(e) => {
@@ -417,7 +549,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
           {showSuggestions && activeInput === "company" && suggestions.length > 0 && (
             <div
               ref={suggestionsRef}
-              className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-2xl shadow-2xl mt-2 z-50 max-h-[28rem] overflow-y-auto overscroll-contain"
+              className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-2xl shadow-2xl mt-2 z-[200] max-h-[28rem] overflow-y-auto overscroll-contain"
             >
               {suggestions.map((suggestion, idx) => (
                 <button
@@ -428,11 +560,13 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
                     idx === selectedIndex ? "bg-gray-100" : ""
                   } ${idx > 0 ? "border-t border-gray-100" : ""}`}
                 >
-                  <span className="text-2xl flex-shrink-0">{suggestion.icon}</span>
+                  {renderSuggestionIcon(suggestion, "desktop")}
                   <div className="flex-grow min-w-0">
                     <div className="font-medium text-gray-800 truncate text-lg">{suggestion.text}</div>
                     {suggestion.subtitle && (
-                      <div className="text-sm text-gray-500 truncate">{suggestion.subtitle}</div>
+                      <div className={`text-sm text-gray-500 ${suggestion.type === "company" ? "break-words" : "truncate"}`}>
+                        {suggestion.subtitle}
+                      </div>
                     )}
                   </div>
                   <span
@@ -462,6 +596,9 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
               <input
                 ref={keywordsInputRef}
                 type="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder={t("search.keywordsPlaceholder")}
                 value={keywordsQuery}
                 onChange={(e) => {
@@ -484,7 +621,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
           {showSuggestions && activeInput === "service" && suggestions.length > 0 && (
             <div
               ref={suggestionsRef}
-              className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-2xl shadow-2xl mt-2 z-50 max-h-[28rem] overflow-y-auto overscroll-contain"
+              className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-2xl shadow-2xl mt-2 z-[200] max-h-[28rem] overflow-y-auto overscroll-contain"
             >
               {suggestions.map((suggestion, idx) => (
                 <button
@@ -495,11 +632,13 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
                     idx === selectedIndex ? "bg-gray-100" : ""
                   } ${idx > 0 ? "border-t border-gray-100" : ""}`}
                 >
-                  <span className="text-2xl flex-shrink-0">{suggestion.icon}</span>
+                  {renderSuggestionIcon(suggestion, "desktop")}
                   <div className="flex-grow min-w-0">
                     <div className="font-medium text-gray-800 truncate text-lg">{suggestion.text}</div>
                     {suggestion.subtitle && (
-                      <div className="text-sm text-gray-500 truncate">{suggestion.subtitle}</div>
+                      <div className={`text-sm text-gray-500 ${suggestion.type === "company" ? "break-words" : "truncate"}`}>
+                        {suggestion.subtitle}
+                      </div>
                     )}
                   </div>
                   <span
@@ -517,9 +656,36 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
           )}
         </div>
 
+        {/* Location input card */}
+        <div className="flex-1 basis-0 min-w-0 relative group/location">
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 h-[68px] overflow-hidden
+            hover:shadow-xl hover:scale-[1.02]
+            transition-all duration-300 cursor-text">
+            <div className="flex items-center h-full">
+              <div className="pl-5 text-[#820251]">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.243-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder={t("filter.locationLabel")}
+                value={cityQuery}
+                onChange={(e) => setCityQuery(e.target.value)}
+                className="portal-dialog-typography search-input-hero flex-grow py-5 px-4 text-[#4b5563] focus:outline-none text-lg bg-transparent"
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Search button */}
         <button
-          type="submit"
+          type="button"
+          onClick={handleSearch}
           className="flex-shrink-0 w-16 bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-2xl shadow-lg
             hover:shadow-[0_0_25px_rgba(255,255,255,0.6)] hover:scale-110
             active:scale-95 transition-all duration-300 flex items-center justify-center group/btn"

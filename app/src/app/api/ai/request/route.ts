@@ -2184,16 +2184,21 @@ function looksLikeGreetingOrCapabilitiesRequest(message: string): boolean {
   const colloquialGreeting =
     /^(че\s+как|ч[её]\s+как|как\s+дела|как\s+ты|как\s+жизнь|что\s+нового)(?:$|[\s!,.?:;()[\]{}"'«»`-])/u.test(text);
 
-  const asksCapabilities =
-    /(что\s+умеешь|что\s+можешь|чем\s+поможешь|чем\s+можешь\s+помочь|какие\s+возможност|ты\s+как|кто\s+ты|ты\s+кто)/u.test(
-      text,
-    );
+  const asksCapabilities = looksLikeCapabilitiesQuestionText(text);
 
   return greetingOnly || colloquialGreeting || asksCapabilities;
 }
 
-function buildGreetingCapabilitiesReply(): string {
-  return SYSTEM_REQUIRED_GREETING_TEXT;
+function looksLikeCapabilitiesQuestionText(text: string): boolean {
+  return /(что\s+умеешь|что\s+можешь|чем\s+поможешь|чем\s+можешь\s+помочь|какие\s+возможност|ты\s+как|кто\s+ты|ты\s+кто)/u
+    .test(text);
+}
+
+function buildGreetingCapabilitiesReply(message: string): string {
+  const text = normalizeComparableText(message || "");
+  if (!text) return "Здравствуйте! Чем я могу вам помочь?";
+  if (looksLikeCapabilitiesQuestionText(text)) return SYSTEM_REQUIRED_GREETING_TEXT;
+  return "Здравствуйте! Чем я могу вам помочь?";
 }
 
 function looksLikeCapabilitiesBoundaryFollowUp(message: string): boolean {
@@ -2226,11 +2231,41 @@ function buildBareActionClarifyingReply(): string {
   ].join("\n");
 }
 
+function looksLikePortalRequestSubmissionHowToIntent(message: string): boolean {
+  const text = normalizeComparableText(message || "");
+  if (!text) return false;
+
+  // If user asks to draft content itself, keep template flow instead.
+  if (
+    /(шаблон|template|draft|состав(?:ь|ьте)|напиш(?:и|ите)|подготов(?:ь|ьте)|текст\s+письм|тема\s+письм|subject|body|whatsapp|сообщени\p{L}*\s+для\s+мессенджер)/u.test(
+      text,
+    )
+  ) {
+    return false;
+  }
+
+  return /(как\s+(?:отправ|подат|сделат|оформит)\p{L}*\s+(?:заявк|запрос)|(?:нужн\p{L}*|надо|хоч\p{L}*|помог\p{L}*|подскаж\p{L}*)\s+(?:отправ|подат)\p{L}*\s+(?:заявк|запрос)|куда\s+нажат\p{L}*.*(?:заявк|запрос)|как\s+отправ\p{L}*.*коммерческ\p{L}*\s+предложен)/u.test(
+    text,
+  );
+}
+
+function buildPortalRequestSubmissionHowToReply(): string {
+  return [
+    `Чтобы отправить заявку на ${PORTAL_BRAND_NAME_RU}:`,
+    "1. Нажмите «Конструктор запроса» и выберите конкретную компанию.",
+    "2. Кратко опишите задачу в поле «Что нужно найти или заказать».",
+    "3. Нажмите «Отправить запрос».",
+    "4. В ответе нажмите «Скопировать как письмо» или «Скопировать как сообщение» и отправьте контакту компании.",
+    "Если компания не выбрана, сначала откройте нужную карточку /company/... и вернитесь в ассистент.",
+  ].join("\n");
+}
+
 function buildHardFormattedReply(
   message: string,
   history: AssistantHistoryMessage[] = [],
   rubricTopCompanyRows: string[] = [],
 ): string | null {
+  if (looksLikePortalRequestSubmissionHowToIntent(message)) return buildPortalRequestSubmissionHowToReply();
   if (looksLikeBareActionOnlyMessage(message)) return buildBareActionClarifyingReply();
   if (looksLikeRetailBreadSinglePieceRequest(message)) return buildRetailBreadSinglePieceReply(message, rubricTopCompanyRows);
   if (looksLikeMilkYieldAdviceQuestion(message)) return buildMilkYieldNonSpecialistReply(message);
@@ -2268,7 +2303,7 @@ function buildHardFormattedReply(
   if (looksLikeGirlsPreferenceLifestyleQuestion(message)) return buildGirlsPreferenceLifestyleReply(message);
   if (looksLikePortalOnlyScopeQuestion(message)) return buildPortalOnlyScopeReply();
   if (looksLikeCapabilitiesBoundaryFollowUp(message)) return buildCapabilitiesBoundaryReply();
-  if (looksLikeGreetingOrCapabilitiesRequest(message)) return buildGreetingCapabilitiesReply();
+  if (looksLikeGreetingOrCapabilitiesRequest(message)) return buildGreetingCapabilitiesReply(message);
   return null;
 }
 

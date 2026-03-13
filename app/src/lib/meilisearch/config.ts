@@ -2,6 +2,8 @@ import { getMeiliClient, COMPANIES_INDEX } from "./client";
 import type { MeiliCompanyDocument } from "./types";
 import { buildSemanticSynonymsForMeili } from "@/lib/search/semantic";
 
+const MEILI_PAGINATION_MAX_TOTAL_HITS = 200000;
+
 function mergeSynonymMaps(...maps: Array<Record<string, string[]>>): Record<string, string[]> {
   const merged = new Map<string, Set<string>>();
 
@@ -107,6 +109,11 @@ export async function configureCompaniesIndex(): Promise<void> {
 
   // Configure geo-search settings
   await index.updateSearchCutoffMs(100);
+  await index.updateSettings({
+    pagination: {
+      maxTotalHits: MEILI_PAGINATION_MAX_TOTAL_HITS,
+    },
+  });
   console.log("Geo-search enabled with _geo filter");
 
   // Configure ranking rules

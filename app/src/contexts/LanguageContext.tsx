@@ -472,7 +472,7 @@ const translations: Record<Language, Record<string, string>> = {
     "map.coordsFromAddressNote": "Координаты определены по адресу. Уточните точку на карте через поиск, если нужно.",
 
 		    // Filter labels
-		    "filter.locationLabel": "Регион, город, улица, дом",
+		    "filter.locationLabel": "Город, улица, дом",
 		    "filter.chooseRegion": "Выбрать регион",
 		    "filter.region": "Регион",
 		    "filter.city": "Город",
@@ -1176,7 +1176,7 @@ const translations: Record<Language, Record<string, string>> = {
     "map.coordsFromAddressNote": "Coordinates were resolved from the address. Use the map search to fine-tune the location if needed.",
 
 		    // Filter labels
-		    "filter.locationLabel": "Region, city, street, house",
+		    "filter.locationLabel": "City, street, house",
 		    "filter.chooseRegion": "Choose region",
 		    "filter.region": "Region",
 		    "filter.city": "City",
@@ -1865,7 +1865,7 @@ const translations: Record<Language, Record<string, string>> = {
     "map.coordsFromAddressNote": "Каардынаты вызначаны па адрасе. Удакладніце кропку на карце праз пошук, калі трэба.",
 
 		    // Filter labels
-		    "filter.locationLabel": "Рэгіён, горад, вуліца, дом",
+		    "filter.locationLabel": "Горад, вуліца, дом",
 		    "filter.chooseRegion": "Выбраць рэгіён",
 		    "filter.region": "Рэгіён",
 		    "filter.city": "Горад",
@@ -2554,7 +2554,7 @@ const translations: Record<Language, Record<string, string>> = {
     "map.coordsFromAddressNote": "坐标由地址解析得到。如有需要，可通过地图搜索来微调位置。",
 
 		    // Filter labels
-		    "filter.locationLabel": "地区、城市、街道、门牌号",
+		    "filter.locationLabel": "城市、街道、门牌号",
 		    "filter.chooseRegion": "选择地区",
 		    "filter.region": "地区",
 		    "filter.city": "城市",
