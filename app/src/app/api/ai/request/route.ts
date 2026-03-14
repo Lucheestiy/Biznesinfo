@@ -2266,6 +2266,7 @@ function buildHardFormattedReply(
   rubricTopCompanyRows: string[] = [],
 ): string | null {
   if (looksLikePortalRequestSubmissionHowToIntent(message)) return buildPortalRequestSubmissionHowToReply();
+  if (looksLikeCompanyPlacementIntent(message, history)) return buildCompanyPlacementAppendix(message);
   if (looksLikeBareActionOnlyMessage(message)) return buildBareActionClarifyingReply();
   if (looksLikeRetailBreadSinglePieceRequest(message)) return buildRetailBreadSinglePieceReply(message, rubricTopCompanyRows);
   if (looksLikeMilkYieldAdviceQuestion(message)) return buildMilkYieldNonSpecialistReply(message);
@@ -5988,6 +5989,24 @@ function normalizeRfqWording(text: string): string {
     .replace(/\brequest\s+for\s+quotation\b/giu, "запрос");
 }
 
+function normalizeForeignTermsForAudience(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/\bhoreca\b/giu, "гостиницы, рестораны и кафе")
+    .replace(/\bretail\b/giu, "розничная торговля")
+    .replace(/\bprivate\s*label\b/giu, "собственная торговая марка")
+    .replace(/\breverse[-\s]?b2b\b/giu, "поиск потенциальных клиентов для бизнеса")
+    .replace(/\bb2b\b/giu, "для бизнеса")
+    .replace(/\bb2c\b/giu, "для частных клиентов")
+    .replace(/\bfirst[-\s]?pass\b/giu, "первичный подбор")
+    .replace(/\branking\b/giu, "рейтинг")
+    .replace(/\boutreach\b/giu, "обращение к клиентам")
+    .replace(/\bemail\b/giu, "электронная почта")
+    .replace(/\bwhats\s*app\b/giu, "мессенджер")
+    .replace(/\bsubject\b/giu, "тема")
+    .replace(/\bbody\b/giu, "текст");
+}
+
 function normalizeClarifyingIntroTone(text: string): string {
   if (!text) return text;
   return text
@@ -6366,6 +6385,7 @@ function applyFinalAssistantQualityGate(params: {
   out = stripAssistantMarkdownArtifacts(out);
   out = normalizePortalScopeWording(out);
   out = normalizeShortlistWording(sanitizeAssistantReplyLinks(out));
+  out = normalizeForeignTermsForAudience(out);
   out = replaceDeprecatedClarifyingQuestionFlow(out);
 
   const seed = oneLine(
@@ -6727,6 +6747,7 @@ function postProcessAssistantReply(params: {
   out = normalizeFirstPassWording(out);
   out = normalizeOutreachChannelsPhrase(out);
   out = normalizeRfqWording(out);
+  out = normalizeForeignTermsForAudience(out);
   out = normalizeClarifyingIntroTone(out);
   out = normalizeAssistantCompanyPaths(out);
   out = moveOnionClarifyingQuestionsToTop(out);
@@ -18110,9 +18131,14 @@ export async function POST(request: Request) {
     }
   }
 
+  const hasSingleCompanyLookupMatchInVendorCandidates =
+    Boolean(singleCompanyBootstrapLookupName) &&
+    vendorCandidates.some(
+      (candidate) => scoreSingleCompanyLookupMatch(candidate.name || "", singleCompanyBootstrapLookupName || "") >= 0.45,
+    );
   const shouldBootstrapSingleCompanyByName =
     Boolean(singleCompanyBootstrapLookupName) &&
-    vendorCandidates.length === 0 &&
+    !hasSingleCompanyLookupMatchInVendorCandidates &&
     !companyResp &&
     shortlistResps.length === 0;
   if (shouldBootstrapSingleCompanyByName) {
@@ -19052,7 +19078,12 @@ export async function POST(request: Request) {
               }) || fallbackStubText
             );
         const sanitizedFailedLocalReply = failedLocalReply
-          ? normalizeShortlistWording(sanitizeAssistantReplyLinks(failedLocalReply))
+          ? applyFinalAssistantQualityGate({
+              replyText: failedLocalReply,
+              message,
+              history,
+              vendorLookupContext: vendorLookupContext || null,
+            })
           : "";
         const failedIsStub = canceled ? false : /\(stub\)/iu.test(failedLocalReply);
 

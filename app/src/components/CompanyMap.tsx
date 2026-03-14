@@ -22,12 +22,14 @@ interface CompanyMapProps {
   searchQuery?: string;
   radius: number;
   onRadiusChange?: (_radius: number) => void;
+  onLoadingChange?: (_loading: boolean) => void;
 }
 
 const RADIUS_OPTIONS = [5000, 10000, 20000, 30000, 50000];
 const MIN_CUSTOM_RADIUS_KM = 1;
 const MAX_CUSTOM_RADIUS_KM = 100;
 const MAP_FETCH_LIMIT = 2000;
+const MAP_SEARCH_TIMEOUT_MS = 15000;
 const INITIAL_VISIBLE_COMPANIES = 10;
 const COMPANY_LIST_LOAD_STEP = 20;
 const LOGO_PROXY_VERSION = "4";
@@ -204,7 +206,8 @@ function CompanyMap({
   searchCenterLabel,
   searchQuery = "", 
   radius, 
-  onRadiusChange 
+  onRadiusChange,
+  onLoadingChange,
 }: CompanyMapProps) {
   const { language } = useLanguage();
   const mapText = useMemo(() => (language === "en"
@@ -212,6 +215,7 @@ function CompanyMap({
         decimalComma: false,
         kmUnit: "km",
         searchError: "Could not perform the search. Please refresh and try again.",
+        searchTimeout: "Search is taking too long. Please try refresh.",
         coordsLabel: "Coordinates",
         resolvingAddress: "Resolving address...",
         youAreHere: "You are here",
@@ -223,6 +227,9 @@ function CompanyMap({
         customPlaceholder: "Custom",
         customAria: "Custom radius in kilometers",
         searching: "Searching...",
+        avgTimeLabel: "Average search time",
+        elapsedLabel: "elapsed",
+        secondsShort: "sec",
         found: "Found",
         companies: "companies",
         refresh: "Refresh",
@@ -240,6 +247,7 @@ function CompanyMap({
           decimalComma: true,
           kmUnit: "км",
           searchError: "Не атрымалася выканаць пошук. Абнавіце і паспрабуйце яшчэ раз.",
+          searchTimeout: "Пошук занадта доўгі. Паспрабуйце абнавіць.",
           coordsLabel: "Каардынаты",
           resolvingAddress: "Вызначаем адрас...",
           youAreHere: "Вы тут",
@@ -251,6 +259,9 @@ function CompanyMap({
           customPlaceholder: "Свой",
           customAria: "Свой радыус у кіламетрах",
           searching: "Пошук...",
+          avgTimeLabel: "Сярэдні час пошуку",
+          elapsedLabel: "прайшло",
+          secondsShort: "с",
           found: "Знойдзена",
           companies: "кампаній",
           refresh: "Абнавіць",
@@ -268,6 +279,7 @@ function CompanyMap({
             decimalComma: false,
             kmUnit: "公里",
             searchError: "搜索失败，请刷新后重试。",
+            searchTimeout: "搜索耗时过长，请尝试刷新。",
             coordsLabel: "坐标",
             resolvingAddress: "正在解析地址...",
             youAreHere: "您在这里",
@@ -279,6 +291,9 @@ function CompanyMap({
             customPlaceholder: "自定义",
             customAria: "自定义半径（公里）",
             searching: "搜索中...",
+            avgTimeLabel: "平均搜索时间",
+            elapsedLabel: "已耗时",
+            secondsShort: "秒",
             found: "找到",
             companies: "家公司",
             refresh: "刷新",
@@ -295,6 +310,7 @@ function CompanyMap({
             decimalComma: true,
             kmUnit: "км",
             searchError: "Не удалось выполнить поиск. Попробуйте обновить.",
+            searchTimeout: "Поиск выполняется слишком долго. Попробуйте обновить.",
             coordsLabel: "Координаты",
             resolvingAddress: "Определяем адрес...",
             youAreHere: "Вы здесь",
@@ -306,6 +322,9 @@ function CompanyMap({
             customPlaceholder: "Свой",
             customAria: "Свой радиус в километрах",
             searching: "Поиск...",
+            avgTimeLabel: "Среднее время поиска",
+            elapsedLabel: "прошло",
+            secondsShort: "с",
             found: "Найдено",
             companies: "компаний",
             refresh: "Обновить",
@@ -326,8 +345,11 @@ function CompanyMap({
   const [userAddress, setUserAddress] = useState<string | null>(null);
   const [loadingUserAddress, setLoadingUserAddress] = useState(false);
   const [customRadiusKm, setCustomRadiusKm] = useState(() => formatRadiusInputValue(radius));
+  const [averageSearchMs, setAverageSearchMs] = useState(3000);
+  const [elapsedSearchMs, setElapsedSearchMs] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const requestSeqRef = useRef(0);
+  const searchStartedAtRef = useRef<number | null>(null);
 
   const fetchNearbyCompanies = useCallback(async () => {
     const requestSeq = requestSeqRef.current + 1;
@@ -339,7 +361,15 @@ function CompanyMap({
 
     const controller = new AbortController();
     abortRef.current = controller;
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, MAP_SEARCH_TIMEOUT_MS);
+    searchStartedAtRef.current = Date.now();
+    setElapsedSearchMs(0);
     setLoading(true);
+    onLoadingChange?.(true);
     setSearchError(null);
 
     try {
@@ -363,7 +393,15 @@ function CompanyMap({
       setVisibleCompanyCount(INITIAL_VISIBLE_COMPANIES);
       setSearchError(null);
     } catch (error) {
-      if ((error as Error)?.name === "AbortError") return;
+      if ((error as Error)?.name === "AbortError") {
+        if (requestSeq === requestSeqRef.current && timedOut) {
+          setCompanies([]);
+          setTotalCompanies(0);
+          setVisibleCompanyCount(INITIAL_VISIBLE_COMPANIES);
+          setSearchError(mapText.searchTimeout);
+        }
+        return;
+      }
       console.error("Failed to fetch nearby companies:", error);
       if (requestSeq === requestSeqRef.current) {
         setCompanies([]);
@@ -372,21 +410,47 @@ function CompanyMap({
         setSearchError(mapText.searchError);
       }
     } finally {
+      window.clearTimeout(timeout);
       if (requestSeq === requestSeqRef.current) {
+        const startedAt = searchStartedAtRef.current;
+        if (typeof startedAt === "number") {
+          const elapsed = Math.max(120, Date.now() - startedAt);
+          setAverageSearchMs((prev) => {
+            const baseline = Number.isFinite(prev) && prev > 0 ? prev : elapsed;
+            return Math.round(baseline * 0.7 + elapsed * 0.3);
+          });
+        }
+        searchStartedAtRef.current = null;
+        setElapsedSearchMs(0);
         setLoading(false);
+        onLoadingChange?.(false);
       }
     }
-  }, [searchCenter, radius, searchQuery, mapText.searchError]);
+  }, [searchCenter, radius, searchQuery, mapText.searchError, mapText.searchTimeout, onLoadingChange]);
 
   useEffect(() => {
     fetchNearbyCompanies();
   }, [fetchNearbyCompanies]);
 
   useEffect(() => {
+    if (!loading) return;
+    const tick = () => {
+      const startedAt = searchStartedAtRef.current;
+      if (typeof startedAt !== "number") return;
+      setElapsedSearchMs(Math.max(0, Date.now() - startedAt));
+    };
+    tick();
+    const timer = window.setInterval(tick, 250);
+    return () => window.clearInterval(timer);
+  }, [loading]);
+
+  useEffect(() => {
     return () => {
       abortRef.current?.abort();
+      searchStartedAtRef.current = null;
+      onLoadingChange?.(false);
     };
-  }, []);
+  }, [onLoadingChange]);
 
   useEffect(() => {
     setCustomRadiusKm(formatRadiusInputValue(radius));
@@ -550,6 +614,8 @@ function CompanyMap({
     },
     [companies.length, hasMoreLoadedCompanies],
   );
+  const averageSearchSeconds = Math.max(1, Math.round(averageSearchMs / 1000));
+  const elapsedSearchSeconds = Math.max(1, Math.ceil(elapsedSearchMs / 1000));
 
   return (
     <div className="w-full">
@@ -601,10 +667,19 @@ function CompanyMap({
       </div>
 
       {/* Results count */}
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm text-gray-600">
-          {loading ? mapText.searching : `${mapText.found}: ${totalCompanies} ${mapText.companies}`}
-        </span>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex flex-col">
+          <span className="text-[18px] leading-6 font-bold text-[#820251]">
+            {loading ? mapText.searching : `${mapText.found}: ${totalCompanies} ${mapText.companies}`}
+          </span>
+          {loading && (
+            <span className="text-xs text-[#820251]/80">
+              ⏱ {mapText.avgTimeLabel}: ~{averageSearchSeconds} {mapText.secondsShort}
+              {" · "}
+              {mapText.elapsedLabel}: {elapsedSearchSeconds} {mapText.secondsShort}
+            </span>
+          )}
+        </div>
         <button
           onClick={fetchNearbyCompanies}
           className="text-sm text-[#820251] hover:underline"

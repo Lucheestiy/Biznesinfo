@@ -194,7 +194,9 @@ export default function MapPage() {
   const [locationError, setLocationError] = useState("");
   const [loadingLocation, setLoadingLocation] = useState(true);
   const [searchingAddress, setSearchingAddress] = useState(false);
+  const [searchingCompanies, setSearchingCompanies] = useState(false);
   const [searchHint, setSearchHint] = useState("");
+  const searchButtonBusy = searchingAddress || searchingCompanies;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -268,32 +270,38 @@ export default function MapPage() {
 
     setSearchingAddress(true);
     try {
-      const geocodeQuery = withCityHint(nextQuery, userCityHint);
-      const geocodeUrl = `/api/biznesinfo/geocode?q=${encodeURIComponent(geocodeQuery)}${
-        userLocation
-          ? `&lat=${encodeURIComponent(String(userLocation.lat))}&lng=${encodeURIComponent(String(userLocation.lng))}`
-          : ""
-      }`;
-      const response = await fetch(geocodeUrl, { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error(`geocode_status:${response.status}`);
+      const geocodeQueries = [withCityHint(nextQuery, userCityHint)];
+      if (geocodeQueries[0] !== nextQuery) geocodeQueries.push(nextQuery);
+
+      let resolved: { lat: number; lng: number; address: string } | null = null;
+      for (const geocodeQuery of geocodeQueries) {
+        const geocodeUrl = `/api/biznesinfo/geocode?q=${encodeURIComponent(geocodeQuery)}${
+          userLocation
+            ? `&lat=${encodeURIComponent(String(userLocation.lat))}&lng=${encodeURIComponent(String(userLocation.lng))}`
+            : ""
+        }`;
+        const response = await fetch(geocodeUrl, { cache: "no-store" });
+        if (!response.ok) continue;
+
+        const data = await response.json();
+        const lat = Number(data?.coords?.lat);
+        const lng = Number(data?.coords?.lng);
+        const kind = typeof data?.kind === "string" ? data.kind : "";
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+        if (!isStreetGeocodeKind(kind)) continue;
+
+        const address = typeof data?.address === "string" ? data.address.trim() : "";
+        resolved = { lat, lng, address };
+        break;
       }
 
-      const data = await response.json();
-      const lat = Number(data?.coords?.lat);
-      const lng = Number(data?.coords?.lng);
-      const kind = typeof data?.kind === "string" ? data.kind : "";
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        throw new Error("geocode_invalid_coords");
-      }
-      if (!isStreetGeocodeKind(kind)) {
-        throw new Error("geocode_not_street");
+      if (!resolved) {
+        throw new Error("geocode_not_found");
       }
 
-      const address = typeof data?.address === "string" ? data.address.trim() : "";
       const hasHouse = hasHouseNumber(nextQuery);
-      setSearchCenter({ lat, lng });
-      setSearchCenterLabel(address || nextQuery);
+      setSearchCenter({ lat: resolved.lat, lng: resolved.lng });
+      setSearchCenterLabel(resolved.address || nextQuery);
       setSearchQuery(hasHouse ? nextQuery : "");
       setSearchHint(
         hasHouse
@@ -468,10 +476,10 @@ export default function MapPage() {
                 />
                 <button
                   onClick={applySearch}
-                  disabled={searchingAddress}
+                  disabled={searchButtonBusy}
                   className="px-6 py-2.5 bg-[#820251] text-white rounded-lg font-medium hover:bg-[#7a0150] transition-colors"
                 >
-                  {searchingAddress ? mapText.searchingButton : mapText.searchButton}
+                  {searchButtonBusy ? mapText.searchingButton : mapText.searchButton}
                 </button>
               </div>
               <p className="mt-2 text-xs text-gray-500">
@@ -512,6 +520,7 @@ export default function MapPage() {
                   searchQuery={searchQuery}
                   radius={radius}
                   onRadiusChange={setRadius}
+                  onLoadingChange={setSearchingCompanies}
                 />
               </div>
             )}

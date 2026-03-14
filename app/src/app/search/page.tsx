@@ -75,6 +75,7 @@ function SearchResults() {
   const [debouncedBusinessFormatDraft, setDebouncedBusinessFormatDraft] = useState<SearchBusinessFormat>(businessFormatFromUrl);
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
   const [servicePhoneHintVisible, setServicePhoneHintVisible] = useState(false);
+  const [serviceFieldFocused, setServiceFieldFocused] = useState(false);
   const cityInputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<number | null>(null);
   const searchDebounceRef = useRef<number | null>(null);
@@ -375,6 +376,23 @@ function SearchResults() {
     if (localized && !isLoading) return localized;
     return effectiveServiceQuery;
   }, [data?.service_display, effectiveServiceQuery, isLoading]);
+  const serviceInputValue = useMemo(() => {
+    if (serviceFieldFocused) return serviceDraft;
+    if (language === "ru") return serviceDraft;
+    if (!serviceDraft.trim()) return serviceDraft;
+    if (isLoading) return serviceDraft;
+    if (serviceDraft.trim() !== effectiveServiceQuery.trim()) return serviceDraft;
+    const localized = String(data?.service_display || "").trim();
+    if (!localized) return serviceDraft;
+    return localized;
+  }, [
+    data?.service_display,
+    effectiveServiceQuery,
+    isLoading,
+    language,
+    serviceDraft,
+    serviceFieldFocused,
+  ]);
   const highlightNameTokens = useMemo(() => {
     return highlightCompanyTokens.length > 0 ? highlightCompanyTokens : highlightServiceTokens;
   }, [highlightCompanyTokens, highlightServiceTokens]);
@@ -472,8 +490,10 @@ function SearchResults() {
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
-                  value={serviceDraft}
+                  value={serviceInputValue}
                   onChange={(e) => setServiceDraft(e.target.value)}
+                  onFocus={() => setServiceFieldFocused(true)}
+                  onBlur={() => setServiceFieldFocused(false)}
                   inputMode="search"
                   placeholder={t("search.servicePlaceholder")}
                   className={inputClassName}

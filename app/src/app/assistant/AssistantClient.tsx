@@ -99,7 +99,7 @@ function looksLikeOutreachHowToIntent(text: string): boolean {
   if (!/(заявк|запрос|коммерческ|предложен)/iu.test(normalized)) return false;
 
   // Drafting request should still go through anti-spam targeting guard.
-  if (/(состав(?:ь|ьте)|напиш(?:и|ите)|подготов(?:ь|ьте)|шаблон|template|draft|тема|subject|body|текст\s+письм|сообщени\p{L}*\s+для\s+мессенджер)/iu.test(normalized)) {
+  if (/(состав\p{L}*|напиш\p{L}*|подготов\p{L}*|шаблон|template|draft|тема|subject|body|текст\s+письм|сообщени\p{L}*\s+для\s+мессенджер)/iu.test(normalized)) {
     return false;
   }
 
@@ -116,8 +116,8 @@ function looksLikeOutreachDraftIntent(text: string): boolean {
     .test(normalized);
   if (!hasOutreachContext) return false;
 
-  // Draft/template asks should not require a fixed company target.
-  return /(состав(?:ь|ьте|ить)|напиш(?:и|ите|у)|подготов(?:ь|ьте|ить)|шаблон|template|draft|тема|subject|body|текст\s+письм|сообщени\p{L}*\s+для\s+мессенджер|готов(?:ый|ое)\s+текст|кп|коммерческ\p{L}*\s+предложен)/iu
+  // Draft/template and edit/refine asks should not require a fixed company target.
+  return /(состав\p{L}*|напиш\p{L}*|подготов\p{L}*|шаблон|template|draft|тема|subject|body|текст\s+письм|сообщени\p{L}*\s+для\s+мессенджер|готов(?:ый|ое)\s+текст|кп|коммерческ\p{L}*\s+предложен|включ(?:и|ите)|добав(?:ь|ьте|ить)|дополни(?:ть|те)?|измени(?:ть|те)?|исправ(?:ь|ьте|ить)|перепиш(?:и|ите|ать)|переформулир(?:уй|уйте|овать)|сократ(?:и|ите|ить)|удал(?:и|ите|ить)|замен(?:и|ите|ить)|уточн(?:и|ите|ить)|в\s+коммерческ\p{L}*|в\s+кп|нужн\p{L}*[^.\n]{0,40}коммерческ\p{L}*\s+предложен|хоч\p{L}*[^.\n]{0,40}коммерческ\p{L}*\s+предложен|отправ\p{L}*[^.\n]{0,40}коммерческ\p{L}*\s+предложен|отправ\p{L}*[^.\n]{0,20}\bкп\b)/iu
     .test(normalized);
 }
 
@@ -136,6 +136,26 @@ function looksLikeExplicitCompanyTargetInText(text: string): boolean {
 
 function normalizeAssistantMessageForCompare(text: string): string {
   return String(text || "").toLowerCase().replace(/\s+/gu, " ").trim();
+}
+
+function normalizeAssistantDisplayText(text: string): string {
+  return String(text || "")
+    .replace(/\*\*/gu, "")
+    .replace(/(^|[\s(])`([^`\n]{1,240})`(?=[\s).,;:!?]|$)/gu, "$1$2")
+    .replace(/\bhoreca\b/giu, "гостиницы, рестораны и кафе")
+    .replace(/\bretail\b/giu, "розничная торговля")
+    .replace(/\bprivate\s*label\b/giu, "собственная торговая марка")
+    .replace(/\breverse[-\s]?b2b\b/giu, "поиск потенциальных клиентов для бизнеса")
+    .replace(/\bb2b\b/giu, "для бизнеса")
+    .replace(/\bb2c\b/giu, "для частных клиентов")
+    .replace(/\bfirst[-\s]?pass\b/giu, "первичный подбор")
+    .replace(/\branking\b/giu, "рейтинг")
+    .replace(/\boutreach\b/giu, "обращение к клиентам")
+    .replace(/\bemail\b/giu, "электронная почта")
+    .replace(/\bwhats\s*app\b/giu, "мессенджер")
+    .replace(/\bsubject\b/giu, "тема")
+    .replace(/\bbody\b/giu, "текст")
+    .replace(/\n{3,}/gu, "\n\n");
 }
 
 function isLegacyAssistantIntroMessage(content: string): boolean {
@@ -857,11 +877,12 @@ export default function AssistantClient({
 
   const renderAssistantMessageContent = (message: AssistantMessage) => {
     if (message.role !== "assistant") return message.content;
-    if (message.id === "intro") return renderLinkifiedText(message.content);
+    const displayContent = normalizeAssistantDisplayText(message.content);
+    if (message.id === "intro") return renderLinkifiedText(displayContent);
 
-    const parts = extractEmailParts(message.content);
+    const parts = extractEmailParts(displayContent);
     const hasTemplateMarkers = parts.markers.subject || parts.markers.body || parts.markers.whatsapp;
-    if (!hasTemplateMarkers) return renderLinkifiedText(message.content);
+    if (!hasTemplateMarkers) return renderLinkifiedText(displayContent);
 
     const subjectValue = parts.subject || (t("ai.export.defaultSubject") || "Запрос через Biznesinfo");
     const subjectLabel = tr("ai.export.subjectLabel", "Тема");
@@ -1041,6 +1062,7 @@ export default function AssistantClient({
     if (!canChat) return;
     if (sendingRef.current) return;
     if (voiceRecording) stopVoiceInput();
+    setError(null);
 
     const outreachIntent = looksLikeOutreachIntent(text);
     const outreachHowToIntent = looksLikeOutreachHowToIntent(text);
@@ -1048,11 +1070,15 @@ export default function AssistantClient({
     const hasTextTarget = looksLikeExplicitCompanyTargetInText(text);
     const hasExplicitTarget = Boolean(companyContext?.companyName || resolvedSendCompanyId || hasTextTarget);
     const requiresExplicitCompanyTarget = outreachIntent && !outreachHowToIntent && !outreachDraftIntent;
-    if (requiresExplicitCompanyTarget && !hasExplicitTarget) {
-      setError("Чтобы избежать спама, выберите конкретную компанию перед отправкой запроса.");
-      return;
-    }
-    if (requiresExplicitCompanyTarget && !companyContext?.companyId && !manualTargetCompanyId && shortlistCompanyIds.length > 1 && !hasTextTarget) {
+    const draftOnlyOutreachMode = requiresExplicitCompanyTarget && !hasExplicitTarget;
+    if (
+      requiresExplicitCompanyTarget &&
+      !draftOnlyOutreachMode &&
+      !companyContext?.companyId &&
+      !manualTargetCompanyId &&
+      shortlistCompanyIds.length > 1 &&
+      !hasTextTarget
+    ) {
       setError("Чтобы избежать спама, отправка запроса доступна только в одну выбранную компанию.");
       return;
     }
@@ -1083,17 +1109,24 @@ export default function AssistantClient({
       const payload: Record<string, unknown> = { source: "assistant_page", page: "/assistant" };
       const context: Record<string, unknown> = {};
       if (companyContext) Object.assign(context, companyContext);
-      if (shortlistCompanyIds.length > 0) context.shortlistCompanyIds = shortlistCompanyIds;
+      if (shortlistCompanyIds.length > 0 && !draftOnlyOutreachMode) context.shortlistCompanyIds = shortlistCompanyIds;
       if (Object.keys(context).length > 0) payload.context = context;
+      if (draftOnlyOutreachMode) payload.outreachMode = "draft_only_no_target";
+
+      const requestMessage = draftOnlyOutreachMode
+        ? `${text}\n\nВажно: подготовь общий черновик коммерческого предложения без выбора конкретной компании и без отправки запроса в компании.`
+        : text;
 
       const requestBody: Record<string, unknown> = {
-        message: text,
+        message: requestMessage,
         history,
         payload,
       };
       if (conversationId) requestBody.conversationId = conversationId;
-      if (resolvedSendCompanyId) requestBody.companyId = resolvedSendCompanyId;
-      if (!resolvedSendCompanyId && shortlistCompanyIds.length > 0 && !hasTextTarget) requestBody.companyIds = shortlistCompanyIds;
+      if (!draftOnlyOutreachMode && resolvedSendCompanyId) requestBody.companyId = resolvedSendCompanyId;
+      if (!draftOnlyOutreachMode && !resolvedSendCompanyId && shortlistCompanyIds.length > 0 && !hasTextTarget) {
+        requestBody.companyIds = shortlistCompanyIds;
+      }
 
       const res = await fetch("/api/ai/request?stream=1", {
         method: "POST",
@@ -1318,6 +1351,18 @@ export default function AssistantClient({
     }
     router.push("/");
   };
+  const outreachIntentDraftPreview = looksLikeOutreachIntent(draft);
+  const outreachHowToDraftPreview = looksLikeOutreachHowToIntent(draft);
+  const outreachDraftDraftPreview = looksLikeOutreachDraftIntent(draft);
+  const hasTextTargetDraftPreview = looksLikeExplicitCompanyTargetInText(draft);
+  const hasExplicitTargetDraftPreview = Boolean(
+    companyContext?.companyName || resolvedSendCompanyId || hasTextTargetDraftPreview,
+  );
+  const draftOnlyOutreachHintVisible =
+    outreachIntentDraftPreview &&
+    !outreachHowToDraftPreview &&
+    !outreachDraftDraftPreview &&
+    !hasExplicitTargetDraftPreview;
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-gray-100">
@@ -1717,6 +1762,12 @@ export default function AssistantClient({
                           )}
                         </div>
                       </div>
+                      {draftOnlyOutreachHintVisible && (
+                        <div className="w-full sm:w-auto sm:self-end sm:max-w-[340px] rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                          Компания не выбрана. Отправим общий черновик без рассылки в компании.
+                          Для отправки в компанию выберите ее в «Конструкторе запроса».
+                        </div>
+                      )}
                       <button
                         type="button"
                         onClick={send}

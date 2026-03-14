@@ -67,6 +67,29 @@ function normalizeInternalPath(raw: string): string | null {
     return `/company/${encodeURIComponent(cleaned)}`;
   }
 
+  if (pathOnly.startsWith("/catalog/")) {
+    const rawTail = pathOnly.slice("/catalog/".length);
+    if (!rawTail) return "/catalog";
+
+    let decoded = rawTail;
+    try {
+      decoded = decodeURIComponent(rawTail);
+    } catch {
+      decoded = rawTail;
+    }
+
+    let cleanedTail = decoded.replace(/[)"'`»«“”’.,;:!?}*_\]]+$/gu, "").trim();
+    if (!cleanedTail) return "/catalog";
+
+    const segments = cleanedTail
+      .split("/")
+      .map((segment) => segment.trim().toLowerCase().replace(/[^a-z0-9-]/gu, ""))
+      .filter(Boolean);
+
+    if (segments.length === 0) return "/catalog";
+    return `/catalog/${segments.map((segment) => encodeURIComponent(segment)).join("/")}`;
+  }
+
   if (pathOnly === "/search") {
     if (s.length > 500) return s.slice(0, 500);
     return s;

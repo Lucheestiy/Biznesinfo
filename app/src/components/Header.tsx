@@ -128,7 +128,12 @@ export default function Header() {
 
     const state = readNavigationState();
     const hasInternalPrev = Boolean(state.prev && state.prev.startsWith("/") && state.prev !== state.curr);
-    if (!hasInternalPrev) {
+    if (hasInternalPrev) {
+      router.push(state.prev);
+      return;
+    }
+
+    if (window.history.length <= 1) {
       router.push(fallbackUrl);
       return;
     }
