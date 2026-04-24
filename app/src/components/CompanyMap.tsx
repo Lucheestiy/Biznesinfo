@@ -7,28 +7,43 @@ import { useLanguage } from "@/contexts/LanguageContext";
 interface Company {
   id: string;
   name: string;
+  description?: string;
   address: string;
   city: string;
   phones: string[];
   logo_url: string;
+  categories?: Array<{ name?: string | null }>;
+  rubrics?: Array<{ name?: string | null }>;
   distance: number;
   _geo?: { lat: number; lng: number } | null;
+}
+
+interface SearchBounds {
+  southLat: number;
+  westLng: number;
+  northLat: number;
+  eastLng: number;
 }
 
 interface CompanyMapProps {
   userLocation: { lat: number; lng: number };
   searchCenter: { lat: number; lng: number };
   searchCenterLabel?: string | null;
+  searchBounds?: SearchBounds | null;
+  searchDistrictName?: string | null;
   searchQuery?: string;
+  searchEnabled?: boolean;
   radius: number;
   onRadiusChange?: (_radius: number) => void;
   onLoadingChange?: (_loading: boolean) => void;
 }
 
 const RADIUS_OPTIONS = [5000, 10000, 20000, 30000, 50000];
+const DEFAULT_RADIUS_METERS = 10000;
 const MIN_CUSTOM_RADIUS_KM = 1;
 const MAX_CUSTOM_RADIUS_KM = 100;
-const MAP_FETCH_LIMIT = 2000;
+const MAP_FETCH_INITIAL_LIMIT = 200;
+const MAP_FETCH_NEXT_LIMIT = 200;
 const MAP_SEARCH_TIMEOUT_MS = 15000;
 const INITIAL_VISIBLE_COMPANIES = 10;
 const COMPANY_LIST_LOAD_STEP = 20;
@@ -113,6 +128,12 @@ function sortableDistanceValue(distance: number): number {
   return Number.isFinite(distance) ? distance : Number.POSITIVE_INFINITY;
 }
 
+function compareCompaniesByDistanceAndName(a: Company, b: Company): number {
+  const distanceDiff = sortableDistanceValue(a.distance) - sortableDistanceValue(b.distance);
+  if (distanceDiff !== 0) return distanceDiff;
+  return (a.name || "").localeCompare(b.name || "", "ru");
+}
+
 function formatRadiusInputValue(radiusMeters: number): string {
   if (!Number.isFinite(radiusMeters) || radiusMeters <= 0) return "";
   const km = radiusMeters / 1000;
@@ -126,6 +147,24 @@ function parseRadiusKmInput(raw: string): number | null {
   const parsed = Number(normalized);
   if (!Number.isFinite(parsed) || parsed <= 0) return null;
   return parsed;
+}
+
+function toClampedRadiusMeters(km: number): number {
+  const clampedKm = Math.min(MAX_CUSTOM_RADIUS_KM, Math.max(MIN_CUSTOM_RADIUS_KM, km));
+  return Math.round(clampedKm * 1000);
+}
+
+function buildNearbyBoundsQuery(rawBounds: SearchBounds | null | undefined): string {
+  if (!rawBounds) return "";
+  const southLat = Number(rawBounds.southLat);
+  const westLng = Number(rawBounds.westLng);
+  const northLat = Number(rawBounds.northLat);
+  const eastLng = Number(rawBounds.eastLng);
+  if (!Number.isFinite(southLat) || !Number.isFinite(westLng) || !Number.isFinite(northLat) || !Number.isFinite(eastLng)) {
+    return "";
+  }
+  if (northLat < southLat || eastLng < westLng) return "";
+  return `&bbox_south=${encodeURIComponent(String(southLat))}&bbox_west=${encodeURIComponent(String(westLng))}&bbox_north=${encodeURIComponent(String(northLat))}&bbox_east=${encodeURIComponent(String(eastLng))}`;
 }
 
 function arePointsEqual(a: { lat: number; lng: number }, b: { lat: number; lng: number }): boolean {
@@ -179,6 +218,61 @@ function spreadDuplicateCompanyPoints(companies: Company[]): Array<{ company: Co
   return markers;
 }
 
+function normalizeInfoText(raw: string): string {
+  return String(raw || "")
+    .replace(/<[^>]*>/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function truncateInfoText(raw: string, maxLen: number): string {
+  const text = normalizeInfoText(raw);
+  if (!text) return "";
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen - 1).trimEnd()}…`;
+}
+
+function dedupeNonEmptyTexts(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const normalized = normalizeInfoText(value);
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(normalized);
+  }
+  return out;
+}
+
+function extractCompanyProfileTags(company: Company): string[] {
+  const rubricTags = (company.rubrics || []).map((rubric) => String(rubric?.name || ""));
+  const categoryTags = (company.categories || []).map((category) => String(category?.name || ""));
+  return dedupeNonEmptyTexts([...rubricTags, ...categoryTags]);
+}
+
+function buildCompanyInfoLines(company: Company, fallback: string): { profile: string; details: string } {
+  const tags = extractCompanyProfileTags(company);
+  const description = truncateInfoText(company.description || "", 150);
+
+  const profileSource = tags.slice(0, 2).join(" · ");
+  const profile = truncateInfoText(profileSource || description || fallback, 80) || fallback;
+
+  const detailCandidates = dedupeNonEmptyTexts([
+    description,
+    tags.slice(2, 4).join(" · "),
+    tags[1] || "",
+    tags[0] || "",
+  ]);
+  const details = truncateInfoText(
+    detailCandidates.find((candidate) => candidate.toLowerCase() !== profile.toLowerCase()) || fallback,
+    110,
+  ) || fallback;
+
+  return { profile, details };
+}
+
 function CompanyListLogo(props: { companyId: string; logoUrl: string; alt: string }) {
   const { companyId, logoUrl, alt } = props;
   const [failed, setFailed] = useState(false);
@@ -204,7 +298,10 @@ function CompanyMap({
   userLocation, 
   searchCenter,
   searchCenterLabel,
+  searchBounds = null,
+  searchDistrictName = null,
   searchQuery = "", 
+  searchEnabled = true,
   radius, 
   onRadiusChange,
   onLoadingChange,
@@ -220,6 +317,7 @@ function CompanyMap({
         resolvingAddress: "Resolving address...",
         youAreHere: "You are here",
         fromYou: "from you",
+        straightLine: "as-the-crow-flies",
         distancePending: "Distance is being determined",
         phone: "Phone",
         openCard: "Open company card",
@@ -232,15 +330,21 @@ function CompanyMap({
         secondsShort: "sec",
         found: "Found",
         companies: "companies",
+        searchNotStarted: "Enter a query or tap Search to show nearby companies",
         refresh: "Refresh",
         searchCenter: "Search center",
         drive: "Drive",
         walk: "Walk",
         scrollMore: "Scroll down to show {count} more companies",
+        scrollLoadMoreServer: "Scroll down to load {count} more companies",
+        loadingMore: "Loading more companies...",
         andMore: "...and {count} more companies",
         shown: "Shown",
         of: "of",
         loaded: "loaded",
+        profileLabel: "Profile",
+        detailsLabel: "What they do",
+        infoFallback: "information is being updated",
       }
     : language === "be"
       ? {
@@ -252,6 +356,7 @@ function CompanyMap({
           resolvingAddress: "Вызначаем адрас...",
           youAreHere: "Вы тут",
           fromYou: "ад вас",
+          straightLine: "па прамой",
           distancePending: "Адлегласць удакладняецца",
           phone: "Тэлефон",
           openCard: "Адкрыць картку",
@@ -264,15 +369,21 @@ function CompanyMap({
           secondsShort: "с",
           found: "Знойдзена",
           companies: "кампаній",
+          searchNotStarted: "Увядзіце запыт або націсніце «Знайсці», каб паказаць бліжэйшыя кампаніі",
           refresh: "Абнавіць",
           searchCenter: "Цэнтр пошуку",
           drive: "Ехаць",
           walk: "Ісці",
           scrollMore: "Пракруціце ніжэй, каб паказаць яшчэ {count} кампаній",
+          scrollLoadMoreServer: "Пракруціце ніжэй, каб загрузіць яшчэ {count} кампаній",
+          loadingMore: "Загружаем яшчэ кампаніі...",
           andMore: "...і яшчэ {count} кампаній",
           shown: "Паказана",
           of: "з",
           loaded: "загружана",
+          profileLabel: "Профіль",
+          detailsLabel: "Чым займаюцца",
+          infoFallback: "інфармацыя ўдакладняецца",
         }
       : language === "zh"
         ? {
@@ -284,6 +395,7 @@ function CompanyMap({
             resolvingAddress: "正在解析地址...",
             youAreHere: "您在这里",
             fromYou: "距您",
+            straightLine: "直线",
             distancePending: "距离计算中",
             phone: "电话",
             openCard: "打开公司卡片",
@@ -296,15 +408,21 @@ function CompanyMap({
             secondsShort: "秒",
             found: "找到",
             companies: "家公司",
+            searchNotStarted: "请输入查询，或直接点击搜索以显示附近公司",
             refresh: "刷新",
             searchCenter: "搜索中心",
             drive: "驾车",
             walk: "步行",
             scrollMore: "向下滚动以显示另外 {count} 家公司",
+            scrollLoadMoreServer: "向下滚动以加载另外 {count} 家公司",
+            loadingMore: "正在加载更多公司...",
             andMore: "...还有 {count} 家公司",
             shown: "已显示",
             of: "/",
             loaded: "已加载",
+            profileLabel: "业务方向",
+            detailsLabel: "公司服务",
+            infoFallback: "信息补充中",
           }
         : {
             decimalComma: true,
@@ -315,6 +433,7 @@ function CompanyMap({
             resolvingAddress: "Определяем адрес...",
             youAreHere: "Вы здесь",
             fromYou: "от вас",
+            straightLine: "по прямой",
             distancePending: "Расстояние уточняется",
             phone: "Телефон",
             openCard: "Открыть карточку",
@@ -327,36 +446,53 @@ function CompanyMap({
             secondsShort: "с",
             found: "Найдено",
             companies: "компаний",
+            searchNotStarted: "Введите запрос или нажмите «Найти», чтобы показать компании рядом",
             refresh: "Обновить",
             searchCenter: "Центр поиска",
             drive: "Ехать",
             walk: "Идти",
             scrollMore: "Прокрутите ниже, чтобы показать ещё {count} компаний",
+            scrollLoadMoreServer: "Прокрутите ниже, чтобы загрузить ещё {count} компаний",
+            loadingMore: "Загружаем ещё компании...",
             andMore: "...и ещё {count} компаний",
             shown: "Показано",
             of: "из",
             loaded: "загружено",
+            profileLabel: "Профиль",
+            detailsLabel: "Чем занимается",
+            infoFallback: "информация уточняется",
           }), [language]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [totalCompanies, setTotalCompanies] = useState(0);
   const [loading, setLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [visibleCompanyCount, setVisibleCompanyCount] = useState(INITIAL_VISIBLE_COMPANIES);
+  const [serverOffset, setServerOffset] = useState(0);
+  const [serverHasMore, setServerHasMore] = useState(false);
+  const [loadingMoreFromServer, setLoadingMoreFromServer] = useState(false);
   const [userAddress, setUserAddress] = useState<string | null>(null);
   const [loadingUserAddress, setLoadingUserAddress] = useState(false);
   const [customRadiusKm, setCustomRadiusKm] = useState(() => formatRadiusInputValue(radius));
+  const [radiusControlsInteracted, setRadiusControlsInteracted] = useState(() => radius !== DEFAULT_RADIUS_METERS);
   const [averageSearchMs, setAverageSearchMs] = useState(3000);
   const [elapsedSearchMs, setElapsedSearchMs] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
+  const loadMoreAbortRef = useRef<AbortController | null>(null);
   const requestSeqRef = useRef(0);
   const searchStartedAtRef = useRef<number | null>(null);
+  const mapRef = useRef<any>(null);
 
   const fetchNearbyCompanies = useCallback(async () => {
+    if (!searchEnabled) return;
     const requestSeq = requestSeqRef.current + 1;
     requestSeqRef.current = requestSeq;
 
     if (abortRef.current) {
       abortRef.current.abort();
+    }
+    if (loadMoreAbortRef.current) {
+      loadMoreAbortRef.current.abort();
+      loadMoreAbortRef.current = null;
     }
 
     const controller = new AbortController();
@@ -371,9 +507,17 @@ function CompanyMap({
     setLoading(true);
     onLoadingChange?.(true);
     setSearchError(null);
+    setLoadingMoreFromServer(false);
+    setServerOffset(0);
+    setServerHasMore(false);
 
     try {
-      const url = `/api/biznesinfo/nearby?lat=${encodeURIComponent(String(searchCenter.lat))}&lng=${encodeURIComponent(String(searchCenter.lng))}&radius=${radius}&q=${encodeURIComponent(searchQuery)}&limit=${MAP_FETCH_LIMIT}`;
+      const boundsQuery = buildNearbyBoundsQuery(searchBounds);
+      const districtQuery = searchDistrictName
+        ? `&district=${encodeURIComponent(searchDistrictName)}`
+        : "";
+      const userDistanceQuery = `&user_lat=${encodeURIComponent(String(userLocation.lat))}&user_lng=${encodeURIComponent(String(userLocation.lng))}`;
+      const url = `/api/biznesinfo/nearby?lat=${encodeURIComponent(String(searchCenter.lat))}&lng=${encodeURIComponent(String(searchCenter.lng))}&radius=${radius}&q=${encodeURIComponent(searchQuery)}&offset=0&limit=${MAP_FETCH_INITIAL_LIMIT}${boundsQuery}${districtQuery}${userDistanceQuery}`;
       const res = await fetch(url, { signal: controller.signal, cache: "no-store" });
       if (!res.ok) {
         throw new Error(`nearby_status:${res.status}`);
@@ -381,16 +525,18 @@ function CompanyMap({
       const data = await res.json();
       if (requestSeq !== requestSeqRef.current) return;
 
-      const nextCompanies = (data.companies || [])
-        .slice()
-        .sort((a: Company, b: Company) => {
-          const distanceDiff = sortableDistanceValue(a.distance) - sortableDistanceValue(b.distance);
-          if (distanceDiff !== 0) return distanceDiff;
-          return (a.name || "").localeCompare(b.name || "", "ru");
-        });
+      const nextCompanies = (data.companies || []).slice().sort(compareCompaniesByDistanceAndName);
+      const offsetBase = Number.isFinite(data?.offset) ? Math.max(0, Number(data.offset)) : 0;
+      const responseLimit = Number.isFinite(data?.limit) && Number(data.limit) > 0
+        ? Number(data.limit)
+        : MAP_FETCH_INITIAL_LIMIT;
+      const nextOffset = offsetBase + responseLimit;
+      const responseTotal = Number.isFinite(data?.total) ? Number(data.total) : nextCompanies.length;
       setCompanies(nextCompanies);
-      setTotalCompanies(typeof data.total === "number" ? data.total : nextCompanies.length);
+      setTotalCompanies(Math.max(responseTotal, nextCompanies.length));
       setVisibleCompanyCount(INITIAL_VISIBLE_COMPANIES);
+      setServerOffset(nextOffset);
+      setServerHasMore(nextOffset < responseTotal && nextCompanies.length > 0);
       setSearchError(null);
     } catch (error) {
       if ((error as Error)?.name === "AbortError") {
@@ -398,6 +544,8 @@ function CompanyMap({
           setCompanies([]);
           setTotalCompanies(0);
           setVisibleCompanyCount(INITIAL_VISIBLE_COMPANIES);
+          setServerOffset(0);
+          setServerHasMore(false);
           setSearchError(mapText.searchTimeout);
         }
         return;
@@ -407,6 +555,8 @@ function CompanyMap({
         setCompanies([]);
         setTotalCompanies(0);
         setVisibleCompanyCount(INITIAL_VISIBLE_COMPANIES);
+        setServerOffset(0);
+        setServerHasMore(false);
         setSearchError(mapText.searchError);
       }
     } finally {
@@ -426,11 +576,27 @@ function CompanyMap({
         onLoadingChange?.(false);
       }
     }
-  }, [searchCenter, radius, searchQuery, mapText.searchError, mapText.searchTimeout, onLoadingChange]);
+  }, [searchEnabled, searchCenter, searchBounds, searchDistrictName, radius, searchQuery, mapText.searchError, mapText.searchTimeout, onLoadingChange]);
 
   useEffect(() => {
+    if (!searchEnabled) {
+      abortRef.current?.abort();
+      loadMoreAbortRef.current?.abort();
+      searchStartedAtRef.current = null;
+      setCompanies([]);
+      setTotalCompanies(0);
+      setVisibleCompanyCount(INITIAL_VISIBLE_COMPANIES);
+      setServerOffset(0);
+      setServerHasMore(false);
+      setLoadingMoreFromServer(false);
+      setSearchError(null);
+      setLoading(false);
+      setElapsedSearchMs(0);
+      onLoadingChange?.(false);
+      return;
+    }
     fetchNearbyCompanies();
-  }, [fetchNearbyCompanies]);
+  }, [searchEnabled, fetchNearbyCompanies, onLoadingChange]);
 
   useEffect(() => {
     if (!loading) return;
@@ -447,14 +613,106 @@ function CompanyMap({
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
+      loadMoreAbortRef.current?.abort();
       searchStartedAtRef.current = null;
       onLoadingChange?.(false);
     };
   }, [onLoadingChange]);
 
+  const fetchMoreNearbyCompanies = useCallback(async () => {
+    if (!searchEnabled) return;
+    if (loading || loadingMoreFromServer) return;
+    if (!serverHasMore) return;
+    if (loadMoreAbortRef.current) {
+      loadMoreAbortRef.current.abort();
+    }
+
+    const requestSeq = requestSeqRef.current;
+    const offset = Math.max(0, serverOffset);
+    const controller = new AbortController();
+    loadMoreAbortRef.current = controller;
+    setLoadingMoreFromServer(true);
+
+    try {
+      const boundsQuery = buildNearbyBoundsQuery(searchBounds);
+      const districtQuery = searchDistrictName
+        ? `&district=${encodeURIComponent(searchDistrictName)}`
+        : "";
+      const userDistanceQuery = `&user_lat=${encodeURIComponent(String(userLocation.lat))}&user_lng=${encodeURIComponent(String(userLocation.lng))}`;
+      const url = `/api/biznesinfo/nearby?lat=${encodeURIComponent(String(searchCenter.lat))}&lng=${encodeURIComponent(String(searchCenter.lng))}&radius=${radius}&q=${encodeURIComponent(searchQuery)}&offset=${offset}&limit=${MAP_FETCH_NEXT_LIMIT}${boundsQuery}${districtQuery}${userDistanceQuery}`;
+      const res = await fetch(url, { signal: controller.signal, cache: "no-store" });
+      if (!res.ok) {
+        throw new Error(`nearby_status:${res.status}`);
+      }
+      const data = await res.json();
+      if (requestSeq !== requestSeqRef.current) return;
+
+      const incomingCompanies = (data.companies || []).slice().sort(compareCompaniesByDistanceAndName);
+      setCompanies((prev) => {
+        if (incomingCompanies.length === 0) return prev;
+        const byId = new Map<string, Company>();
+        for (const company of prev) byId.set(company.id, company);
+        for (const company of incomingCompanies) byId.set(company.id, company);
+        return Array.from(byId.values()).sort(compareCompaniesByDistanceAndName);
+      });
+      if (incomingCompanies.length > 0) {
+        setVisibleCompanyCount((prev) => prev + Math.min(COMPANY_LIST_LOAD_STEP, incomingCompanies.length));
+      }
+
+      const offsetBase = Number.isFinite(data?.offset) ? Math.max(0, Number(data.offset)) : offset;
+      const responseLimit = Number.isFinite(data?.limit) && Number(data.limit) > 0
+        ? Number(data.limit)
+        : MAP_FETCH_NEXT_LIMIT;
+      const nextOffset = offsetBase + responseLimit;
+      const responseTotal = Number.isFinite(data?.total) ? Number(data.total) : totalCompanies;
+      setServerOffset(nextOffset);
+      setServerHasMore(incomingCompanies.length > 0 && nextOffset < responseTotal);
+      setTotalCompanies((prev) => {
+        const fallbackTotal = Number.isFinite(responseTotal) ? responseTotal : prev;
+        return Math.max(fallbackTotal, prev, incomingCompanies.length > 0 ? nextOffset : 0);
+      });
+    } catch (error) {
+      if ((error as Error)?.name === "AbortError") return;
+      console.error("Failed to fetch more nearby companies:", error);
+      if (requestSeq === requestSeqRef.current) {
+        setSearchError(mapText.searchError);
+      }
+    } finally {
+      if (loadMoreAbortRef.current === controller) {
+        loadMoreAbortRef.current = null;
+      }
+      if (requestSeq === requestSeqRef.current) {
+        setLoadingMoreFromServer(false);
+      }
+    }
+  }, [
+    searchEnabled,
+    loading,
+    loadingMoreFromServer,
+    totalCompanies,
+    serverOffset,
+    serverHasMore,
+    searchCenter.lat,
+    searchCenter.lng,
+    searchBounds,
+    searchDistrictName,
+    userLocation.lat,
+    userLocation.lng,
+    radius,
+    searchQuery,
+    mapText.searchError,
+  ]);
+
   useEffect(() => {
     setCustomRadiusKm(formatRadiusInputValue(radius));
   }, [radius]);
+
+  useEffect(() => {
+    if (radiusControlsInteracted) return;
+    if (radius !== DEFAULT_RADIUS_METERS) {
+      setRadiusControlsInteracted(true);
+    }
+  }, [radius, radiusControlsInteracted]);
 
   useEffect(() => {
     let isActive = true;
@@ -501,14 +759,24 @@ function CompanyMap({
 
   const placemarkCompanies = useMemo(() => spreadDuplicateCompanyPoints(companies), [companies]);
   const isPresetRadius = useMemo(() => RADIUS_OPTIONS.some((opt) => opt === radius), [radius]);
-  const effectiveTotalCompanies = Math.max(totalCompanies, companies.length);
+  const pendingCustomRadiusMeters = useMemo(() => {
+    const parsedKm = parseRadiusKmInput(customRadiusKm);
+    if (!parsedKm) return null;
+    return toClampedRadiusMeters(parsedKm);
+  }, [customRadiusKm]);
+  const hasPendingCustomRadius = pendingCustomRadiusMeters !== null && pendingCustomRadiusMeters !== radius;
+  const hasServerUnloadedRemainder = serverHasMore;
+  const effectiveTotalCompanies = hasServerUnloadedRemainder
+    ? Math.max(totalCompanies, companies.length)
+    : companies.length;
   const shownCompanyCount = Math.min(visibleCompanyCount, companies.length);
   const visibleCompanies = companies.slice(0, shownCompanyCount);
   const hiddenTotalCount = Math.max(effectiveTotalCompanies - shownCompanyCount, 0);
   const hiddenLoadedCount = Math.max(companies.length - shownCompanyCount, 0);
   const hasMoreLoadedCompanies = hiddenLoadedCount > 0;
   const nextLoadBatchCount = Math.min(COMPANY_LIST_LOAD_STEP, hiddenLoadedCount);
-  const hasServerUnloadedRemainder = effectiveTotalCompanies > companies.length;
+  const nextServerLoadCount = Math.max(1, Math.min(MAP_FETCH_NEXT_LIMIT, Math.max(effectiveTotalCompanies - serverOffset, 0)));
+  const displayTotalCompanies = hasServerUnloadedRemainder ? effectiveTotalCompanies : companies.length;
   const userCoordinatesText = useMemo(
     () => `${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}`,
     [userLocation.lat, userLocation.lng],
@@ -534,6 +802,7 @@ function CompanyMap({
     </div>
   `;
   const userHintText = userAddress ? `${mapText.youAreHere}: ${userAddress}` : mapText.youAreHere;
+  const isDistrictMode = Boolean((searchDistrictName || "").trim());
 
   const getPlacemarkPreset = (distance: number) => {
     if (distance < 1000) return "islands#redDotIcon";
@@ -545,12 +814,15 @@ function CompanyMap({
     const phone = escapeHtml(company.phones?.[0] || "");
     const name = escapeHtml(company.name || "");
     const address = escapeHtml(company.address || "");
-    const distanceText = Number.isFinite(company.distance)
-      ? `${formatDistanceKm(company.distance, { unit: mapText.kmUnit, decimalComma: mapText.decimalComma })} ${mapText.fromYou}`
-      : mapText.distancePending;
+    const infoLines = buildCompanyInfoLines(company, mapText.infoFallback);
+    const distanceText = !isDistrictMode && Number.isFinite(company.distance)
+      ? `${formatDistanceKm(company.distance, { unit: mapText.kmUnit, decimalComma: mapText.decimalComma })} ${mapText.fromYou} (${mapText.straightLine})`
+      : "";
 
     const bodyLines = [
       address,
+      `${mapText.profileLabel}: ${escapeHtml(infoLines.profile)}`,
+      `${mapText.detailsLabel}: ${escapeHtml(infoLines.details)}`,
       phone ? `${mapText.phone}: ${phone}` : "",
       distanceText,
     ].filter(Boolean);
@@ -598,22 +870,36 @@ function CompanyMap({
       return;
     }
 
-    const clampedKm = Math.min(MAX_CUSTOM_RADIUS_KM, Math.max(MIN_CUSTOM_RADIUS_KM, parsedKm));
-    const meters = Math.round(clampedKm * 1000);
+    const meters = toClampedRadiusMeters(parsedKm);
     setCustomRadiusKm(formatRadiusInputValue(meters));
+    setRadiusControlsInteracted(true);
     onRadiusChange(meters);
   }, [customRadiusKm, onRadiusChange, radius]);
 
   const handleListScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {
-      if (!hasMoreLoadedCompanies) return;
       const el = event.currentTarget;
       const distanceToBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
       if (distanceToBottom > 48) return;
-      setVisibleCompanyCount((prev) => Math.min(companies.length, prev + COMPANY_LIST_LOAD_STEP));
+      if (hasMoreLoadedCompanies) {
+        setVisibleCompanyCount((prev) => Math.min(companies.length, prev + COMPANY_LIST_LOAD_STEP));
+        return;
+      }
+      if (hasServerUnloadedRemainder && !loadingMoreFromServer && !loading) {
+        void fetchMoreNearbyCompanies();
+      }
     },
-    [companies.length, hasMoreLoadedCompanies],
+    [companies.length, hasMoreLoadedCompanies, hasServerUnloadedRemainder, loadingMoreFromServer, loading, fetchMoreNearbyCompanies],
   );
+  const setMapInstance = useCallback((instance: any) => {
+    mapRef.current = instance || null;
+  }, []);
+  const centerOnUserLocation = useCallback(() => {
+    const mapInstance = mapRef.current;
+    if (!mapInstance) return;
+    const currentZoom = Number.isFinite(mapInstance.getZoom?.()) ? Number(mapInstance.getZoom()) : 11;
+    mapInstance.setCenter([userLocation.lat, userLocation.lng], currentZoom, { duration: 250 });
+  }, [userLocation.lat, userLocation.lng]);
   const averageSearchSeconds = Math.max(1, Math.round(averageSearchMs / 1000));
   const elapsedSearchSeconds = Math.max(1, Math.ceil(elapsedSearchMs / 1000));
 
@@ -625,11 +911,18 @@ function CompanyMap({
         {RADIUS_OPTIONS.map((opt) => (
           <button
             key={opt}
-            onClick={() => onRadiusChange?.(opt)}
+            disabled={isDistrictMode}
+            onClick={() => {
+              if (isDistrictMode) return;
+              setRadiusControlsInteracted(true);
+              onRadiusChange?.(opt);
+            }}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              radius === opt
-                ? "bg-[#820251] text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              isDistrictMode
+                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                : radiusControlsInteracted && radius === opt
+                  ? "bg-[#820251] text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
             }`}
           >
             {`${Math.round(opt / 1000)} ${mapText.kmUnit}`}
@@ -637,13 +930,18 @@ function CompanyMap({
         ))}
         <div
           className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 ${
-            isPresetRadius ? "border-gray-300 bg-white" : "border-[#820251]/40 bg-[#820251]/5"
+            isDistrictMode
+              ? "border-gray-200 bg-gray-50"
+              : radiusControlsInteracted && !isPresetRadius
+                ? "border-[#820251]/40 bg-[#820251]/5"
+                : "border-gray-300 bg-white"
           }`}
         >
           <input
             type="text"
             inputMode="decimal"
             value={customRadiusKm}
+            disabled={isDistrictMode}
             onChange={(e) => setCustomRadiusKm(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -652,14 +950,21 @@ function CompanyMap({
               }
             }}
             placeholder={mapText.customPlaceholder}
-            className="w-14 border-0 bg-transparent text-sm text-gray-800 focus:outline-none"
+            className={`w-14 border-0 bg-transparent text-sm focus:outline-none ${
+              isDistrictMode ? "text-gray-400" : "text-gray-800"
+            }`}
             aria-label={mapText.customAria}
           />
-          <span className="text-xs text-gray-500">{mapText.kmUnit}</span>
+          <span className={`text-xs ${isDistrictMode ? "text-gray-400" : "text-gray-500"}`}>{mapText.kmUnit}</span>
           <button
             type="button"
+            disabled={isDistrictMode || !hasPendingCustomRadius}
             onClick={applyCustomRadius}
-            className="rounded bg-[#820251] px-2 py-0.5 text-xs font-medium text-white hover:bg-[#700246]"
+            className={`rounded px-2 py-0.5 text-xs font-medium ${
+              isDistrictMode || !hasPendingCustomRadius
+                ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                : "bg-[#820251] text-white hover:bg-[#700246]"
+            }`}
           >
             OK
           </button>
@@ -670,7 +975,11 @@ function CompanyMap({
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex flex-col">
           <span className="text-[18px] leading-6 font-bold text-[#820251]">
-            {loading ? mapText.searching : `${mapText.found}: ${totalCompanies} ${mapText.companies}`}
+            {loading
+              ? mapText.searching
+              : searchEnabled
+                ? `${mapText.found}: ${displayTotalCompanies} ${mapText.companies}`
+                : mapText.searchNotStarted}
           </span>
           {loading && (
             <span className="text-xs text-[#820251]/80">
@@ -682,8 +991,8 @@ function CompanyMap({
         </div>
         <button
           onClick={fetchNearbyCompanies}
-          className="text-sm text-[#820251] hover:underline"
-          disabled={loading}
+          className={`text-sm ${searchEnabled && !loading ? "text-[#820251] hover:underline" : "text-gray-400 cursor-not-allowed"}`}
+          disabled={loading || !searchEnabled}
         >
           🔄 {mapText.refresh}
         </button>
@@ -696,17 +1005,23 @@ function CompanyMap({
 
       {/* Map */}
       <div className="relative rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-        <div className="pointer-events-none absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-[#d60032] shadow">
+        <button
+          type="button"
+          onClick={centerOnUserLocation}
+          className="absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-[#d60032] shadow transition hover:bg-white"
+          title={mapText.youAreHere}
+        >
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="16" viewBox="0 0 38 52" aria-hidden="true">
             <path d="M19 2C10.2 2 3 9.2 3 18c0 12.1 13 27.5 16 31.8C22 45.5 35 30.1 35 18 35 9.2 27.8 2 19 2z" fill="#FF1744" />
             <circle cx="19" cy="18" r="7" fill="#ffffff" />
             <circle cx="19" cy="18" r="3.3" fill="#FF1744" />
           </svg>
           <span>{mapText.youAreHere}</span>
-        </div>
+        </button>
         <YMaps query={{ apikey: process.env.NEXT_PUBLIC_YANDEX_MAPS_API_KEY || "" }}>
           <YandexMap
             key={mapCenterKey}
+            instanceRef={setMapInstance}
             defaultState={{
               center: [searchCenter.lat, searchCenter.lng],
               zoom: 11,
@@ -719,19 +1034,22 @@ function CompanyMap({
             height="450px"
           >
             {/* User location circle */}
-            <Circle
-              geometry={[[searchCenter.lat, searchCenter.lng], radius]}
-              options={{
-                fillColor: "#82025120",
-                strokeColor: "#820251",
-                strokeWidth: 2,
-                strokeOpacity: 0.8,
-              }}
-            />
+            {!isDistrictMode && (
+              <Circle
+                geometry={[[searchCenter.lat, searchCenter.lng], radius]}
+                options={{
+                  fillColor: "#82025120",
+                  strokeColor: "#820251",
+                  strokeWidth: 2,
+                  strokeOpacity: 0.8,
+                }}
+              />
+            )}
 
             {/* User location placemark */}
             <Placemark
               geometry={[userLocation.lat, userLocation.lng]}
+              onClick={centerOnUserLocation}
               modules={["geoObject.addon.hint", "geoObject.addon.balloon"]}
               properties={{
                 hintContent: userHintText,
@@ -790,67 +1108,87 @@ function CompanyMap({
 
       {/* Company list below map */}
       <div className="mt-4 space-y-2 max-h-64 overflow-y-auto" onScroll={handleListScroll}>
-        {visibleCompanies.map((company) => (
-          <div
-            key={company.id}
-            className="p-3 rounded-lg border border-gray-100 hover:border-[#820251]/30 hover:bg-gray-50 transition-colors"
-          >
-            <a href={`/company/${company.id}`} className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                <CompanyListLogo companyId={company.id} logoUrl={company.logo_url} alt={company.name} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-gray-900 truncate">{company.name}</div>
-                <div className="text-sm text-gray-500 truncate">{company.address}</div>
-              </div>
-              <div className="text-sm text-[#820251] font-medium whitespace-nowrap">
-                {Number.isFinite(company.distance) ? formatDistanceKm(company.distance, { unit: mapText.kmUnit, decimalComma: mapText.decimalComma }) : "—"}
-              </div>
-            </a>
+        {visibleCompanies.map((company) => {
+          const infoLines = buildCompanyInfoLines(company, mapText.infoFallback);
+          return (
+            <div
+              key={company.id}
+              className="p-3 rounded-lg border border-gray-100 hover:border-[#820251]/30 hover:bg-gray-50 transition-colors"
+            >
+              <a href={`/company/${company.id}`} className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <CompanyListLogo companyId={company.id} logoUrl={company.logo_url} alt={company.name} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900 truncate">{company.name}</div>
+                  <div className="text-sm text-gray-500 truncate">{company.address}</div>
+                  <div className="mt-1 space-y-0.5">
+                    <div className="text-xs text-gray-600 leading-tight line-clamp-1">
+                      <span className="font-medium text-gray-700">{mapText.profileLabel}:</span> {infoLines.profile}
+                    </div>
+                    <div className="text-xs text-gray-500 leading-tight line-clamp-1">
+                      <span className="font-medium text-gray-700">{mapText.detailsLabel}:</span> {infoLines.details}
+                    </div>
+                  </div>
+                </div>
+                <div className="self-start text-right">
+                  <div className="text-sm text-[#820251] font-medium whitespace-nowrap">
+                    {Number.isFinite(company.distance) ? formatDistanceKm(company.distance, { unit: mapText.kmUnit, decimalComma: mapText.decimalComma }) : "—"}
+                  </div>
+                  {Number.isFinite(company.distance) && (
+                    <div className="text-[11px] leading-tight text-gray-400">{mapText.straightLine}</div>
+                  )}
+                </div>
+              </a>
 
-            {Number.isFinite(company._geo?.lat) && Number.isFinite(company._geo?.lng) && (
-              <div className="mt-2 flex flex-wrap items-center gap-2 pl-13">
-                <a
-                  href={buildYandexRouteUrl(
-                    userLocation,
-                    { lat: company._geo!.lat, lng: company._geo!.lng },
-                    "drive",
-                  )}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 rounded-md bg-[#820251] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#700246]"
-                >
-                  🚗 {mapText.drive}
-                </a>
-                <a
-                  href={buildYandexRouteUrl(
-                    userLocation,
-                    { lat: company._geo!.lat, lng: company._geo!.lng },
-                    "walk",
-                  )}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 rounded-md border border-[#820251]/40 bg-white px-3 py-1.5 text-xs font-semibold text-[#820251] hover:bg-[#820251]/5"
-                >
-                  🚶 {mapText.walk}
-                </a>
-              </div>
-            )}
-          </div>
-        ))}
+              {Number.isFinite(company._geo?.lat) && Number.isFinite(company._geo?.lng) && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 pl-13">
+                  <a
+                    href={buildYandexRouteUrl(
+                      userLocation,
+                      { lat: company._geo!.lat, lng: company._geo!.lng },
+                      "drive",
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md bg-[#820251] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#700246]"
+                  >
+                    🚗 {mapText.drive}
+                  </a>
+                  <a
+                    href={buildYandexRouteUrl(
+                      userLocation,
+                      { lat: company._geo!.lat, lng: company._geo!.lng },
+                      "walk",
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md border border-[#820251]/40 bg-white px-3 py-1.5 text-xs font-semibold text-[#820251] hover:bg-[#820251]/5"
+                  >
+                    🚶 {mapText.walk}
+                  </a>
+                </div>
+              )}
+            </div>
+          );
+        })}
         {hiddenTotalCount > 0 && (
           <div className="text-center py-2">
             <div className="text-sm text-gray-500">
               {hasMoreLoadedCompanies
                 ? mapText.scrollMore.replace("{count}", String(nextLoadBatchCount))
+                : hasServerUnloadedRemainder
+                  ? (loadingMoreFromServer
+                    ? mapText.loadingMore
+                    : mapText.scrollLoadMoreServer.replace("{count}", String(nextServerLoadCount)))
                 : mapText.andMore.replace("{count}", String(hiddenTotalCount))}
-            </div>
-            <div className="mt-1 text-xs text-gray-400">
-              {mapText.shown} {shownCompanyCount} {mapText.of} {effectiveTotalCompanies}
-              {hasServerUnloadedRemainder ? ` (${mapText.loaded} ${companies.length})` : ""}
             </div>
           </div>
         )}
+      </div>
+      <div className="mt-2 text-center text-xs text-gray-400">
+        {mapText.shown} {shownCompanyCount} {mapText.of} {effectiveTotalCompanies}
+        {hasServerUnloadedRemainder ? ` (${mapText.loaded} ${companies.length})` : ""}
       </div>
     </div>
   );

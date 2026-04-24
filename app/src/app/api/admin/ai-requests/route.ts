@@ -48,7 +48,7 @@ function getProviderStatus() {
   const openaiModel = (process.env.OPENAI_MODEL || "").trim() || "gpt-4o-mini";
   const openaiBaseUrl = (process.env.OPENAI_BASE_URL || "").trim() || "https://api.openai.com/v1";
   const hasOpenaiKey = Boolean((process.env.OPENAI_API_KEY || "").trim());
-  const codexModel = (process.env.CODEX_MODEL || "").trim() || "gpt-5.2-codex";
+  const codexModel = (process.env.CODEX_MODEL || "").trim() || "gpt-5.4";
   const codexBaseUrl = (process.env.CODEX_BASE_URL || "").trim() || "https://chatgpt.com/backend-api/codex";
   const hasCodexAuthPath = Boolean((process.env.CODEX_AUTH_JSON_PATH || "").trim());
 

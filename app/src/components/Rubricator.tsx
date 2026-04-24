@@ -81,7 +81,7 @@ export default function Rubricator({ floating = true, inline = false }: Rubricat
   // Inline mode - renders as a card in the search form
   if (inline) {
     return (
-      <div className="mt-3">
+      <div className="w-full">
         {/* Rubricator toggle button */}
         <button
           type="button"

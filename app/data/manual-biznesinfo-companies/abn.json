@@ -1,0 +1,83 @@
+{
+  "source": "biznesinfo",
+  "source_id": "abn",
+  "source_url": "/company/abn",
+  "name": "ООО \"ЭйБиЭн\"",
+  "unp": "191540196",
+  "country": "BY",
+  "region": "",
+  "city": "Минск",
+  "address": "220053, Минск, Стадионная, 9",
+  "phones": [
+    "+375 (17) 310 44 44",
+    "+375 (44) 592 00 86",
+    "+375 (33) 366 51 85"
+  ],
+  "phones_ext": [
+    {
+      "number": "+375 (17) 310 44 44",
+      "labels": [
+        "тел."
+      ]
+    },
+    {
+      "number": "+375 (44) 592 00 86",
+      "labels": [
+        "тел."
+      ]
+    },
+    {
+      "number": "+375 (33) 366 51 85",
+      "labels": [
+        "тел."
+      ]
+    }
+  ],
+  "emails": [
+    "info@abn.by"
+  ],
+  "websites": [
+    "http://abn.by"
+  ],
+  "description": "Поставщики электротехнического оборудования в области промышленной автоматизации и электроники на территории РБ. Промышленные контроллеры. Сетевое оборудование. Датчики. Силовые разъемы. Климат-контроль.",
+  "about": "",
+  "contact_person": "Имя (Должность)",
+  "logo_url": "/images/logo/131822.gif",
+  "work_hours": {
+    "work_time": "09:00 - 18:00",
+    "break_time": "без обеда",
+    "status": "Закрыто"
+  },
+  "categories": [
+    {
+      "slug": "it-internet-i-orgtehnika",
+      "name": "IT, интернет и оргтехника",
+      "url": "/catalog/it-internet-i-orgtehnika"
+    },
+    {
+      "slug": "mashinostroenie-i-oborudovanie",
+      "name": "Машиностроение и оборудование",
+      "url": "/catalog/mashinostroenie-i-oborudovanie"
+    }
+  ],
+  "rubrics": [
+    {
+      "slug": "it-internet-i-orgtehnika/setevoe-oborudovanie",
+      "name": "Сетевое оборудование",
+      "url": "/catalog/it-internet-i-orgtehnika/setevoe-oborudovanie",
+      "category_slug": "it-internet-i-orgtehnika",
+      "category_name": "IT, интернет и оргтехника"
+    },
+    {
+      "slug": "mashinostroenie-i-oborudovanie/elektrotehnicheskaya-produkciya-oborudovanie",
+      "name": "Электротехническая продукция",
+      "url": "/catalog/mashinostroenie-i-oborudovanie/elektrotehnicheskaya-produkciya-oborudovanie",
+      "category_slug": "mashinostroenie-i-oborudovanie",
+      "category_name": "Машиностроение и оборудование"
+    }
+  ],
+  "extra": {
+    "lat": 53.937361,
+    "lng": 27.537559
+  }
+}

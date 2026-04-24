@@ -9,32 +9,33 @@ import SearchBar from "@/components/SearchBar";
 import ServicesBlock from "@/components/ServicesBlock";
 import NewsBlock from "@/components/NewsBlock";
 import { useLanguage } from "@/contexts/LanguageContext";
-import type { BiznesinfoCatalogResponse } from "@/lib/biznesinfo/types";
+import type { BiznesinfoCatalogStats } from "@/lib/biznesinfo/types";
 
-export default function HomePageClient({ initialCatalog }: { initialCatalog: BiznesinfoCatalogResponse | null }) {
+export default function HomePageClient({ initialStats }: { initialStats: BiznesinfoCatalogStats | null }) {
   const { t } = useLanguage();
   const router = useRouter();
-  const [catalog, setCatalog] = useState<BiznesinfoCatalogResponse | null>(initialCatalog);
+  const [stats, setStats] = useState<BiznesinfoCatalogStats | null>(initialStats);
+  const [shareState, setShareState] = useState<"idle" | "copied" | "error">("idle");
 
   useEffect(() => {
-    setCatalog(initialCatalog);
-  }, [initialCatalog]);
+    setStats(initialStats);
+  }, [initialStats]);
 
   useEffect(() => {
-    if (typeof catalog?.stats?.companies_total === "number") return;
+    if (typeof stats?.companies_total === "number") return;
 
     const controller = new AbortController();
-    fetch("/api/biznesinfo/catalog", {
+    fetch("/api/biznesinfo/catalog/stats", {
       cache: "no-store",
       signal: controller.signal,
     })
       .then(async (res) => {
         if (!res.ok) return null;
-        return (await res.json()) as BiznesinfoCatalogResponse;
+        return (await res.json()) as BiznesinfoCatalogStats;
       })
       .then((data) => {
-        if (data && typeof data?.stats?.companies_total === "number") {
-          setCatalog(data);
+        if (data && typeof data.companies_total === "number") {
+          setStats(data);
         }
       })
       .catch((error: unknown) => {
@@ -45,11 +46,73 @@ export default function HomePageClient({ initialCatalog }: { initialCatalog: Biz
       });
 
     return () => controller.abort();
-  }, [catalog?.stats?.companies_total]);
+  }, [stats?.companies_total]);
+
+  useEffect(() => {
+    if (shareState === "idle") return;
+
+    const timeoutId = window.setTimeout(() => {
+      setShareState("idle");
+    }, 2500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [shareState]);
 
   const formatCount = (value: number | null | undefined): string => {
     if (typeof value !== "number" || !Number.isFinite(value)) return "…";
     return new Intl.NumberFormat().format(value);
+  };
+
+  const copyPortalLinkFallback = async (url: string): Promise<boolean> => {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+      return true;
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = url;
+    textarea.setAttribute("readonly", "true");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    textarea.style.pointerEvents = "none";
+    document.body.appendChild(textarea);
+    textarea.select();
+
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } finally {
+      document.body.removeChild(textarea);
+    }
+
+    return copied;
+  };
+
+  const handleSharePortal = async (): Promise<void> => {
+    const url = new URL("/", window.location.origin).toString();
+    const sharePayload = {
+      title: `Biznesinfo.by — ${t("hero.title")}`,
+      text: t("hero.subtitle"),
+      url,
+    };
+
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share(sharePayload);
+        setShareState("idle");
+        return;
+      } catch (error: unknown) {
+        const err = error as { name?: string };
+        if (err?.name === "AbortError") return;
+      }
+    }
+
+    try {
+      const copied = await copyPortalLinkFallback(url);
+      setShareState(copied ? "copied" : "error");
+    } catch {
+      setShareState("error");
+    }
   };
 
   return (
@@ -95,7 +158,7 @@ export default function HomePageClient({ initialCatalog }: { initialCatalog: Biz
             </div>
 
             {/* Quick Stats - Interactive */}
-            <div className="relative z-10 flex justify-center mt-10">
+            <div className="relative z-10 flex justify-center mt-4 md:mt-10">
               <div className="relative group cursor-pointer">
                 {/* Animated border */}
                 <div className="absolute inset-0 rounded-2xl p-[3px] overflow-hidden">
@@ -120,7 +183,7 @@ export default function HomePageClient({ initialCatalog }: { initialCatalog: Biz
                     style={{
                       textShadow: '0 0 30px rgba(250,204,21,0.4), 0 0 60px rgba(250,204,21,0.2)',
                     }}>
-                    {formatCount(catalog?.stats?.companies_total)}
+                    {formatCount(stats?.companies_total)}
                   </div>
                   <div className="text-pink-200 text-lg mt-2 group-hover:text-white transition-colors">
                     {t("stats.companies")}
@@ -200,7 +263,37 @@ export default function HomePageClient({ initialCatalog }: { initialCatalog: Biz
                     </svg>
                   </Link>
                 </div>
+
+                <div className="relative group/share">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleSharePortal();
+                    }}
+                    className="relative inline-flex items-center gap-3 px-6 py-3 rounded-xl font-semibold text-white
+                      bg-gradient-to-r from-[#820251] via-[#a80368] to-[#820251]
+                      border-2 border-yellow-400/70 hover:border-yellow-300
+                      shadow-[0_10px_28px_rgba(130,2,81,0.35)]
+                      group-hover/share:shadow-[0_14px_36px_rgba(130,2,81,0.45)]
+                      transition-all duration-300 group-hover/share:scale-[1.03]"
+                    aria-label={t("home.sharePortal")}
+                  >
+                    <svg className="w-6 h-6 text-yellow-400 group-hover/share:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                    </svg>
+                    <span className="group-hover/share:text-yellow-100">{t("home.sharePortal")}</span>
+                    <svg className="w-5 h-5 text-yellow-400 group-hover/share:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17L17 7m0 0H9m8 0v8" />
+                    </svg>
+                  </button>
+                </div>
               </div>
+
+              {shareState !== "idle" && (
+                <p className={`text-sm ${shareState === "copied" ? "text-yellow-200" : "text-pink-100"}`}>
+                  {shareState === "copied" ? t("home.shareCopied") : t("home.shareCopyFailed")}
+                </p>
+              )}
             </div>
           </div>
         </div>

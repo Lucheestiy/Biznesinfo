@@ -103,6 +103,8 @@ export interface BiznesinfoCompanySummary {
   primary_category_name: string | null;
   primary_rubric_slug: string | null;
   primary_rubric_name: string | null;
+  keywords?: string[];
+  generated_keywords?: string[];
 }
 
 export interface BiznesinfoCatalogRubric {
@@ -121,14 +123,16 @@ export interface BiznesinfoCatalogCategory {
   rubrics: BiznesinfoCatalogRubric[];
 }
 
+export interface BiznesinfoCatalogStats {
+  companies_total: number;
+  categories_total: number;
+  rubrics_total: number;
+  updated_at: string | null;
+  source_path: string | null;
+}
+
 export interface BiznesinfoCatalogResponse {
-  stats: {
-    companies_total: number;
-    categories_total: number;
-    rubrics_total: number;
-    updated_at: string | null;
-    source_path: string | null;
-  };
+  stats: BiznesinfoCatalogStats;
   categories: BiznesinfoCatalogCategory[];
 }
 

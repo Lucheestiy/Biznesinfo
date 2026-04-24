@@ -22,6 +22,7 @@ import {
 import {
   buildCompanySuggestSubtitle,
   isAddressLikeLocationQuery,
+  localizeBelarusGeoLabel,
   normalizeLocationQueryForSearch,
 } from "../utils/location";
 
@@ -72,6 +73,7 @@ const POST_FILTER_FETCH_MAX = 200;
 // For commodity-like queries we need a wider retrieval window, otherwise
 // strict relevance guards can under-sample candidates on page size=10.
 const COMMODITY_POST_FILTER_FETCH_FLOOR = 200;
+const ADDRESS_FETCH_FLOOR = 200;
 const HYBRID_FETCH_MAX = 280;
 const HYBRID_RRF_K = 50;
 const COMMODITY_MIN_STRUCTURED_SCORE_SINGLE = 16;
@@ -104,6 +106,10 @@ const PROCUREMENT_CUE_RE =
   /(^|[^\p{L}\p{N}])(купить|где|взять|поставщик\p{L}*|поставка\p{L}*|опт\p{L}*|заказать\p{L}*|закуп\p{L}*)(?=$|[^\p{L}\p{N}])/iu;
 const FOOD_MILK_CATEGORY_RE =
   /(^|[^\p{L}\p{N}])(молоч\p{L}*|пищев\p{L}*|продукт\p{L}*\s+питан|молок\p{L}*|сыродель\p{L}*|молочно-консерв\p{L}*)(?=$|[^\p{L}\p{N}])/iu;
+const CHEESE_DAIRY_CATEGORY_RE =
+  /(^|[^\p{L}\p{N}])(молоч\p{L}*|молок\p{L}*|сыродел\p{L}*|сыровар\p{L}*|сырн\p{L}*)(?=$|[^\p{L}\p{N}])/iu;
+const CHEESE_MEAT_DISTRACTOR_RE =
+  /(^|[^\p{L}\p{N}])(мяс\p{L}*|колбас\p{L}*|мясоперераб\p{L}*)(?=$|[^\p{L}\p{N}])/iu;
 const PRODUCE_FRUIT_ITEM_TOKEN_RE =
   /^(груш\p{L}*|яблок\p{L}*|банан\p{L}*|цитрус\p{L}*|апельсин\p{L}*|мандарин\p{L}*|лимон\p{L}*|киви|персик\p{L}*|абрикос\p{L}*|слив\p{L}*|виноград\p{L}*|черешн\p{L}*|вишн\p{L}*|ягод\p{L}*|клубник\p{L}*|малин\p{L}*|голубик\p{L}*|ежевик\p{L}*|смородин\p{L}*)$/iu;
 const PRODUCE_VEGETABLE_ITEM_TOKEN_RE =
@@ -174,6 +180,94 @@ const BUSINESS_B2B_SIGNAL_RE =
   /(^|[^\p{L}\p{N}])(опт\p{L}*|оптов\p{L}*|постав\p{L}*|дистриб\p{L}*|производ\p{L}*|b2b|horeca|для\s+бизнес\p{L}*)(?=$|[^\p{L}\p{N}])/iu;
 const BUSINESS_B2C_SIGNAL_RE =
   /(^|[^\p{L}\p{N}])(розниц\p{L}*|магазин\p{L}*|интернет[-\s]?магазин\p{L}*|витрин\p{L}*|для\s+дом\p{L}*|для\s+себя|b2c|retail)(?=$|[^\p{L}\p{N}])/iu;
+const TRANSPORT_DIRECTION_QUERY_CUE_RE =
+  /(^|[^\p{L}\p{N}])(транспорт\p{L}*|перевоз\p{L}*|груз\p{L}*|достав\p{L}*|логист\p{L}*|экспед\p{L}*)(?=$|[^\p{L}\p{N}])/iu;
+const TRANSPORT_DIRECTION_QUERY_TOKEN_RE =
+  /^(транспорт\p{L}*|перевоз\p{L}*|груз\p{L}*|достав\p{L}*|логист\p{L}*|экспед\p{L}*)$/iu;
+
+type CountryIntentRule = {
+  key: string;
+  queryTokenRe: RegExp;
+  mentionRe: RegExp;
+};
+
+const COUNTRY_INTENT_RULES: CountryIntentRule[] = [
+  {
+    key: "iran",
+    queryTokenRe: /^(иран\p{L}*|iran\p{L}*)$/iu,
+    mentionRe: /(^|[^\p{L}\p{N}])(иран\p{L}*|iran\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "iraq",
+    queryTokenRe: /^(ирак\p{L}*|iraq\p{L}*)$/iu,
+    mentionRe: /(^|[^\p{L}\p{N}])(ирак\p{L}*|iraq\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "afghanistan",
+    queryTokenRe: /^(афган\p{L}*|afghan\p{L}*|afghanistan)$/iu,
+    mentionRe: /(^|[^\p{L}\p{N}])(афган\p{L}*|afghan\p{L}*|afghanistan)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "turkmenistan",
+    queryTokenRe: /^(туркмен\p{L}*|turkmen\p{L}*)$/iu,
+    mentionRe: /(^|[^\p{L}\p{N}])(туркмен\p{L}*|turkmen\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "armenia",
+    queryTokenRe: /^(армени\p{L}*|armeni\p{L}*)$/iu,
+    mentionRe: /(^|[^\p{L}\p{N}])(армени\p{L}*|armeni\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "georgia",
+    queryTokenRe: /^(грузи\p{L}*|georgi\p{L}*)$/iu,
+    mentionRe: /(^|[^\p{L}\p{N}])(грузи\p{L}*|georgi\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "azerbaijan",
+    queryTokenRe: /^(азербайдж\p{L}*|azerbaij\p{L}*)$/iu,
+    mentionRe: /(^|[^\p{L}\p{N}])(азербайдж\p{L}*|azerbaij\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "turkey",
+    queryTokenRe: /^(турци\p{L}*|turk\p{L}*|turkey)$/iu,
+    mentionRe: /(^|[^\p{L}\p{N}])(турци\p{L}*|turk\p{L}*|turkey)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "russia",
+    queryTokenRe: /^(росси\p{L}*|russi\p{L}*|rf)$/iu,
+    mentionRe: /(^|[^\p{L}\p{N}])(росси\p{L}*|russi\p{L}*|rf)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "belarus",
+    queryTokenRe: /^(беларус\p{L}*|belarus\p{L}*)$/iu,
+    mentionRe: /(^|[^\p{L}\p{N}])(беларус\p{L}*|belarus\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "poland",
+    queryTokenRe: /^(поль\p{L}*|poland|polish)$/iu,
+    mentionRe: /(^|[^\p{L}\p{N}])(поль\p{L}*|poland|polish)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "lithuania",
+    queryTokenRe: /^(литв\p{L}*|lithuan\p{L}*)$/iu,
+    mentionRe: /(^|[^\p{L}\p{N}])(литв\p{L}*|lithuan\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "latvia",
+    queryTokenRe: /^(латви\p{L}*|latvi\p{L}*)$/iu,
+    mentionRe: /(^|[^\p{L}\p{N}])(латви\p{L}*|latvi\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "estonia",
+    queryTokenRe: /^(эстон\p{L}*|eston\p{L}*)$/iu,
+    mentionRe: /(^|[^\p{L}\p{N}])(эстон\p{L}*|eston\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "ukraine",
+    queryTokenRe: /^(украин\p{L}*|ukrain\p{L}*)$/iu,
+    mentionRe: /(^|[^\p{L}\p{N}])(украин\p{L}*|ukrain\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+];
 
 type HybridRetrievalPlan = {
   key: string;
@@ -188,6 +282,151 @@ type HybridRetrievalPlanResult = {
   estimatedTotalHits: number;
 };
 
+type DistrictGeoIntent = {
+  label: string;
+  region: string | null;
+  city: string | null;
+  centerLat: number;
+  centerLng: number;
+  radiusMeters: number;
+};
+
+type MinskDistrictGeoIntent = DistrictGeoIntent & {
+  key:
+  | "frunzensky"
+  | "pervomaisky"
+  | "centralny"
+  | "sovetsky"
+  | "zavodskoy"
+  | "leninsky"
+  | "moskovsky"
+  | "oktyabrsky"
+  | "partizansky";
+  region: "minsk";
+  city: "Минск";
+  queryRe: RegExp;
+};
+
+type BelarusCityGeoHint = {
+  city: string;
+  region: string | null;
+  queryRe: RegExp;
+};
+
+const MINSK_CITY_HINT_RE = /(^|[^\p{L}\p{N}])(минск\p{L}*|minsk)(?=$|[^\p{L}\p{N}])/iu;
+const DISTRICT_MARKER_RE = /(^|[^\p{L}\p{N}])(р-н|район|district)(?=$|[^\p{L}\p{N}])/iu;
+const ADDRESS_MARKER_IN_LOCATION_RE =
+  /(^|[^\p{L}\p{N}])(ул\.?|улиц\p{L}*|пр-?т\.?|просп\p{L}*|пер\.?|бульвар\p{L}*|наб\.?|шоссе|дом|д\.|корп\.?|кв\.?)(?=$|[^\p{L}\p{N}])/iu;
+const OTHER_BELARUS_CITY_HINT_RE =
+  /(^|[^\p{L}\p{N}])(брест\p{L}*|гродн\p{L}*|витеб\p{L}*|гомел\p{L}*|могил\p{L}*|бобруйск\p{L}*|пинск\p{L}*|лид\p{L}*|жодин\p{L}*|солигор\p{L}*|молодеч\p{L}*|слуцк\p{L}*|орш\p{L}*)(?=$|[^\p{L}\p{N}])/iu;
+const DISTRICT_GEO_DEFAULT_RADIUS_METERS = 5200;
+const DISTRICT_GEO_TIMEOUT_MS = 3600;
+const DISTRICT_GEO_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
+const DISTRICT_GEO_QUERY_MAX_LEN = 180;
+const DISTRICT_GEO_RESULTS_LIMIT = "10";
+const DISTRICT_GEO_ENDPOINT = "https://geocode-maps.yandex.ru/1.x/";
+const districtGeoIntentCache = new Map<string, { expiresAt: number; value: DistrictGeoIntent | null }>();
+const BELARUS_CITY_GEO_HINTS: BelarusCityGeoHint[] = [
+  { city: "Минск", region: "minsk", queryRe: /(^|[^\p{L}\p{N}])(минск(?:а|е|у|ом)?|minsk)(?=$|[^\p{L}\p{N}])/iu },
+  { city: "Брест", region: "brest", queryRe: /(^|[^\p{L}\p{N}])(брест(?:а|е|у|ом)?|brest)(?=$|[^\p{L}\p{N}])/iu },
+  { city: "Витебск", region: "vitebsk", queryRe: /(^|[^\p{L}\p{N}])(витебск(?:а|е|у|ом)?|vitebsk)(?=$|[^\p{L}\p{N}])/iu },
+  { city: "Гомель", region: "gomel", queryRe: /(^|[^\p{L}\p{N}])(гомел(?:ь|я|ю|е|ем)?|gomel|homel)(?=$|[^\p{L}\p{N}])/iu },
+  { city: "Гродно", region: "grodno", queryRe: /(^|[^\p{L}\p{N}])(гродн(?:о|а|е|у)?|grodno|hrodna)(?=$|[^\p{L}\p{N}])/iu },
+  { city: "Могилев", region: "mogilev", queryRe: /(^|[^\p{L}\p{N}])(могил(?:е|ё)в(?:а|е|у|ом)?|mogilev|mohilev)(?=$|[^\p{L}\p{N}])/iu },
+];
+const MINSK_DISTRICT_GEO_INTENTS: MinskDistrictGeoIntent[] = [
+  {
+    key: "frunzensky",
+    label: "Фрунзенский район",
+    region: "minsk",
+    city: "Минск",
+    centerLat: 53.905,
+    centerLng: 27.455,
+    radiusMeters: 4300,
+    queryRe: /(^|[^\p{L}\p{N}])(фрунзен\p{L}*|frunzen\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "pervomaisky",
+    label: "Первомайский район",
+    region: "minsk",
+    city: "Минск",
+    centerLat: 53.94,
+    centerLng: 27.64,
+    radiusMeters: 4300,
+    queryRe: /(^|[^\p{L}\p{N}])(первомай\p{L}*|pervomai\p{L}*|pervomay\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "centralny",
+    label: "Центральный район",
+    region: "minsk",
+    city: "Минск",
+    centerLat: 53.927,
+    centerLng: 27.536,
+    radiusMeters: 3900,
+    queryRe: /(^|[^\p{L}\p{N}])(центральн\p{L}*|tsentral\p{L}*|centraln\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "sovetsky",
+    label: "Советский район",
+    region: "minsk",
+    city: "Минск",
+    centerLat: 53.932,
+    centerLng: 27.595,
+    radiusMeters: 3900,
+    queryRe: /(^|[^\p{L}\p{N}])(советск\p{L}*|sovetsk\p{L}*|soviet\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "zavodskoy",
+    label: "Заводской район",
+    region: "minsk",
+    city: "Минск",
+    centerLat: 53.852,
+    centerLng: 27.684,
+    radiusMeters: 4500,
+    queryRe: /(^|[^\p{L}\p{N}])(заводск\p{L}*|zavodsk\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "leninsky",
+    label: "Ленинский район",
+    region: "minsk",
+    city: "Минск",
+    centerLat: 53.865,
+    centerLng: 27.585,
+    radiusMeters: 4300,
+    queryRe: /(^|[^\p{L}\p{N}])(ленинск\p{L}*|leninsk\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "moskovsky",
+    label: "Московский район",
+    region: "minsk",
+    city: "Минск",
+    centerLat: 53.876,
+    centerLng: 27.49,
+    radiusMeters: 4300,
+    queryRe: /(^|[^\p{L}\p{N}])(московск\p{L}*|moskov\p{L}*|moscow\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "oktyabrsky",
+    label: "Октябрьский район",
+    region: "minsk",
+    city: "Минск",
+    centerLat: 53.844,
+    centerLng: 27.54,
+    radiusMeters: 4100,
+    queryRe: /(^|[^\p{L}\p{N}])(октябр\p{L}*|oktyabr\p{L}*|october\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+  {
+    key: "partizansky",
+    label: "Партизанский район",
+    region: "minsk",
+    city: "Минск",
+    centerLat: 53.892,
+    centerLng: 27.655,
+    radiusMeters: 4000,
+    queryRe: /(^|[^\p{L}\p{N}])(партизанск\p{L}*|partizansk\p{L}*|partizan\p{L}*)(?=$|[^\p{L}\p{N}])/iu,
+  },
+];
+
 function shouldLogSearchPerf(): boolean {
   return String(process.env.BIZNESINFO_SEARCH_PERF_LOG || "").trim() === "1";
 }
@@ -200,6 +439,289 @@ function normalizeText(value: string | null | undefined): string {
   return String(value || "")
     .replace(/\s+/gu, " ")
     .trim();
+}
+
+function resolveMinskDistrictGeoIntent(rawCity: string | null | undefined): DistrictGeoIntent | null {
+  const text = normalizeGeoText(rawCity || "");
+  if (!text) return null;
+
+  const hasMinskHint = MINSK_CITY_HINT_RE.test(text);
+  const hasDistrictMarker = DISTRICT_MARKER_RE.test(text);
+  if (!hasMinskHint && !hasDistrictMarker) return null;
+  if (!hasDistrictMarker && ADDRESS_MARKER_IN_LOCATION_RE.test(text)) return null;
+  if (!hasMinskHint && OTHER_BELARUS_CITY_HINT_RE.test(text)) return null;
+
+  for (const intent of MINSK_DISTRICT_GEO_INTENTS) {
+    if (!intent.queryRe.test(text)) continue;
+    return intent;
+  }
+  return null;
+}
+
+function detectBelarusCityGeoHint(raw: string | null | undefined): BelarusCityGeoHint | null {
+  const text = normalizeGeoText(raw || "");
+  if (!text) return null;
+
+  for (const hint of BELARUS_CITY_GEO_HINTS) {
+    if (hint.queryRe.test(text)) return hint;
+  }
+
+  const localized = normalizeGeoText(localizeBelarusGeoLabel(raw || ""));
+  if (localized && localized !== text) {
+    for (const hint of BELARUS_CITY_GEO_HINTS) {
+      if (hint.queryRe.test(localized)) return hint;
+    }
+  }
+
+  return null;
+}
+
+function parseGeocoderCoordinates(rawPos: string): { lat: number; lng: number } | null {
+  const value = normalizeText(rawPos || "");
+  if (!value) return null;
+  const [lngRaw, latRaw] = value.split(/\s+/u);
+  const lat = Number(latRaw);
+  const lng = Number(lngRaw);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+}
+
+type DistrictGeoCandidate = {
+  lat: number;
+  lng: number;
+  address: string;
+  text: string;
+  kind: string;
+  radiusMetersHint: number | null;
+};
+
+function extractDistrictGeoCandidates(payload: any): DistrictGeoCandidate[] {
+  const featureMembers = payload?.response?.GeoObjectCollection?.featureMember;
+  if (!Array.isArray(featureMembers)) return [];
+
+  const out: DistrictGeoCandidate[] = [];
+  for (const member of featureMembers) {
+    const geoObject = member?.GeoObject;
+    const coords = parseGeocoderCoordinates(geoObject?.Point?.pos || "");
+    if (!coords) continue;
+    const metadata = geoObject?.metaDataProperty?.GeocoderMetaData;
+    const address = normalizeText(metadata?.Address?.formatted || metadata?.text || "");
+    const text = normalizeText(metadata?.text || "");
+    const kind = normalizeText(metadata?.kind || "");
+    const lowerCorner = parseGeocoderCoordinates(geoObject?.boundedBy?.Envelope?.lowerCorner || "");
+    const upperCorner = parseGeocoderCoordinates(geoObject?.boundedBy?.Envelope?.upperCorner || "");
+    let radiusMetersHint: number | null = null;
+    if (lowerCorner && upperCorner) {
+      const corners = [
+        { lat: lowerCorner.lat, lng: lowerCorner.lng },
+        { lat: lowerCorner.lat, lng: upperCorner.lng },
+        { lat: upperCorner.lat, lng: lowerCorner.lng },
+        { lat: upperCorner.lat, lng: upperCorner.lng },
+      ];
+      const maxKm = Math.max(
+        ...corners.map((corner) => haversineDistanceKm(coords.lat, coords.lng, corner.lat, corner.lng)),
+      );
+      if (Number.isFinite(maxKm) && maxKm > 0) {
+        radiusMetersHint = Math.round(maxKm * 1000 + 300);
+      }
+    }
+    out.push({
+      lat: coords.lat,
+      lng: coords.lng,
+      address,
+      text,
+      kind,
+      radiusMetersHint,
+    });
+  }
+
+  return out;
+}
+
+function buildDistrictGeoQuery(rawDistrict: string): string {
+  const source = normalizeText(rawDistrict || "");
+  if (!source) return "";
+  const hasBelarusHint = /(^|[^\p{L}\p{N}])(беларус\p{L}*|belarus)(?=$|[^\p{L}\p{N}])/iu.test(source);
+  if (hasBelarusHint) return source;
+  return `${source}, Беларусь`;
+}
+
+async function requestDistrictGeoCandidates(
+  rawDistrict: string,
+  kind: "district" | "locality" | null,
+): Promise<DistrictGeoCandidate[]> {
+  const apiKey = (
+    process.env.YANDEX_MAPS_API_KEY ||
+    process.env.NEXT_PUBLIC_YANDEX_MAPS_API_KEY ||
+    ""
+  ).trim();
+  if (!apiKey) return [];
+
+  const query = buildDistrictGeoQuery(rawDistrict);
+  if (!query) return [];
+
+  const endpoint = new URL(DISTRICT_GEO_ENDPOINT);
+  endpoint.searchParams.set("apikey", apiKey);
+  endpoint.searchParams.set("geocode", query);
+  endpoint.searchParams.set("format", "json");
+  endpoint.searchParams.set("lang", "ru_RU");
+  endpoint.searchParams.set("results", DISTRICT_GEO_RESULTS_LIMIT);
+  if (kind) endpoint.searchParams.set("kind", kind);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DISTRICT_GEO_TIMEOUT_MS);
+  try {
+    const response = await fetch(endpoint.toString(), {
+      signal: controller.signal,
+      cache: "no-store",
+      headers: {
+        "user-agent": "biznesinfo.lucheestiy.com/search-district",
+      },
+    });
+    if (!response.ok) return [];
+    const payload = await response.json();
+    return extractDistrictGeoCandidates(payload);
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function scoreDistrictGeoCandidate(candidate: DistrictGeoCandidate): number {
+  let score = 0;
+  if (candidate.kind === "district") score += 40;
+  else if (candidate.kind === "locality") score += 30;
+  else if (candidate.kind === "street") score += 10;
+  else if (candidate.kind === "house") score += 8;
+
+  const searchable = normalizeGeoText([candidate.text, candidate.address].join(" "));
+  if (/(^|[^\p{L}\p{N}])(район|district)(?=$|[^\p{L}\p{N}])/iu.test(searchable)) score += 6;
+  return score;
+}
+
+function candidateMatchesCityHint(candidate: DistrictGeoCandidate, cityHint: BelarusCityGeoHint): boolean {
+  const searchable = normalizeGeoText([candidate.text, candidate.address].join(" "));
+  return cityHint.queryRe.test(searchable);
+}
+
+async function resolveCityCenterGeo(cityHint: BelarusCityGeoHint): Promise<{ lat: number; lng: number } | null> {
+  const candidates = await requestDistrictGeoCandidates(cityHint.city, "locality");
+  if (!candidates.length) return null;
+  const normalizedCity = normalizeGeoText(cityHint.city);
+  const scored = candidates
+    .map((candidate) => {
+      const searchable = normalizeGeoText([candidate.text, candidate.address].join(" "));
+      let score = 0;
+      if (candidate.kind === "locality") score += 20;
+      if (candidateMatchesCityHint(candidate, cityHint)) score += 16;
+      if (searchable === `беларусь ${normalizedCity}` || searchable === `беларусь, ${normalizedCity}`) score += 24;
+      if (searchable.endsWith(` ${normalizedCity}`) || searchable.endsWith(`, ${normalizedCity}`)) score += 8;
+      return { candidate, score };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const winner = scored[0]?.candidate || null;
+  if (!winner) return null;
+  return { lat: winner.lat, lng: winner.lng };
+}
+
+function pickBestDistrictGeoCandidate(
+  candidates: DistrictGeoCandidate[],
+  cityHint: BelarusCityGeoHint | null,
+  cityCenter: { lat: number; lng: number } | null,
+): DistrictGeoCandidate | null {
+  if (!candidates.length) return null;
+
+  let pool = candidates;
+  if (cityHint) {
+    const cityMatched = candidates.filter((candidate) => candidateMatchesCityHint(candidate, cityHint));
+    if (cityMatched.length > 0) {
+      pool = cityMatched;
+    } else {
+      return null;
+    }
+  }
+
+  if (cityCenter) {
+    const nearby = pool.filter((candidate) =>
+      haversineDistanceKm(cityCenter.lat, cityCenter.lng, candidate.lat, candidate.lng) <= 70,
+    );
+    if (nearby.length > 0) pool = nearby;
+  }
+
+  return pool
+    .slice()
+    .sort((a, b) => {
+      const scoreDiff = scoreDistrictGeoCandidate(b) - scoreDistrictGeoCandidate(a);
+      if (scoreDiff !== 0) return scoreDiff;
+      if (cityCenter) {
+        const distA = haversineDistanceKm(cityCenter.lat, cityCenter.lng, a.lat, a.lng);
+        const distB = haversineDistanceKm(cityCenter.lat, cityCenter.lng, b.lat, b.lng);
+        if (Math.abs(distA - distB) > 0.05) return distA - distB;
+      }
+      return (a.address || a.text || "").localeCompare((b.address || b.text || ""), "ru");
+    })[0] || null;
+}
+
+async function resolveDynamicDistrictGeoIntent(rawCity: string | null | undefined): Promise<DistrictGeoIntent | null> {
+  const source = normalizeText(rawCity || "");
+  if (!source || source.length > DISTRICT_GEO_QUERY_MAX_LEN) return null;
+
+  const normalized = normalizeGeoText(source);
+  if (!normalized) return null;
+  if (!DISTRICT_MARKER_RE.test(normalized)) return null;
+  if (ADDRESS_MARKER_IN_LOCATION_RE.test(normalized)) return null;
+
+  const cached = districtGeoIntentCache.get(normalized);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const cityHintFromInput = detectBelarusCityGeoHint(source);
+  const cityCenter = cityHintFromInput ? await resolveCityCenterGeo(cityHintFromInput) : null;
+
+  let candidate: DistrictGeoCandidate | null = null;
+  for (const kind of ["district", null] as const) {
+    const candidates = await requestDistrictGeoCandidates(source, kind);
+    candidate = pickBestDistrictGeoCandidate(candidates, cityHintFromInput, cityCenter);
+    if (candidate) break;
+  }
+
+  // Fallback to city center if district geocoder does not return a city-consistent district object.
+  if (!candidate && cityHintFromInput) {
+    const localityCandidates = await requestDistrictGeoCandidates(cityHintFromInput.city, "locality");
+    candidate = pickBestDistrictGeoCandidate(localityCandidates, cityHintFromInput, cityCenter);
+  }
+
+  if (!candidate) {
+    districtGeoIntentCache.set(normalized, {
+      expiresAt: Date.now() + Math.min(30 * 60 * 1000, DISTRICT_GEO_CACHE_TTL_MS),
+      value: null,
+    });
+    return null;
+  }
+
+  const cityHint =
+    cityHintFromInput ||
+    detectBelarusCityGeoHint([candidate.text, candidate.address].join(" "));
+  const localityFloor = candidate.kind === "locality" ? 8000 : 0;
+  const radiusMeters = Math.max(
+    DISTRICT_GEO_DEFAULT_RADIUS_METERS,
+    localityFloor,
+    Number.isFinite(candidate.radiusMetersHint) ? Number(candidate.radiusMetersHint) : 0,
+  );
+  const resolved: DistrictGeoIntent = {
+    label: source,
+    city: cityHint?.city || null,
+    region: cityHint?.region || null,
+    centerLat: candidate.lat,
+    centerLng: candidate.lng,
+    radiusMeters,
+  };
+
+  districtGeoIntentCache.set(normalized, {
+    expiresAt: Date.now() + DISTRICT_GEO_CACHE_TTL_MS,
+    value: resolved,
+  });
+  return resolved;
 }
 
 function hashStringFNV1a(value: string): number {
@@ -413,14 +935,36 @@ function hasCompanyLogo(logoUrl: string): boolean {
   return !EMPTY_LOGO_HINTS.some((hint) => normalized.includes(hint));
 }
 
-function prioritizeCompaniesWithLogos(companies: BiznesinfoCompanySummary[]): BiznesinfoCompanySummary[] {
+function prioritizeCompaniesWithLogos(
+  companies: BiznesinfoCompanySummary[],
+  options?: {
+    scoreById?: Map<string, number>;
+    scoreTieDelta?: number;
+  },
+): BiznesinfoCompanySummary[] {
+  const scoreById = options?.scoreById;
+  const scoreTieDelta = Number.isFinite(options?.scoreTieDelta)
+    ? Math.max(0, Number(options?.scoreTieDelta))
+    : 1.25;
   const ranked = (companies || []).map((company, index) => ({
     company,
     index,
     hasLogo: hasCompanyLogo(company.logo_url || ""),
+    score: scoreById?.get(company.id),
   }));
 
   ranked.sort((a, b) => {
+    const aHasScore = Number.isFinite(a.score);
+    const bHasScore = Number.isFinite(b.score);
+    if (aHasScore && bHasScore) {
+      const scoreDiff = Number(b.score) - Number(a.score);
+      if (Math.abs(scoreDiff) > scoreTieDelta) return scoreDiff;
+      if (a.hasLogo !== b.hasLogo) return a.hasLogo ? -1 : 1;
+      if (scoreDiff !== 0) return scoreDiff;
+      return a.index - b.index;
+    }
+
+    if (aHasScore !== bHasScore) return aHasScore ? -1 : 1;
     if (a.hasLogo !== b.hasLogo) return a.hasLogo ? -1 : 1;
     return a.index - b.index;
   });
@@ -874,29 +1418,27 @@ function applyCompanyNameRelevanceGuard(
   const queryTokens = buildCompanyNameQueryTokens(rawQuery);
   if (queryTokens.length === 0) return companies;
 
+  const normalizedQuery = normalizeCompanySuggestText(rawQuery);
   const requiredOverlap = queryTokens.length >= 2 ? 2 : 1;
   const ranked = companies.map((company, index) => {
     const nameText = company.name || "";
-    const categoryText = `${company.primary_category_name || ""} ${company.primary_rubric_name || ""}`.trim();
+    const normalizedName = normalizeCompanySuggestText(nameText);
     const nameTokens = canonicalizeSemanticTokens(
       tokenizeSemanticText(nameText)
         .filter((token) => token.length >= 2)
         .filter((token) => !COMPANY_NAME_QUERY_STOP_TOKENS.has(token)),
     );
-    const categoryTokens = canonicalizeSemanticTokens(
-      tokenizeSemanticText(categoryText).filter((token) => token.length >= 2),
-    );
 
     const nameOverlap = overlapCount(nameTokens, queryTokens);
-    const categoryOverlap = overlapCount(categoryTokens, queryTokens);
     const nameScore = semanticOverlapScore(nameText, queryTokens);
-    const categoryScore = semanticOverlapScore(categoryText, queryTokens);
+    const hasExactPhrase = normalizedQuery.length >= 3 && normalizedName.includes(normalizedQuery);
+    const strictNameScoreThreshold = queryTokens.length >= 2 ? 5 : 3;
     const keep = requiredOverlap === 1
-      ? nameOverlap >= 1 || nameScore >= 2 || categoryOverlap >= 1 || categoryScore >= 3
+      ? nameOverlap >= 1 || nameScore >= strictNameScoreThreshold || hasExactPhrase
       : nameOverlap >= requiredOverlap ||
-          nameScore >= 4 ||
-          (nameOverlap >= 1 && (categoryOverlap >= 1 || categoryScore >= 3));
-    const score = (nameOverlap * 120) + (nameScore * 20) + (categoryOverlap * 10) + categoryScore;
+          nameScore >= strictNameScoreThreshold ||
+          hasExactPhrase;
+    const score = (hasExactPhrase ? 1000 : 0) + (nameOverlap * 120) + (nameScore * 20);
 
     return { company, index, score, keep };
   });
@@ -1149,11 +1691,90 @@ function computeBusinessFieldScore(
   };
 }
 
+function hasTransportDirectionIntent(rawQueryText: string, queryTokens: string[]): boolean {
+  if (TRANSPORT_DIRECTION_QUERY_CUE_RE.test(rawQueryText || "")) return true;
+  return queryTokens.some((token) => TRANSPORT_DIRECTION_QUERY_TOKEN_RE.test(token));
+}
+
+function detectCountryIntentRules(rawQueryText: string, queryTokens: string[]): CountryIntentRule[] {
+  const normalizedQuery = normalizeGeoText(rawQueryText || "");
+  const matched: CountryIntentRule[] = [];
+  for (const rule of COUNTRY_INTENT_RULES) {
+    const tokenMatched = queryTokens.some((token) => rule.queryTokenRe.test(token));
+    const textMatched = normalizedQuery ? rule.queryTokenRe.test(normalizedQuery) : false;
+    if (tokenMatched || textMatched) matched.push(rule);
+  }
+  return matched;
+}
+
+function computeCountryDirectionMatchScore(
+  hit: MeiliCompanyDocument,
+  countryIntentRules: CountryIntentRule[],
+): {
+  score: number;
+  matchedCountries: number;
+  matchedStructuredCountries: number;
+} {
+  if (countryIntentRules.length === 0) {
+    return {
+      score: 0,
+      matchedCountries: 0,
+      matchedStructuredCountries: 0,
+    };
+  }
+
+  const structuredText = [
+    hit.servicesText || "",
+    ...(hit.serviceTitles || []),
+    ...(hit.serviceCategories || []),
+    ...(hit.categoryNames || []),
+    ...(hit.category_names || []),
+    ...(hit.rubric_names || []),
+    ...(hit.keywords || []),
+    hit.region || "",
+    hit.city || "",
+  ].join(" ");
+  const longText = `${hit.description || ""} ${hit.about || ""}`.trim();
+  const joinedText = `${structuredText} ${longText}`.trim();
+
+  let matchedCountries = 0;
+  let matchedStructuredCountries = 0;
+  for (const rule of countryIntentRules) {
+    const inStructured = rule.mentionRe.test(structuredText);
+    const inAny = inStructured || rule.mentionRe.test(joinedText);
+    if (inAny) matchedCountries += 1;
+    if (inStructured) matchedStructuredCountries += 1;
+  }
+
+  if (matchedCountries === 0) {
+    return {
+      score: 0,
+      matchedCountries: 0,
+      matchedStructuredCountries: 0,
+    };
+  }
+
+  const coverageRatio = matchedCountries / countryIntentRules.length;
+  const score =
+    (coverageRatio * 38) +
+    (matchedStructuredCountries * 10) +
+    ((matchedCountries - matchedStructuredCountries) * 5);
+
+  return {
+    score,
+    matchedCountries,
+    matchedStructuredCountries,
+  };
+}
+
 function buildRerankReasons(input: {
   businessFieldScore: ReturnType<typeof computeBusinessFieldScore>;
   qualityScore: number;
   freshnessScore: number;
   geoScore: number;
+  logoScore: number;
+  countryMatchScore: number;
+  countryMissPenalty: boolean;
   penalty: number;
   variant: SearchRankingVariant;
 }): string[] {
@@ -1163,6 +1784,9 @@ function buildRerankReasons(input: {
   if (input.businessFieldScore.semanticScore >= 20 || input.businessFieldScore.keywordScore >= 10) {
     reasons.push("semantic_service_match");
   }
+  if (input.countryMatchScore > 0) reasons.push("country_direction_match");
+  if (input.countryMissPenalty) reasons.push("country_direction_miss_penalty");
+  if (input.logoScore >= 0.5) reasons.push("logo_priority");
   if (input.geoScore >= 0.9) reasons.push("geo_relevant");
   if (input.qualityScore >= 0.8) reasons.push("full_profile");
   if (input.freshnessScore >= 0.8) reasons.push("fresh_profile");
@@ -1198,21 +1822,28 @@ function rerankHitsByBusinessSignals(
   }
 
   const isCommodityQuery = looksLikeCommodityIntent(context.queryText, queryTokens);
+  const transportDirectionIntent = hasTransportDirectionIntent(context.queryText, queryTokens);
+  const countryIntentRules = detectCountryIntentRules(context.queryText, queryTokens);
+  const enforceCountryDirection = transportDirectionIntent && countryIntentRules.length > 0;
   const variant = options.variant;
   const weights = variant === "treatment"
     ? {
       quality: 9.5,
       freshness: 6,
       geo: 7,
+      logo: 4.2,
       rankPrior: 1.2,
       descOnlyPenalty: 16,
+      countryMissPenalty: 35,
     }
     : {
       quality: 8,
       freshness: 5,
       geo: 6,
+      logo: 3.5,
       rankPrior: 1,
       descOnlyPenalty: 14,
+      countryMissPenalty: 30,
     };
   const totalHits = Math.max(1, hits.length);
   const ranked = hits.map((hit, index) => {
@@ -1220,11 +1851,16 @@ function rerankHitsByBusinessSignals(
     const qualityScore = clampScore(Number(hit.data_quality_score || 0), 0, 100) / 100;
     const freshnessScore = computeFreshnessScore(hit);
     const geoScore = computeGeoRelevanceScore(hit, context);
+    const logoScore = clampScore(Number(hit.logo_rank || 0), 0, 100) / 100;
+    const countryMatch = computeCountryDirectionMatchScore(hit, countryIntentRules);
     const rankPrior = (totalHits - index) / totalHits;
 
     let penalty = 0;
     if (isCommodityQuery && businessField.structuredOverlap === 0 && businessField.descriptionScore > 0) {
       penalty += weights.descOnlyPenalty;
+    }
+    if (enforceCountryDirection && countryMatch.matchedCountries === 0) {
+      penalty += weights.countryMissPenalty;
     }
 
     const totalScore =
@@ -1232,6 +1868,8 @@ function rerankHitsByBusinessSignals(
       (qualityScore * weights.quality) +
       (freshnessScore * weights.freshness) +
       (geoScore * weights.geo) +
+      countryMatch.score +
+      (logoScore * weights.logo) +
       (rankPrior * weights.rankPrior) -
       penalty;
 
@@ -1240,6 +1878,9 @@ function rerankHitsByBusinessSignals(
       qualityScore,
       freshnessScore,
       geoScore,
+      logoScore,
+      countryMatchScore: countryMatch.score,
+      countryMissPenalty: enforceCountryDirection && countryMatch.matchedCountries === 0,
       penalty,
       variant,
     });
@@ -1393,6 +2034,7 @@ function applyCommodityStructuredHitGuard(
   if (queryTokens.length === 0) return hits;
   const foodCommodityIntent = looksLikeFoodCommodityIntent(rawProductQuery, queryTokens);
   const strictFoodCommodityIntent = queryTokens.some((token) => isStrictFoodCommodityIntentToken(token));
+  const cheeseIntent = looksLikeCheeseCommodityIntent(rawProductQuery);
   const procurementIntent = PROCUREMENT_CUE_RE.test(rawProductQuery);
   const packagingQuery = PACKAGING_QUERY_CUE_RE.test(rawProductQuery);
   const rawMaterialQuery = RAW_MATERIAL_TOKEN_RE.test(rawProductQuery);
@@ -1428,6 +2070,14 @@ function applyCommodityStructuredHitGuard(
     const hasFoodSupplySignal = procurementIntent
       ? hasFoodProductSignal && hasFoodSupplyChainSignal
       : (hasFoodProductSignal || hasCommodityNameSignal);
+    const cheeseSignalFromText = tokenizeSemanticText(foodContextText).some((token) => isCheeseIntentToken(token));
+    const cheeseSignalFromCategory = CHEESE_DAIRY_CATEGORY_RE.test(categoryContextText);
+    const cheeseMeatDistractor = cheeseIntent && CHEESE_MEAT_DISTRACTOR_RE.test(foodContextText);
+    const cheeseDistractor =
+      cheeseIntent && (
+        (!cheeseSignalFromText && !cheeseSignalFromCategory) ||
+        (cheeseMeatDistractor && !cheeseSignalFromCategory)
+      );
     const nonFoodCommodityDistractor = hasCommodityDomainDistractor(
       categoryContextText,
       `${structuredText} ${keywordText}`,
@@ -1460,6 +2110,7 @@ function applyCommodityStructuredHitGuard(
       weakFoodRelevance,
       missingStructuredProfile,
       nonFoodCommodityDistractor,
+      cheeseDistractor,
     };
   });
 
@@ -1471,7 +2122,8 @@ function applyCommodityStructuredHitGuard(
       !item.noisyDescriptionOnly &&
       !item.weakFoodRelevance &&
       !item.missingStructuredProfile &&
-      !item.nonFoodCommodityDistractor,
+      !item.nonFoodCommodityDistractor &&
+      !item.cheeseDistractor,
   );
   if (filtered.length === 0) return [];
 
@@ -1526,6 +2178,14 @@ function applyCommodityRelevanceGuard(
     const chemicalCategory = CHEMICAL_CATEGORY_RE.test(categoryText);
     const foodCheeseCategory = FOOD_CHEESE_CATEGORY_RE.test(categoryText);
     const cheeseRawMaterialDistractor = cheeseIntent && (chemicalCategory || hasRawMaterialCue) && !foodCheeseCategory;
+    const cheeseSignalFromText = tokenizeSemanticText(joinedText).some((token) => isCheeseIntentToken(token));
+    const cheeseSignalFromCategory = CHEESE_DAIRY_CATEGORY_RE.test(categoryText);
+    const cheeseMeatDistractor = cheeseIntent && CHEESE_MEAT_DISTRACTOR_RE.test(joinedText);
+    const cheeseNonDairyDistractor =
+      cheeseIntent && (
+        (!cheeseSignalFromText && !cheeseSignalFromCategory) ||
+        (cheeseMeatDistractor && !cheeseSignalFromCategory)
+      );
     const nonFoodCommodityDistractor = hasCommodityDomainDistractor(
       categoryText,
       detailsText,
@@ -1540,6 +2200,7 @@ function applyCommodityRelevanceGuard(
     const hardDistractor =
       ((mediaCategory || industrialCategory) && categoryScore === 0 && detailsScore === 0) ||
       cheeseRawMaterialDistractor ||
+      cheeseNonDairyDistractor ||
       nonFoodCommodityDistractor ||
       strictFoodMismatch;
     const score =
@@ -1766,13 +2427,16 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
   const index = getCompaniesIndex();
   const { page, limit, offset } = parsePagination(params);
   const cityFilter = normalizeText(params.city || "");
-  const cityLooksLikeAddress = isAddressLikeLocationQuery(cityFilter);
+  const dynamicDistrictGeoIntent = await resolveDynamicDistrictGeoIntent(cityFilter);
+  const districtGeoIntent = dynamicDistrictGeoIntent || resolveMinskDistrictGeoIntent(cityFilter);
+  const cityLooksLikeAddress = !districtGeoIntent && isAddressLikeLocationQuery(cityFilter);
   const locationQuery = cityLooksLikeAddress ? normalizeLocationQueryForSearch(cityFilter) : "";
   const query = [composeSearchQuery(params), locationQuery].filter(Boolean).join(" ").trim();
   const queryFieldValue = normalizeText(params.query || "");
   const serviceFieldValue = normalizeText(params.service || "");
-  const strictCityFilter = cityLooksLikeAddress ? "" : cityFilter;
-  const regionFilter = normalizeText(params.region || "");
+  const strictCityFilter = districtGeoIntent ? districtGeoIntent.city : (cityLooksLikeAddress ? "" : cityFilter);
+  const explicitRegionFilter = normalizeText(params.region || "");
+  const regionFilter = explicitRegionFilter || (districtGeoIntent?.region || "");
   const supplyType = normalizeSupplyType(params.supplyType);
   const businessFormat = normalizeBusinessFormat(params.businessFormat);
   const hasUxPostFilters = supplyType !== "any" || businessFormat !== "any";
@@ -1783,30 +2447,48 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
     productQueryForRetrieval || productQuery,
     productQueryTokens,
   );
-  const cityAddressIntent = buildAddressIntentFromCity(cityFilter);
+  const cityAddressIntent = districtGeoIntent ? null : buildAddressIntentFromCity(cityFilter);
   const addressHouseIntent = buildAddressHouseIntentFromParams(params);
   const companyNameOnlyQuery = isCompanyNameOnlyQuery(params) && !cityLooksLikeAddress;
-  const filter = buildSearchFilter({ ...params, city: strictCityFilter || null });
-  const sort = buildSort(params);
+  const filter = buildSearchFilter({
+    ...params,
+    region: regionFilter || null,
+    city: strictCityFilter || null,
+  });
+  if (districtGeoIntent) {
+    filter.push(
+      `_geoRadius(${districtGeoIntent.centerLat}, ${districtGeoIntent.centerLng}, ${districtGeoIntent.radiusMeters})`,
+    );
+  }
+  const sort = buildSort({
+    ...params,
+    lat: Number.isFinite(params.lat) ? Number(params.lat) : (districtGeoIntent?.centerLat ?? null),
+    lng: Number.isFinite(params.lng) ? Number(params.lng) : (districtGeoIntent?.centerLng ?? null),
+  });
   const shouldUsePostFilterWindow = Boolean(productQuery) || companyNameOnlyQuery || hasUxPostFilters;
+  const shouldUseAddressFetchWindow = cityLooksLikeAddress || Boolean(cityAddressIntent);
+  const shouldUseWideFetchWindow = shouldUsePostFilterWindow || shouldUseAddressFetchWindow;
   const useHybridRetrieval =
     isHybridSearchEnabled() &&
     Boolean(normalizeText(query) || normalizeText(productQuery) || normalizeText(params.query || ""));
   const abResolution = resolveSearchAbResolution(params, productQuery || query || queryFieldValue || serviceFieldValue);
   const shouldExplainInResponse = Boolean(params.explain);
   const shouldEmitExplainLog = shouldLogSearchExplainability() || shouldExplainInResponse;
-  const windowOffset = useHybridRetrieval ? 0 : offset;
+  const windowOffset = useHybridRetrieval || shouldUseAddressFetchWindow ? 0 : offset;
   const postFilterFetchFloor = commodityIntentQuery ? COMMODITY_POST_FILTER_FETCH_FLOOR : 0;
-  const baseFetchLimit = shouldUsePostFilterWindow
+  const addressFetchFloor = shouldUseAddressFetchWindow ? ADDRESS_FETCH_FLOOR : 0;
+  const baseFetchLimit = shouldUseWideFetchWindow
     ? Math.min(
       POST_FILTER_FETCH_MAX,
-      Math.max(limit, limit * POST_FILTER_FETCH_MULTIPLIER, postFilterFetchFloor),
+      Math.max(limit, limit * POST_FILTER_FETCH_MULTIPLIER, postFilterFetchFloor, addressFetchFloor),
     )
     : limit;
   const fetchLimit = useHybridRetrieval
     ? Math.min(HYBRID_FETCH_MAX, Math.max(baseFetchLimit, offset + Math.max(limit * 2, 40)))
-    : baseFetchLimit;
-  const attributesToRetrieve: string[] = shouldUsePostFilterWindow
+    : shouldUseAddressFetchWindow
+      ? Math.min(POST_FILTER_FETCH_MAX, Math.max(baseFetchLimit, offset + Math.max(limit * 2, 40)))
+      : baseFetchLimit;
+  const attributesToRetrieve: string[] = shouldUseWideFetchWindow
     ? [
       "id",
       "name",
@@ -1874,10 +2556,10 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
     shouldUsePostFilterWindow && !companyNameOnlyQuery
       ? rerankHitsByBusinessSignals(structuredHits, {
         queryText: productQuery || query,
-        region: params.region || null,
-        city: params.city || null,
-        lat: Number.isFinite(params.lat) ? Number(params.lat) : null,
-        lng: Number.isFinite(params.lng) ? Number(params.lng) : null,
+        region: regionFilter || null,
+        city: strictCityFilter || null,
+        lat: Number.isFinite(params.lat) ? Number(params.lat) : (districtGeoIntent?.centerLat ?? null),
+        lng: Number.isFinite(params.lng) ? Number(params.lng) : (districtGeoIntent?.centerLng ?? null),
       }, {
         variant: abResolution.variant,
       })
@@ -1903,6 +2585,7 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
     !productQuery &&
     !companyNameOnlyQuery &&
     !hasUxPostFilters &&
+    !districtGeoIntent &&
     !addressHouseIntent &&
     !cityAddressIntent &&
     Boolean(cityFilter || regionFilter);
@@ -1970,7 +2653,26 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
   const dbStartedAt = Date.now();
   const summaries = await biznesinfoGetCompaniesSummaryByIds(ids);
   const dbDurationMs = Date.now() - dbStartedAt;
-  const hydrated = hydrateCompaniesInOrder(ids, summaries);
+  const keywordHintsById = new Map<string, string[]>();
+  for (const hit of rerankedHits) {
+    const id = normalizeText(hit.id || "");
+    if (!id) continue;
+    const keywordHints = Array.isArray(hit.keywords)
+      ? hit.keywords
+        .map((value) => normalizeText(String(value || "")))
+        .filter(Boolean)
+        .slice(0, 24)
+      : [];
+    if (keywordHints.length > 0) keywordHintsById.set(id, keywordHints);
+  }
+  const hydrated = hydrateCompaniesInOrder(ids, summaries).map((company) => {
+    const keywordHints = keywordHintsById.get(normalizeText(company.id || ""));
+    if (!keywordHints || keywordHints.length === 0) return company;
+    return {
+      ...company,
+      keywords: keywordHints,
+    };
+  });
   const nameGuarded = companyNameOnlyQuery
     ? applyCompanyNameRelevanceGuard(hydrated, params.query || "")
     : hydrated;
@@ -1982,7 +2684,16 @@ export async function meiliSearch(params: MeiliSearchParams): Promise<Biznesinfo
     supplyType,
     businessFormat,
   });
-  const logoPrioritized = prioritizeCompaniesWithLogos(uxFiltered);
+  const rerankScoreById = new Map<string, number>();
+  for (const [id, explainItem] of rerankExplainById.entries()) {
+    const score = Number(explainItem?.score);
+    if (!id || !Number.isFinite(score)) continue;
+    rerankScoreById.set(id, score);
+  }
+  const logoPrioritized = prioritizeCompaniesWithLogos(uxFiltered, {
+    scoreById: rerankScoreById,
+    scoreTieDelta: 1.25,
+  });
   const zeroResults = buildZeroResultsPayload({
     filteredCompanies: logoPrioritized,
     baseCompanies: addressGuarded,

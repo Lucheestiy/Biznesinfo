@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type TouchEvent } from "react";
 import Header from "@/components/Header";
+import CompanyCallDialog from "@/components/CompanyCallDialog";
 import Footer from "@/components/Footer";
 import MessageModal from "@/components/MessageModal";
 import CompanyLocationMap from "@/components/CompanyLocationMap";
@@ -50,15 +51,6 @@ function logoProxyUrl(companyId: string, rawLogoUrl: string): string {
 
   if (!pathname.startsWith("/images/")) return "";
   return `/api/biznesinfo/logo?id=${encodeURIComponent(companyId)}&path=${encodeURIComponent(pathname)}&v=3`;
-}
-
-function normalizePhoneForTel(phone: string): string {
-  const trimmed = (phone || "").trim();
-  if (!trimmed) return "";
-  const cleaned = trimmed.replace(/[^\d+]/g, "");
-  if (!cleaned) return trimmed;
-  if (cleaned.startsWith("+")) return `+${cleaned.slice(1).replace(/\+/g, "")}`;
-  return cleaned.replace(/\+/g, "");
 }
 
 function getWorkStatusDotClass(workStatus: { isOpen: boolean }): string {
@@ -261,6 +253,32 @@ function getOptimizedLocalImageSrc(src: string | null | undefined, width: 256 | 
   return `/_next/image?url=${encodeURIComponent(raw)}&w=${width}&q=75`;
 }
 
+function companyMediaProxyUrl(companyId: string, rawUrl: string | null | undefined): string {
+  const raw = (rawUrl || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("/api/biznesinfo/company-media")) return raw;
+  if (raw.startsWith("/")) return raw;
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return raw;
+    u.username = "";
+    u.password = "";
+    u.hash = "";
+    return `/api/biznesinfo/company-media?id=${encodeURIComponent(companyId)}&url=${encodeURIComponent(u.toString())}`;
+  } catch {
+    return raw;
+  }
+}
+
+function getCompanyMediaSrc(companyId: string, src: string | null | undefined, width?: 256 | 384): string | null {
+  const raw = (src || "").trim();
+  if (!raw) return null;
+  if (raw.startsWith("/")) {
+    return width ? (getOptimizedLocalImageSrc(raw, width) || raw) : raw;
+  }
+  return companyMediaProxyUrl(companyId, raw);
+}
+
 // Use provided keyword tags as-is (for company overrides), fallback to generated top-10.
 function generateKeywords(company: BiznesinfoCompany, generatedKeywords?: string[] | null): string[] {
   const ready = (generatedKeywords || [])
@@ -344,6 +362,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
   const { t, language } = useLanguage();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [messageModalOpen, setMessageModalOpen] = useState(false);
+  const [callDialogPhone, setCallDialogPhone] = useState<BiznesinfoPhoneExt | null>(null);
   const [data, setData] = useState<BiznesinfoCompanyResponse | null>(initialData);
   const [isLoading, setIsLoading] = useState(!initialData);
   const [logoFailed, setLogoFailed] = useState(false);
@@ -361,6 +380,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
     setShowAllWebsites(false);
     setPhotoViewerOpen(false);
     setPhotoViewerIndex(0);
+    setCallDialogPhone(null);
     const shouldFetchLocalized = language !== "ru";
     const endpoint = shouldFetchLocalized
       ? `/api/biznesinfo/company/${encodeURIComponent(id)}?lang=${encodeURIComponent(language)}`
@@ -467,6 +487,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
 
   const photosForLightbox = companyMaybe?.photos || [];
   const lightboxPhoto = photoViewerOpen ? photosForLightbox[photoViewerIndex] : null;
+  const overlayOpen = photoViewerOpen || Boolean(callDialogPhone);
 
   useEffect(() => {
     if (!photoViewerOpen) return;
@@ -503,14 +524,27 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
   }, [photoViewerOpen, photosForLightbox.length]);
 
   useEffect(() => {
-    if (!photoViewerOpen) return;
+    if (!overlayOpen) return;
     if (typeof document === "undefined") return;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prevOverflow;
     };
-  }, [photoViewerOpen]);
+  }, [overlayOpen]);
+
+  useEffect(() => {
+    if (!callDialogPhone) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setCallDialogPhone(null);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [callDialogPhone]);
 
   if (isLoading) {
     return (
@@ -603,7 +637,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
   const headerDescription = hasHeaderOverride
     ? headerDescriptionSource
     : truncateDescription(headerDescriptionSource, 250);
-  const secondaryLabel = localizedPrimaryCategoryName || localizedPrimaryRubricName || "";
+  const secondaryLabel = localizedPrimaryRubricName || localizedPrimaryCategoryName || "";
   const isMsu23 = (() => {
     const keys = [id, company.source_id]
       .filter(Boolean)
@@ -617,6 +651,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
   const servicesList = company.services_list || [];
   const photos = company.photos || [];
   const reviews = company.reviews || [];
+  const companyMediaId = String(company.source_id || id || "").trim();
 
   const categoryLink = primaryCategory ? `/catalog/${primaryCategory.slug}` : "/#catalog";
   const rubricSubSlug = primaryRubric ? primaryRubric.slug.split("/").slice(1).join("/") : "";
@@ -670,6 +705,15 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
     setPhotoViewerOpen(true);
   };
   const closePhotoViewer = () => setPhotoViewerOpen(false);
+  const openCallDialog = (phone: BiznesinfoPhoneExt) => {
+    if (!phone?.number) return;
+    setCallDialogPhone(phone);
+  };
+  const closeCallDialog = () => setCallDialogPhone(null);
+  const handlePhoneClick = (event: MouseEvent<HTMLElement>, phone: BiznesinfoPhoneExt) => {
+    event.preventDefault();
+    openCallDialog(phone);
+  };
   const goPrevPhoto = () => {
     if (photos.length <= 1) return;
     setPhotoViewerIndex((i) => (i - 1 + photos.length) % photos.length);
@@ -730,7 +774,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
           {isMsu23 ? (
             <>
               <img
-                src={company.hero_image || "/companies/msu-23/hero.jpg"}
+                src={getCompanyMediaSrc(companyMediaId, company.hero_image) || "/companies/msu-23/hero.jpg"}
                 alt=""
                 className="absolute inset-0 w-full h-full object-cover object-[50%_65%]"
                 decoding="async"
@@ -747,7 +791,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
               <div className="absolute top-1/4 right-1/4 w-20 h-20 bg-white/5 rounded-full" />
               {company.hero_image && (
                 <img
-                  src={getOptimizedLocalImageSrc(company.hero_image, 384) || company.hero_image}
+                  src={getCompanyMediaSrc(companyMediaId, company.hero_image, 384) || company.hero_image}
                   alt=""
                   className="absolute inset-0 w-full h-full object-cover opacity-15 blur-sm"
                   decoding="async"
@@ -1116,9 +1160,12 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                           {phones.map((p, idx) => (
                             <div key={`${p.number}-${idx}`} className="flex items-start gap-2">
                               <div className="flex w-full flex-col gap-1 sm:flex-row sm:items-start sm:gap-3">
-                                <a
-                                  href={`tel:${normalizePhoneForTel(p.number) || p.number}`}
-                                  className="flex items-start gap-2 text-[#820251] font-semibold text-base md:text-lg hover:underline whitespace-nowrap"
+                                <button
+                                  type="button"
+                                  onClick={(event) => handlePhoneClick(event, p)}
+                                  aria-label={`${t("company.call")}: ${company.name}, ${p.number}`}
+                                  title={`${t("company.call")}: ${company.name}`}
+                                  className="flex items-start gap-2 whitespace-nowrap text-left font-semibold text-[#820251] text-base hover:underline md:text-lg"
                                 >
                                   <svg
                                     className="w-4 h-4 text-[#074c48] mt-1"
@@ -1133,7 +1180,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.86 19.86 0 0 1 3 5.18 2 2 0 0 1 5 3h3a2 2 0 0 1 2 1.72 12.36 12.36 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L9.1 10.9a16 16 0 0 0 4 4l1.26-1.15a2 2 0 0 1 2.11-.45 12.36 12.36 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
                                   </svg>
                                   <span>{p.number}</span>
-                                </a>
+                                </button>
                                 {p.labels && p.labels.length > 0 && (
                                   <div className="text-sm md:text-base text-gray-500 leading-snug sm:ml-auto sm:text-right break-words">
                                     {p.labels.join(", ")}
@@ -1303,6 +1350,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                       query: {
                         companyId: company.source_id,
                         companyName: company.name,
+                        rfqOpen: "1",
                         returnTo: `/company/${company.source_id}`,
                       },
                     }}
@@ -1359,7 +1407,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                         {service.image_url ? (
                           <div className="w-full h-32 rounded-lg overflow-hidden bg-gray-100 mb-3">
                             <img
-                              src={getOptimizedLocalImageSrc(service.image_url, 384) || service.image_url}
+                              src={getCompanyMediaSrc(companyMediaId, service.image_url, 384) || service.image_url}
                               alt={service.name}
                               className="w-full h-full object-contain bg-white"
                               loading="lazy"
@@ -1406,7 +1454,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
                             aria-label={`${t("company.openPhoto")}: ${photo.alt || company.name}`}
                           >
                             <img
-                              src={getOptimizedLocalImageSrc(photo.url, 256) || photo.url}
+                              src={getCompanyMediaSrc(companyMediaId, photo.url, 256) || photo.url}
                               alt={photo.alt || company.name}
                               className="w-full h-full object-cover"
                               loading="lazy"
@@ -1550,6 +1598,17 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
 
       <Footer />
 
+      <CompanyCallDialog
+        open={Boolean(callDialogPhone)}
+        companyId={company.source_id || id}
+        companyName={company.name}
+        phone={callDialogPhone}
+        email={primaryEmail || undefined}
+        website={regularWebsites[0] || company.websites?.[0] || undefined}
+        address={company.address || undefined}
+        onClose={closeCallDialog}
+      />
+
       {photoViewerOpen && lightboxPhoto && (
         <div
           className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-3"
@@ -1564,7 +1623,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
               <div className="text-sm">{photos.length > 0 ? `${photoViewerIndex + 1} / ${photos.length}` : ""}</div>
               <div className="flex items-center gap-3">
                 <a
-                  href={lightboxPhoto.url}
+                  href={getCompanyMediaSrc(companyMediaId, lightboxPhoto.url) || lightboxPhoto.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-white/80 hover:text-white underline underline-offset-2"
@@ -1600,7 +1659,7 @@ export default function CompanyPageClient({ id, initialData }: CompanyPageClient
               )}
 
               <img
-                src={lightboxPhoto.url}
+                src={getCompanyMediaSrc(companyMediaId, lightboxPhoto.url) || lightboxPhoto.url}
                 alt={lightboxPhoto.alt || company.name}
                 className="max-h-[80vh] w-auto max-w-full object-contain rounded-lg shadow-2xl select-none"
                 draggable={false}

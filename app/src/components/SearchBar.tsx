@@ -8,7 +8,7 @@ import type { BiznesinfoSuggestResponse } from "@/lib/biznesinfo/types";
 import Rubricator from "./Rubricator";
 
 interface SearchBarProps {
-  variant?: "hero" | "compact" | "compactKeywords";
+  variant?: "hero" | "compact" | "compactKeywords" | "subrubric";
 }
 
 interface SearchSuggestion {
@@ -44,6 +44,9 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
   const phoneHintTimeoutRef = useRef<number | null>(null);
 
   const activeInputRef = activeInput === "company" ? companyInputRef : keywordsInputRef;
+  const supportsLocation = variant === "hero" || variant === "subrubric";
+  const usesRegionContext = variant !== "subrubric";
+  const showHeroExtras = variant === "hero";
 
   // Initialize query from URL parameter
   useEffect(() => {
@@ -55,12 +58,12 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
     setCompanyQuery(urlQuery);
     setServiceQuery(urlService);
     setKeywordsQuery(urlKeywords);
-    setCityQuery(variant === "hero" ? urlCity : "");
+    setCityQuery(supportsLocation ? urlCity : "");
 
     if (urlQuery && companyInputRef.current) {
       companyInputRef.current.focus();
     }
-  }, [searchParams, variant]);
+  }, [searchParams, supportsLocation]);
 
   // Update suggestions when query/region changes
   useEffect(() => {
@@ -76,7 +79,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
     }
 
     const abort = new AbortController();
-    const region = selectedRegion || "";
+    const region = usesRegionContext ? (selectedRegion || "") : "";
     
     // "Название компании" → /api/biznesinfo/suggest (companies)
     // "Продукция и услуги" → /api/biznesinfo/catalog/suggest (categories/rubrics)
@@ -116,7 +119,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
       });
 
     return () => abort.abort();
-  }, [activeInput, companyQuery, keywordsQuery, selectedRegion, serviceQuery]);
+  }, [activeInput, companyQuery, keywordsQuery, selectedRegion, serviceQuery, usesRegionContext]);
 
   // Handle click outside to close suggestions
   useEffect(() => {
@@ -163,11 +166,11 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
     if (keywords && service && keywords !== service) {
       params.set("keywords", keywords);
     }
-    const location = variant === "hero" ? cityQuery.trim() : "";
+    const location = supportsLocation ? cityQuery.trim() : "";
     if (location) {
       params.set("city", location);
     }
-    if (selectedRegion && !location) {
+    if (usesRegionContext && selectedRegion && !location) {
       params.set("region", selectedRegion);
     }
     router.push(`/search?${params.toString()}`);
@@ -203,6 +206,21 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
   const handleSuggestionClick = (url: string) => {
     setShowSuggestions(false);
     router.push(url);
+  };
+
+  const preventInputBlurOnMouseDown = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+  };
+
+  const clearCompanyInput = () => {
+    setCompanyQuery("");
+    setSuggestions([]);
+    setSelectedIndex(-1);
+    setShowSuggestions(false);
+    setActiveInput("company");
+    window.requestAnimationFrame(() => {
+      companyInputRef.current?.focus();
+    });
   };
 
   const isImageIcon = (icon: string): boolean => {
@@ -389,7 +407,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
   }
 
   return (
-    <form onSubmit={handleSearch} className="w-full max-w-4xl mx-auto px-4 md:px-0">
+    <div className="w-full max-w-4xl mx-auto px-4 md:px-0">
       {/* Mobile layout - separate cards */}
       <div className="flex md:hidden flex-col gap-3">
         {/* Search input card */}
@@ -424,9 +442,24 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
                 autoComplete="off"
                 className="portal-dialog-typography search-input-mobile flex-grow min-w-0 py-3.5 px-3 text-gray-600 focus:outline-none text-base bg-transparent"
               />
+              {companyQuery.trim().length > 0 && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={clearCompanyInput}
+                  className="w-8 h-8 shrink-0 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors flex items-center justify-center"
+                  aria-label="Очистить поиск"
+                  title="Очистить"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              )}
               {/* Search button inside input */}
               <button
                 type="button"
+                onMouseDown={preventInputBlurOnMouseDown}
                 onClick={handleSearch}
                 className="m-2 w-10 h-10 shrink-0 flex items-center justify-center bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-xl shadow-md
                   hover:shadow-[0_0_20px_rgba(255,255,255,0.6)] hover:scale-110
@@ -444,7 +477,8 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
           {showSuggestions && activeInput === "company" && suggestions.length > 0 && (
             <div
               ref={suggestionsRef}
-              className="mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl max-h-[50vh] overflow-y-auto overscroll-contain"
+              className="mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-y-auto overscroll-contain"
+              style={{ maxHeight: "34dvh", paddingBottom: "calc(env(safe-area-inset-bottom) + 6rem)" }}
             >
               {suggestions.map((suggestion, idx) => (
                 <button
@@ -507,6 +541,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
             {renderPhoneSearchHint("mobile")}
             <button
               type="button"
+              onMouseDown={preventInputBlurOnMouseDown}
               onClick={handleSearch}
               className="m-2 w-10 h-10 shrink-0 flex items-center justify-center bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-xl shadow-md
                 hover:shadow-[0_0_20px_rgba(255,255,255,0.6)] hover:scale-110
@@ -523,7 +558,8 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
           {showSuggestions && activeInput === "service" && suggestions.length > 0 && (
             <div
               ref={suggestionsRef}
-              className="mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl max-h-[50vh] overflow-y-auto overscroll-contain"
+              className="mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-y-auto overscroll-contain"
+              style={{ maxHeight: "34dvh", paddingBottom: "calc(env(safe-area-inset-bottom) + 6rem)" }}
             >
               {suggestions.map((suggestion, idx) => (
                 <button
@@ -576,6 +612,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
             />
             <button
               type="button"
+              onMouseDown={preventInputBlurOnMouseDown}
               onClick={handleSearch}
               className="m-2 w-10 h-10 shrink-0 flex items-center justify-center bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-xl shadow-md
                 hover:shadow-[0_0_20px_rgba(255,255,255,0.6)] hover:scale-110
@@ -588,6 +625,8 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
             </button>
           </div>
         </div>
+
+        {showHeroExtras && <Rubricator inline floating={false} />}
       </div>
 
       {/* Desktop layout - separate cards in row */}
@@ -624,6 +663,20 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
                 autoComplete="off"
                 className="portal-dialog-typography search-input-hero flex-grow py-5 px-4 text-[#4b5563] focus:outline-none text-lg bg-transparent"
               />
+              {companyQuery.trim().length > 0 && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={clearCompanyInput}
+                  className="mr-4 w-8 h-8 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors flex items-center justify-center shrink-0"
+                  aria-label="Очистить поиск"
+                  title="Очистить"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
 
@@ -769,6 +822,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
         {/* Search button */}
         <button
           type="button"
+          onMouseDown={preventInputBlurOnMouseDown}
           onClick={handleSearch}
           className="flex-shrink-0 w-16 bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-2xl shadow-lg
             hover:shadow-[0_0_25px_rgba(255,255,255,0.6)] hover:scale-110
@@ -781,13 +835,15 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
         </button>
       </div>
 
-      {/* Inline Rubricator - third window, same width as search row (without button) */}
-      <div className="">
-        <Rubricator inline floating={false} />
-      </div>
+      {showHeroExtras && (
+        <>
+          {/* Inline Rubricator - third window, same width as search row (without button) */}
+          <div className="hidden md:block mt-3">
+            <Rubricator inline floating={false} />
+          </div>
 
-      {/* AI Assistant info block - clickable */}
-      <div className="mt-3 w-full relative group/consult">
+          {/* AI Assistant info block - clickable */}
+          <div className="mt-4 md:mt-3 w-full relative group/consult">
         {/* Animated running border */}
         <div className="absolute inset-0 rounded-2xl p-[2px] overflow-hidden">
           <div
@@ -802,59 +858,61 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
         {/* Outer glow on hover */}
         <div className="absolute inset-0 rounded-2xl bg-yellow-400/0 group-hover/consult:bg-yellow-400/10 blur-xl transition-all duration-500" />
 
-        <button
-          type="button"
-          onClick={() => {
-            router.push("/assistant");
-          }}
-          className="relative w-full bg-gradient-to-r from-[#820251] via-[#a80368] to-[#820251] bg-[length:200%_100%] animate-gradient rounded-2xl p-5 md:p-6 text-white
-            shadow-[0_10px_40px_rgba(130,2,81,0.4)] group-hover/consult:shadow-[0_20px_60px_rgba(130,2,81,0.5)]
-            transition-all duration-300 group-hover/consult:scale-[1.02] active:scale-[0.98] overflow-hidden"
-        >
+            <button
+              type="button"
+              onClick={() => {
+                router.push("/assistant");
+              }}
+              className="relative w-full bg-gradient-to-r from-[#820251] via-[#a80368] to-[#820251] bg-[length:200%_100%] animate-gradient rounded-2xl p-4 md:p-6 text-white
+                shadow-[0_10px_40px_rgba(130,2,81,0.4)] group-hover/consult:shadow-[0_20px_60px_rgba(130,2,81,0.5)]
+                transition-all duration-300 group-hover/consult:scale-[1.02] active:scale-[0.98] overflow-hidden"
+            >
           {/* Background particles */}
           <div className="absolute inset-0 overflow-hidden">
             <div className="absolute top-0 right-0 w-48 h-48 bg-yellow-400/10 rounded-full blur-3xl animate-pulse" />
             <div className="absolute bottom-0 left-0 w-32 h-32 bg-pink-400/10 rounded-full blur-2xl animate-pulse" style={{animationDelay: '1s'}} />
           </div>
 
-          <div className="relative flex items-center gap-5">
+              <div className="relative flex items-center gap-4 md:gap-5">
             {/* Glowing lightbulb */}
             <div className="relative flex-shrink-0">
               {/* Glow layers */}
               <div className="absolute inset-[-12px] bg-yellow-400/20 rounded-full blur-xl animate-[pulse_2s_ease-in-out_infinite]" />
               <div className="absolute inset-[-6px] bg-yellow-300/25 rounded-full blur-lg animate-[pulse_1.5s_ease-in-out_infinite]" />
 
-              <div className="relative w-14 h-14 md:w-16 md:h-16 bg-gradient-to-br from-yellow-200 via-yellow-400 to-yellow-500 rounded-xl flex items-center justify-center
+              <div className="relative w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-yellow-200 via-yellow-400 to-yellow-500 rounded-xl flex items-center justify-center
                 shadow-[0_0_20px_rgba(250,204,21,0.5),0_0_40px_rgba(250,204,21,0.2)]
                 group-hover/consult:shadow-[0_0_30px_rgba(250,204,21,0.7),0_0_60px_rgba(250,204,21,0.3)]
                 group-hover/consult:scale-110 transition-all duration-300 animate-[pulse_2s_ease-in-out_infinite]">
-                <svg className="w-7 h-7 md:w-8 md:h-8 text-[#820251]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 md:w-8 md:h-8 text-[#820251]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
               </div>
             </div>
 
-            <div className="flex-grow min-w-0 text-left">
-              <h3 className="font-bold text-lg md:text-xl mb-1 flex items-center gap-2 group-hover/consult:text-yellow-300 transition-colors">
-                {t("ai.title")}
-                <span className="text-xs bg-gradient-to-r from-yellow-300 to-yellow-500 text-[#820251] px-2.5 py-1 rounded-full font-bold uppercase
-                  shadow-[0_0_10px_rgba(250,204,21,0.4)] animate-pulse">{t("ai.newBadge") || "New"}</span>
-              </h3>
-              <p className="text-pink-100 text-sm md:text-base leading-relaxed group-hover/consult:text-white transition-colors">
-                {t("ai.shortDesc")}
-              </p>
-            </div>
+                <div className="flex-grow min-w-0 text-left">
+                  <h3 className="font-bold text-base md:text-xl mb-1 flex items-center gap-2 group-hover/consult:text-yellow-300 transition-colors">
+                    {t("ai.title")}
+                    <span className="text-[10px] md:text-xs bg-gradient-to-r from-yellow-300 to-yellow-500 text-[#820251] px-2 py-0.5 md:px-2.5 md:py-1 rounded-full font-bold uppercase
+                      shadow-[0_0_10px_rgba(250,204,21,0.4)] animate-pulse">{t("ai.newBadge") || "New"}</span>
+                  </h3>
+                  <p className="text-pink-100 text-[13px] md:text-base leading-snug md:leading-relaxed group-hover/consult:text-white transition-colors">
+                    {t("ai.shortDesc")}
+                  </p>
+                </div>
 
-            <div className="flex-shrink-0">
-              <svg className="w-6 h-6 md:w-8 md:h-8 text-yellow-400 group-hover/consult:translate-x-2 group-hover/consult:text-yellow-300 transition-all duration-300
-                drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </div>
+                <div className="flex-shrink-0">
+                  <svg className="w-5 h-5 md:w-8 md:h-8 text-yellow-400 group-hover/consult:translate-x-2 group-hover/consult:text-yellow-300 transition-all duration-300
+                    drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </div>
+              </div>
+
+            </button>
           </div>
-
-        </button>
-      </div>
-    </form>
+        </>
+      )}
+    </div>
   );
 }

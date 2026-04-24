@@ -6,6 +6,7 @@ import { canonicalizeSemanticToken, tokenizeSemanticText } from "@/lib/search/se
 
 import type {
   BiznesinfoCatalogResponse,
+  BiznesinfoCatalogStats,
   BiznesinfoCategoryRef,
   BiznesinfoCompany,
   BiznesinfoCompanyResponse,
@@ -393,7 +394,8 @@ function safeLower(value: string): string {
 }
 
 function normalizeCompanyIdForMatch(id: string): string {
-  return safeLower(id).replace(DASH_VARIANTS_RE, "");
+  const canonical = companySlugForUrl(id || "");
+  return safeLower(canonical || id).replace(DASH_VARIANTS_RE, "");
 }
 
 function regionAliasKeys(region: string | null): string[] {
@@ -1193,6 +1195,12 @@ export type UpsertCompaniesServicesBatchResult = {
   insertedServices: number;
 };
 
+export type UpsertBiznesinfoCatalogBatchResult = {
+  total: number;
+  upserted: number;
+  skipped: number;
+};
+
 export type BiznesinfoSearchItem = {
   id: string;
   name: string;
@@ -1955,6 +1963,195 @@ export async function upsertCompaniesAndServicesBatch(companies: BiznesinfoCompa
   };
 }
 
+export async function upsertBiznesinfoCatalogBatch(companies: BiznesinfoCompany[]): Promise<UpsertBiznesinfoCatalogBatchResult> {
+  await ensureBiznesinfoPgSchema();
+  const pool = getCatalogDbPool();
+  const client = await pool.connect();
+
+  let upserted = 0;
+  let skipped = 0;
+
+  try {
+    await client.query("BEGIN");
+
+    for (const rawCompany of companies || []) {
+      const sourceId = String(rawCompany?.source_id || "").trim();
+      if (!sourceId) {
+        skipped += 1;
+        continue;
+      }
+
+      const company = sanitizeCompanyRecord({
+        ...rawCompany,
+        source: "biznesinfo",
+        source_id: sourceId,
+      } as BiznesinfoCompany);
+
+      if (isExcludedBiznesinfoCompany(company)) {
+        skipped += 1;
+        continue;
+      }
+
+      const categories = Array.isArray(company.categories) ? company.categories : [];
+      const rubrics = Array.isArray(company.rubrics) ? company.rubrics : [];
+      const primaryCategory = categories[0] ?? null;
+      const primaryRubric = rubrics[0] ?? null;
+      const regionSlug = normalizeRegionSlug(company.city || "", company.region || "", company.address || "");
+      const cityNorm = normalizeCityForFilter(company.city || "");
+      const searchText = buildCompanySearchText(company);
+
+      await client.query(
+        `
+          INSERT INTO biznesinfo_companies (
+            id, source, unp, name, search_text, region_slug, city_norm,
+            primary_category_slug, primary_category_name,
+            primary_rubric_slug, primary_rubric_name,
+            payload, updated_at
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7,
+            $8, $9,
+            $10, $11,
+            $12::jsonb, now()
+          )
+          ON CONFLICT (id)
+          DO UPDATE SET
+            source = EXCLUDED.source,
+            unp = EXCLUDED.unp,
+            name = EXCLUDED.name,
+            search_text = EXCLUDED.search_text,
+            region_slug = EXCLUDED.region_slug,
+            city_norm = EXCLUDED.city_norm,
+            primary_category_slug = EXCLUDED.primary_category_slug,
+            primary_category_name = EXCLUDED.primary_category_name,
+            primary_rubric_slug = EXCLUDED.primary_rubric_slug,
+            primary_rubric_name = EXCLUDED.primary_rubric_name,
+            payload = EXCLUDED.payload,
+            updated_at = now()
+        `,
+        [
+          sourceId,
+          "biznesinfo",
+          normalizeBiznesinfoUnp(company.unp || ""),
+          company.name || "",
+          searchText,
+          regionSlug,
+          cityNorm,
+          primaryCategory?.slug ?? null,
+          primaryCategory?.name ?? null,
+          primaryRubric?.slug ?? null,
+          primaryRubric?.name ?? null,
+          JSON.stringify(company),
+        ],
+      );
+
+      await client.query("DELETE FROM biznesinfo_company_categories WHERE company_id = $1", [sourceId]);
+      await client.query("DELETE FROM biznesinfo_company_rubrics WHERE company_id = $1", [sourceId]);
+
+      const seenCategories = new Set<string>();
+      for (let idx = 0; idx < categories.length; idx += 1) {
+        const category = categories[idx];
+        const slug = String(category?.slug || "").trim();
+        if (!slug || seenCategories.has(slug)) continue;
+        seenCategories.add(slug);
+
+        const name = String(category?.name || slug).trim() || slug;
+        const url = String(category?.url || `/catalog/${slug}`).trim() || `/catalog/${slug}`;
+
+        await client.query(
+          `
+            INSERT INTO biznesinfo_categories (slug, name, url)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (slug)
+            DO UPDATE SET
+              name = EXCLUDED.name,
+              url = EXCLUDED.url
+          `,
+          [slug, name, url],
+        );
+
+        await client.query(
+          `
+            INSERT INTO biznesinfo_company_categories (
+              company_id, category_slug, category_name, category_url, position
+            ) VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (company_id, category_slug)
+            DO UPDATE SET
+              category_name = EXCLUDED.category_name,
+              category_url = EXCLUDED.category_url,
+              position = EXCLUDED.position
+          `,
+          [sourceId, slug, name, url, idx],
+        );
+      }
+
+      const seenRubrics = new Set<string>();
+      for (let idx = 0; idx < rubrics.length; idx += 1) {
+        const rubric = rubrics[idx];
+        const rubricSlug = String(rubric?.slug || "").trim();
+        const categorySlug = String(rubric?.category_slug || "").trim();
+        if (!rubricSlug || !categorySlug || seenRubrics.has(rubricSlug)) continue;
+        seenRubrics.add(rubricSlug);
+
+        const rubricName = String(rubric?.name || rubricSlug).trim() || rubricSlug;
+        const rubricUrl = String(
+          rubric?.url || `/catalog/${categorySlug}/${rubricSlug.split("/").slice(1).join("/")}`,
+        ).trim() || `/catalog/${categorySlug}/${rubricSlug.split("/").slice(1).join("/")}`;
+        const categoryName = String(rubric?.category_name || categorySlug).trim() || categorySlug;
+
+        await client.query(
+          `
+            INSERT INTO biznesinfo_rubrics (slug, name, url, category_slug, category_name)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (slug)
+            DO UPDATE SET
+              name = EXCLUDED.name,
+              url = EXCLUDED.url,
+              category_slug = EXCLUDED.category_slug,
+              category_name = EXCLUDED.category_name
+          `,
+          [rubricSlug, rubricName, rubricUrl, categorySlug, categoryName],
+        );
+
+        await client.query(
+          `
+            INSERT INTO biznesinfo_company_rubrics (
+              company_id, rubric_slug, rubric_name, rubric_url,
+              category_slug, category_name, position
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (company_id, rubric_slug)
+            DO UPDATE SET
+              rubric_name = EXCLUDED.rubric_name,
+              rubric_url = EXCLUDED.rubric_url,
+              category_slug = EXCLUDED.category_slug,
+              category_name = EXCLUDED.category_name,
+              position = EXCLUDED.position
+          `,
+          [sourceId, rubricSlug, rubricName, rubricUrl, categorySlug, categoryName, idx],
+        );
+      }
+
+      upserted += 1;
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      // ignore rollback failure
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  return {
+    total: companies.length,
+    upserted,
+    skipped,
+  };
+}
+
 export type BackfillEmptyCompanyRegionsResult = {
   scanned: number;
   updated: number;
@@ -2526,20 +2723,22 @@ export async function biznesinfoGetCompanyCardsByIds(ids: string[]): Promise<Arr
 
 export async function biznesinfoGetCompanyById(id: string): Promise<BiznesinfoCompanyResponse> {
   const rawId = (id || "").trim();
-  if (!rawId) throw new Error("company_not_found:");
+  const canonicalId = companySlugForUrl(rawId);
+  const lookupId = (canonicalId || rawId).trim();
+  if (!lookupId) throw new Error("company_not_found:");
 
   await ensureBiznesinfoPgSchema();
   const pool = getCatalogDbPool();
 
   const exact = await pool.query<{ id: string; region_slug: string | null; payload: unknown }>(
     `SELECT id, region_slug, payload FROM biznesinfo_companies WHERE id = $1 LIMIT 1`,
-    [rawId],
+    [lookupId],
   );
 
   let row = exact.rows[0] || null;
 
   if (!row) {
-    const normalizedTarget = normalizeCompanyIdForMatch(rawId);
+    const normalizedTarget = normalizeCompanyIdForMatch(lookupId);
     const fallback = await pool.query<{ id: string; region_slug: string | null; payload: unknown }>(
       `
         SELECT id, region_slug, payload
@@ -2553,12 +2752,12 @@ export async function biznesinfoGetCompanyById(id: string): Promise<BiznesinfoCo
   }
 
   if (!row) {
-    throw new Error(`company_not_found:${rawId}`);
+    throw new Error(`company_not_found:${lookupId}`);
   }
 
   const company = toBiznesinfoCompany(row.payload);
   if (!company.source_id || isExcludedBiznesinfoCompany(company)) {
-    throw new Error(`company_not_found:${rawId}`);
+    throw new Error(`company_not_found:${lookupId}`);
   }
 
   return {
@@ -2572,14 +2771,57 @@ export async function biznesinfoGetCompanyById(id: string): Promise<BiznesinfoCo
   };
 }
 
-export async function biznesinfoGetCatalogFromPg(region: string | null): Promise<BiznesinfoCatalogResponse> {
+export async function biznesinfoGetCatalogStatsFromPg(region: string | null): Promise<BiznesinfoCatalogStats> {
   await ensureBiznesinfoPgSchema();
   const pool = getCatalogDbPool();
 
   const regionKeys = regionAliasKeys(region);
   const hasRegion = regionKeys.length > 0;
 
-  const [categoriesRes, rubricsRes, categoryCountsRes, rubricCountsRes, totalsRes, updatedAtRes] = await Promise.all([
+  const [totalsRes, updatedAtRes] = await Promise.all([
+    hasRegion
+      ? pool.query<{ companies_total: string; categories_total: string; rubrics_total: string }>(
+          `
+            SELECT
+              (SELECT COUNT(*)::text FROM biznesinfo_companies c WHERE c.region_slug = ANY($1::text[])) AS companies_total,
+              (SELECT COUNT(*)::text FROM biznesinfo_categories) AS categories_total,
+              (SELECT COUNT(*)::text FROM biznesinfo_rubrics) AS rubrics_total
+          `,
+          [regionKeys],
+        )
+      : pool.query<{ companies_total: string; categories_total: string; rubrics_total: string }>(
+          `
+            SELECT
+              (SELECT COUNT(*)::text FROM biznesinfo_companies) AS companies_total,
+              (SELECT COUNT(*)::text FROM biznesinfo_categories) AS categories_total,
+              (SELECT COUNT(*)::text FROM biznesinfo_rubrics) AS rubrics_total
+          `,
+        ),
+    pool.query<{ updated_at: string | null }>(
+      `SELECT to_char(MAX(updated_at), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS updated_at FROM biznesinfo_companies`,
+    ),
+  ]);
+
+  const totals = totalsRes.rows[0] || { companies_total: "0", categories_total: "0", rubrics_total: "0" };
+
+  return {
+    companies_total: Number.parseInt(String(totals.companies_total || "0"), 10) || 0,
+    categories_total: Number.parseInt(String(totals.categories_total || "0"), 10) || 0,
+    rubrics_total: Number.parseInt(String(totals.rubrics_total || "0"), 10) || 0,
+    updated_at: updatedAtRes.rows[0]?.updated_at || null,
+    source_path: "postgresql",
+  };
+}
+
+export async function biznesinfoGetCatalogFromPg(region: string | null): Promise<BiznesinfoCatalogResponse> {
+  await ensureBiznesinfoPgSchema();
+  const pool = getCatalogDbPool();
+
+  const regionKeys = regionAliasKeys(region);
+  const hasRegion = regionKeys.length > 0;
+  const statsPromise = biznesinfoGetCatalogStatsFromPg(region);
+
+  const [categoriesRes, rubricsRes, categoryCountsRes, rubricCountsRes, stats] = await Promise.all([
     pool.query<{ slug: string; name: string; url: string }>(
       `SELECT slug, name, url FROM biznesinfo_categories ORDER BY name ASC, slug ASC`,
     ),
@@ -2622,27 +2864,7 @@ export async function biznesinfoGetCatalogFromPg(region: string | null): Promise
             GROUP BY cr.rubric_slug
           `,
         ),
-    hasRegion
-      ? pool.query<{ companies_total: string; categories_total: string; rubrics_total: string }>(
-          `
-            SELECT
-              (SELECT COUNT(*)::text FROM biznesinfo_companies c WHERE c.region_slug = ANY($1::text[])) AS companies_total,
-              (SELECT COUNT(*)::text FROM biznesinfo_categories) AS categories_total,
-              (SELECT COUNT(*)::text FROM biznesinfo_rubrics) AS rubrics_total
-          `,
-          [regionKeys],
-        )
-      : pool.query<{ companies_total: string; categories_total: string; rubrics_total: string }>(
-          `
-            SELECT
-              (SELECT COUNT(*)::text FROM biznesinfo_companies) AS companies_total,
-              (SELECT COUNT(*)::text FROM biznesinfo_categories) AS categories_total,
-              (SELECT COUNT(*)::text FROM biznesinfo_rubrics) AS rubrics_total
-          `,
-        ),
-    pool.query<{ updated_at: string | null }>(
-      `SELECT to_char(MAX(updated_at), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS updated_at FROM biznesinfo_companies`,
-    ),
+    statsPromise,
   ]);
 
   const categoryCountBySlug = new Map<string, number>();
@@ -2680,16 +2902,8 @@ export async function biznesinfoGetCatalogFromPg(region: string | null): Promise
     ),
   }));
 
-  const totals = totalsRes.rows[0] || { companies_total: "0", categories_total: "0", rubrics_total: "0" };
-
   return {
-    stats: {
-      companies_total: Number.parseInt(String(totals.companies_total || "0"), 10) || 0,
-      categories_total: Number.parseInt(String(totals.categories_total || "0"), 10) || 0,
-      rubrics_total: Number.parseInt(String(totals.rubrics_total || "0"), 10) || 0,
-      updated_at: updatedAtRes.rows[0]?.updated_at || null,
-      source_path: "postgresql",
-    },
+    stats,
     categories,
   };
 }

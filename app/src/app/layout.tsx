@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import { biznesinfoWarmStore } from "@/lib/biznesinfo/store";
+import { buildWebsiteJsonLd } from "@/lib/biznesinfo/schema";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -56,11 +57,6 @@ export const metadata: Metadata = {
     apple: [{ url: `/apple-touch-icon.png?v=${ICON_VERSION}`, sizes: "180x180", type: "image/png" }],
     shortcut: [`/favicon.ico?v=${ICON_VERSION}`],
   },
-  appleWebApp: {
-    capable: true,
-    title: "Biznesinfo.by",
-    statusBarStyle: "black-translucent",
-  },
 };
 
 export const viewport: Viewport = {
@@ -77,20 +73,29 @@ export default function RootLayout({
 
   return (
     <html lang="ru">
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(buildWebsiteJsonLd()) }}
+        />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} antialiased`}>
         <div
           id="app-loading-fallback"
+          aria-hidden="true"
           style={{
             position: "fixed",
             inset: "0",
             zIndex: "2147483647",
             background: "#f3f4f6",
-            display: "flex",
+            display: "none",
             alignItems: "center",
             justifyContent: "center",
             padding: "24px",
             textAlign: "center",
             color: "#1f2937",
+            opacity: "0",
+            pointerEvents: "none",
           }}
         >
           <div>
@@ -105,7 +110,7 @@ export default function RootLayout({
         </div>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var root=document.documentElement;var box=document.getElementById('app-loading-fallback');var hint=document.getElementById('app-loading-hint');if(!box){return;}var done=false;var observer=null;var HINT_MS=2000;var MAX_WAIT_MS=3500;var hide=function(force){if(done){return;}if(!force&&root.getAttribute('data-app-hydrated')!=='1'){return;}done=true;if(observer){observer.disconnect();}box.style.transition='opacity 180ms ease';box.style.opacity='0';setTimeout(function(){box.style.display='none';box.setAttribute('aria-hidden','true');},200);};hide(false);observer=new MutationObserver(function(){hide(false);});observer.observe(root,{attributes:true,attributeFilter:['data-app-hydrated']});var earlyHide=function(){setTimeout(function(){hide(true);},700);};if(document.readyState==='complete'||document.readyState==='interactive'){earlyHide();}else{document.addEventListener('DOMContentLoaded',earlyHide,{once:true});}setTimeout(function(){if(done){return;}if(hint){hint.textContent='Почти готово...';}},HINT_MS);setTimeout(function(){if(done){return;}hide(true);},MAX_WAIT_MS);window.addEventListener('error',function(){hide(true);},{once:true});window.addEventListener('unhandledrejection',function(){hide(true);},{once:true});})();`,
+            __html: `(function(){var root=document.documentElement;var box=document.getElementById('app-loading-fallback');var hint=document.getElementById('app-loading-hint');if(!box){return;}var done=false;var shown=false;var observer=null;var showTimer=null;var hintTimer=null;var maxTimer=null;var SHOW_MS=280;var HINT_MS=1600;var MAX_WAIT_MS=2200;box.style.transition='opacity 140ms ease';var show=function(){if(done||shown){return;}if(root.getAttribute('data-app-hydrated')==='1'){return;}shown=true;box.style.display='flex';box.setAttribute('aria-hidden','false');requestAnimationFrame(function(){box.style.opacity='1';});};var hide=function(force){if(done){return;}if(!force&&root.getAttribute('data-app-hydrated')!=='1'){return;}done=true;if(observer){observer.disconnect();}if(showTimer){clearTimeout(showTimer);}if(hintTimer){clearTimeout(hintTimer);}if(maxTimer){clearTimeout(maxTimer);}box.style.opacity='0';setTimeout(function(){box.style.display='none';box.setAttribute('aria-hidden','true');},140);};observer=new MutationObserver(function(){hide(false);});observer.observe(root,{attributes:true,attributeFilter:['data-app-hydrated']});showTimer=setTimeout(show,SHOW_MS);hintTimer=setTimeout(function(){if(done||!shown){return;}if(hint){hint.textContent='Почти готово...';}},HINT_MS);maxTimer=setTimeout(function(){hide(true);},MAX_WAIT_MS);if(document.readyState==='complete'||document.readyState==='interactive'){setTimeout(function(){hide(true);},420);}else{document.addEventListener('DOMContentLoaded',function(){setTimeout(function(){hide(true);},420);},{once:true});}window.addEventListener('error',function(){hide(true);},{once:true});window.addEventListener('unhandledrejection',function(){hide(true);},{once:true});})();`,
           }}
         />
         <Providers>{children}</Providers>

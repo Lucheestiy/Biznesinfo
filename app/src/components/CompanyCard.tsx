@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useFavorites } from "@/contexts/FavoritesContext";
 import AIAssistant from "./AIAssistant";
+import CompanyCallDialog from "./CompanyCallDialog";
 import MessageModal from "./MessageModal";
 import { localizeCatalogCategoryName, localizeCatalogRubricName } from "@/lib/biznesinfo/catalog-localization";
-import type { BiznesinfoCompanySummary } from "@/lib/biznesinfo/types";
+import type { BiznesinfoCompanySummary, BiznesinfoPhoneExt } from "@/lib/biznesinfo/types";
 import { BIZNESINFO_CATEGORY_ICONS } from "@/lib/biznesinfo/icons";
 import { companySlugForUrl } from "@/lib/biznesinfo/slug";
 import { buildHighlightRegex, highlightText } from "@/lib/utils/highlight";
@@ -261,9 +262,28 @@ function excerptAroundMatch(text: string, matchIndex: number, matchLength: numbe
   }
 
   let snippet = value.slice(start, end).trim();
-  if (start > 0) snippet = `…${snippet}`;
   if (end < value.length) snippet = `${snippet}…`;
   return snippet;
+}
+
+function normalizeSnippetLead(raw: string): string {
+  let value = normalizeWhitespace(raw || "");
+  if (!value) return "";
+
+  value = value.replace(/^(?:\.\.\.|…)+\s*/u, "");
+  value = value.replace(/^[-–—,:;.\s]+/u, "");
+
+  if (/^наша\s+цель\s*[-–—:]\s*/iu.test(value)) {
+    value = value.replace(/^наша\s+цель\s*[-–—:]\s*/iu, "Цель компании - ");
+  } else if (/^цель\s*[-–—:]\s*/iu.test(value)) {
+    value = value.replace(/^цель\s*[-–—:]\s*/iu, "Цель компании - ");
+  }
+
+  if (value.length > 0) {
+    value = value.replace(/^([a-zа-яё])/u, (m) => m.toUpperCase());
+  }
+
+  return value;
 }
 
 function buildSearchSnippet(raw: string, maxChars: number, highlightTokens: string[] = []): string {
@@ -308,10 +328,6 @@ function buildSearchSnippet(raw: string, maxChars: number, highlightTokens: stri
   const lastSpace = truncated.lastIndexOf(" ");
   if (lastSpace > 0) return truncated.slice(0, lastSpace).trim();
   return truncated.trim();
-}
-
-function normalizePhoneHref(raw: string): string {
-  return (raw || "").replace(/[^\d+]/g, "");
 }
 
 /**
@@ -421,6 +437,7 @@ function SearchCompanyCard({
   const { isFavorite, toggleFavorite } = useFavorites();
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
+  const [callDialogPhone, setCallDialogPhone] = useState<BiznesinfoPhoneExt | null>(null);
   const logoImgRef = useRef<HTMLImageElement | null>(null);
 
   const companySlug = companySlugForUrl(company.id);
@@ -498,18 +515,19 @@ function SearchCompanyCard({
 
     if (tokens.length > 0) {
       if (firstHighlightMatch(description, tokens)) {
-        return buildSearchSnippet(description, maxChars, tokens);
+        return normalizeSnippetLead(buildSearchSnippet(description, maxChars, tokens));
       }
       if (firstHighlightMatch(about, tokens)) {
-        return buildSearchSnippet(about, maxChars, tokens);
+        return normalizeSnippetLead(buildSearchSnippet(about, maxChars, tokens));
       }
     }
 
     const source = description || about;
-    return buildSearchSnippet(source, maxChars, tokens);
+    return normalizeSnippetLead(buildSearchSnippet(source, maxChars, tokens));
   }, [company.about, company.description, highlightServiceTokens]);
 
   const address = (company.address || company.city || "").trim();
+  const primaryWebsite = (company.websites?.[0] || "").trim();
 
   const phones = useMemo(() => {
     const list = (company.phones_ext && company.phones_ext.length > 0)
@@ -529,6 +547,17 @@ function SearchCompanyCard({
   }, [company.phones, company.phones_ext]);
 
   const email = (company.emails?.[0] || "").trim();
+
+  const openCallDialog = useCallback((phoneNumber: string) => {
+    const number = (phoneNumber || "").trim();
+    if (!number) return;
+    setCallDialogPhone({ number, labels: [] });
+  }, []);
+
+  const handlePhoneClick = useCallback((event: MouseEvent<HTMLElement>, phoneNumber: string) => {
+    event.preventDefault();
+    openCallDialog(phoneNumber);
+  }, [openCallDialog]);
 
   const prefetchCompany = useCallback(() => {
     if (!prefetchedCompanyRoutes.has(companyHref)) {
@@ -568,137 +597,152 @@ function SearchCompanyCard({
   };
 
   return (
-    <div
-      ref={cardRef}
-      className="bg-white rounded-2xl shadow-sm border-2 border-[#820251] hover:shadow-md transition-shadow overflow-hidden flex flex-col h-full"
-    >
-      <div className="bg-gradient-to-r from-[#820251] to-[#6a0143] p-3.5">
-        <div className="flex items-start gap-4">
-          {/* Logo (must stay as implemented) */}
-          <Link
-            {...companyLinkProps}
-            aria-label={t("company.details")}
-            className="block w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 shadow-md focus:outline-none focus:ring-2 focus:ring-white/70"
-          >
-            {showLogo ? (
-              <div className="w-full h-full relative flex items-center justify-center bg-white">
-                <span
-                  className={`text-[#820251] text-3xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}
+    <>
+      <div
+        ref={cardRef}
+        className="bg-white rounded-2xl shadow-sm border-2 border-[#820251] hover:shadow-md transition-shadow overflow-hidden flex flex-col h-full"
+      >
+        <div className="bg-gradient-to-r from-[#820251] to-[#6a0143] p-3.5">
+          <div className="flex items-start gap-4">
+            {/* Logo (must stay as implemented) */}
+            <Link
+              {...companyLinkProps}
+              aria-label={t("company.details")}
+              className="block w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 shadow-md focus:outline-none focus:ring-2 focus:ring-white/70"
+            >
+              {showLogo ? (
+                <div className="w-full h-full relative flex items-center justify-center bg-white">
+                  <span
+                    className={`text-[#820251] text-3xl transition-opacity duration-200 ${logoLoaded ? "opacity-0" : "opacity-100"}`}
+                  >
+                    {icon}
+                  </span>
+                  <img
+                    ref={logoImgRef}
+                    src={logoSrc}
+                    alt={company.name}
+                    className={`absolute inset-0 w-full h-full object-contain p-1 transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
+                    decoding="sync"
+                    loading="eager"
+                    fetchPriority="high"
+                    onLoad={() => setLogoLoaded(true)}
+                    onError={() => setLogoFailed(true)}
+                  />
+                </div>
+              ) : (
+                <div className={`w-full h-full bg-gradient-to-br ${initialsColor} flex items-center justify-center`}>
+                  <span className="text-white text-2xl font-bold tracking-wide">{initials}</span>
+                </div>
+              )}
+            </Link>
+
+            <div className="min-w-0 flex-1">
+              <h3 className="text-[18px] font-bold text-white leading-tight">
+                <Link
+                  {...companyLinkProps}
+                  className="hover:underline focus:outline-none focus:ring-2 focus:ring-white/70 rounded-sm"
                 >
-                  {icon}
-                </span>
-                <img
-                  ref={logoImgRef}
-                  src={logoSrc}
-                  alt={company.name}
-                  className={`absolute inset-0 w-full h-full object-contain p-1 transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
-                  decoding="sync"
-                  loading="eager"
-                  fetchPriority="high"
-                  onLoad={() => setLogoLoaded(true)}
-                  onError={() => setLogoFailed(true)}
-                />
-              </div>
-            ) : (
-              <div className={`w-full h-full bg-gradient-to-br ${initialsColor} flex items-center justify-center`}>
-                <span className="text-white text-2xl font-bold tracking-wide">{initials}</span>
-              </div>
-            )}
-          </Link>
+                  {highlightText(company.name, highlightNameTokens)}
+                </Link>
+              </h3>
+              {industryText && (
+                <div className="mt-2">
+                  <span className="inline-block bg-white/10 text-white text-[13px] leading-tight font-semibold px-2 py-1 rounded-md">
+                    {highlightText(industryText, highlightServiceTokens)}
+                  </span>
+                </div>
+              )}
+            </div>
 
-          <div className="min-w-0 flex-1">
-            <h3 className="text-[18px] font-bold text-white leading-tight">
-              <Link
-                {...companyLinkProps}
-                className="hover:underline focus:outline-none focus:ring-2 focus:ring-white/70 rounded-sm"
+            <button
+              type="button"
+              aria-pressed={favorite}
+              aria-label={favorite ? t("favorites.remove") : t("favorites.add")}
+              onClick={() => toggleFavorite(company.id)}
+              title={favorite ? t("favorites.remove") : t("favorites.add")}
+              className={`shrink-0 w-10 h-10 rounded-xl transition-colors flex items-center justify-center ${
+                favorite ? "bg-white/20" : "bg-white/10 hover:bg-white/15 active:bg-white/20"
+              }`}
+            >
+              <svg
+                className={`w-6 h-6 ${favorite ? "text-red-400 fill-current" : "text-white"}`}
+                fill={favorite ? "currentColor" : "none"}
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden
               >
-                {highlightText(company.name, highlightNameTokens)}
-              </Link>
-            </h3>
-            {industryText && (
-              <div className="mt-2">
-                <span className="inline-block bg-white/10 text-white text-[13px] leading-tight font-semibold px-2 py-1 rounded-md">
-                  {highlightText(industryText, highlightServiceTokens)}
-                </span>
-              </div>
-            )}
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                />
+              </svg>
+            </button>
           </div>
-
-          <button
-            type="button"
-            aria-pressed={favorite}
-            aria-label={favorite ? t("favorites.remove") : t("favorites.add")}
-            onClick={() => toggleFavorite(company.id)}
-            title={favorite ? t("favorites.remove") : t("favorites.add")}
-            className={`shrink-0 w-10 h-10 rounded-xl transition-colors flex items-center justify-center ${
-              favorite ? "bg-white/20" : "bg-white/10 hover:bg-white/15 active:bg-white/20"
-            }`}
-          >
-            <svg
-              className={`w-6 h-6 ${favorite ? "text-red-400 fill-current" : "text-white"}`}
-              fill={favorite ? "currentColor" : "none"}
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-              />
-            </svg>
-          </button>
         </div>
-      </div>
 
-      <div className="p-3.5 bg-gradient-to-br from-white to-[#820251]/5 flex-1 flex flex-col">
-        {shortDescription && (
-          <p className="text-[15px] text-gray-900 leading-tight font-medium">
-            {highlightText(shortDescription, highlightServiceTokens)}
-          </p>
-        )}
+        <div className="p-3.5 bg-gradient-to-br from-white to-[#820251]/5 flex-1 flex flex-col">
+          {shortDescription && (
+            <p className="text-[15px] text-gray-900 leading-tight font-medium">
+              {highlightText(shortDescription, highlightServiceTokens)}
+            </p>
+          )}
 
-        {address && (
-          <div className={`${shortDescription ? "mt-2.5" : ""} text-[13px] text-gray-800 leading-tight whitespace-pre-line break-words`}>
-            {highlightText(address, highlightLocationTokens)}
-          </div>
-        )}
+          {address && (
+            <div className={`${shortDescription ? "mt-2.5" : ""} text-[13px] text-gray-800 leading-tight whitespace-pre-line break-words`}>
+              {highlightText(address, highlightLocationTokens)}
+            </div>
+          )}
 
-        <div className="mt-2.5 space-y-1.5">
-          <div className="space-y-1">
+          <div className="mt-2.5 space-y-1.5">
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={(event) => handlePhoneClick(event, phones[0] || "")}
+                className="block text-[15px] font-semibold text-[#820251] hover:underline"
+              >
+                {phones[0] || "—"}
+              </button>
+              <button
+                type="button"
+                onClick={(event) => handlePhoneClick(event, phones[1] || "")}
+                className="block text-[15px] font-semibold text-[#820251] hover:underline"
+              >
+                {phones[1] || "—"}
+              </button>
+            </div>
+
             <a
-              href={phones[0] ? `tel:${normalizePhoneHref(phones[0])}` : undefined}
-              className="block text-[15px] text-[#820251] font-semibold hover:underline"
+              href={email ? `mailto:${email}` : undefined}
+              className="block text-[13px] text-gray-800 hover:text-[#820251] hover:underline break-words"
             >
-              {phones[0] || "—"}
-            </a>
-            <a
-              href={phones[1] ? `tel:${normalizePhoneHref(phones[1])}` : undefined}
-              className="block text-[15px] text-[#820251] font-semibold hover:underline"
-            >
-              {phones[1] || "—"}
+              {email || "—"}
             </a>
           </div>
 
-          <a
-            href={email ? `mailto:${email}` : undefined}
-            className="block text-[13px] text-gray-800 hover:text-[#820251] hover:underline break-words"
-          >
-            {email || "—"}
-          </a>
-        </div>
-
-        <div className="mt-auto pt-2.5 flex justify-end">
-          <Link
-            {...companyLinkProps}
-            className="inline-flex items-center justify-center bg-[#820251] text-white px-4 py-1.5 rounded-lg text-[15px] font-bold shadow-sm hover:bg-[#6a0143] active:bg-[#520031] transition-colors"
-          >
-            {t("company.details")}
-          </Link>
+          <div className="mt-auto pt-2.5 flex justify-end">
+            <Link
+              {...companyLinkProps}
+              className="inline-flex items-center justify-center bg-[#820251] text-white px-4 py-1.5 rounded-lg text-[15px] font-bold shadow-sm hover:bg-[#6a0143] active:bg-[#520031] transition-colors"
+            >
+              {t("company.details")}
+            </Link>
+          </div>
         </div>
       </div>
-    </div>
+
+      <CompanyCallDialog
+        open={Boolean(callDialogPhone)}
+        companyId={company.id}
+        companyName={company.name}
+        phone={callDialogPhone}
+        email={email || undefined}
+        website={primaryWebsite || undefined}
+        address={address || undefined}
+        onClose={() => setCallDialogPhone(null)}
+      />
+    </>
   );
 }
 
@@ -707,6 +751,7 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
   const router = useRouter();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [messageModalOpen, setMessageModalOpen] = useState(false);
+  const [callDialogPhone, setCallDialogPhone] = useState<BiznesinfoPhoneExt | null>(null);
   const [phonesExpanded, setPhonesExpanded] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
@@ -820,6 +865,22 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
     onTouchStart: prefetchCompany,
     onFocus: prefetchCompany,
   };
+
+  const openCallDialog = useCallback((phone: BiznesinfoPhoneExt | string) => {
+    if (typeof phone === "string") {
+      const number = phone.trim();
+      if (!number) return;
+      setCallDialogPhone({ number, labels: [] });
+      return;
+    }
+    if (!phone?.number) return;
+    setCallDialogPhone(phone);
+  }, []);
+
+  const handlePhoneClick = useCallback((event: MouseEvent<HTMLElement>, phone: BiznesinfoPhoneExt) => {
+    event.preventDefault();
+    openCallDialog(phone);
+  }, [openCallDialog]);
 
   return (
     <>
@@ -990,16 +1051,17 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
                 </svg>
                 <div className="flex flex-col gap-1">
                   {(phonesExpanded ? phones : phones.slice(0, 3)).map((p, idx) => (
-                    <a
+                    <button
+                      type="button"
                       key={idx}
-                      href={`tel:${p.number}`}
-                      className="text-[#820251] font-medium hover:underline"
+                      onClick={(event) => handlePhoneClick(event, p)}
+                      className="text-left font-medium text-[#820251] hover:underline"
                     >
                       {p.number}
                       {p.labels && p.labels.length > 0 && (
                         <span className="text-gray-500 font-normal"> ({p.labels.join(", ")})</span>
                       )}
-                    </a>
+                    </button>
                   ))}
                   {phones.length > 3 && (
                     <button
@@ -1017,12 +1079,18 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
 
           {/* Actions */}
           <div className="flex flex-wrap gap-2 mt-auto">
-            <a
-              href={primaryPhone ? `tel:${primaryPhone}` : undefined}
-              className="flex-1 min-w-[100px] bg-green-600 text-white px-3 py-2 rounded text-sm font-medium hover:bg-green-700 transition-colors text-center"
+            <button
+              type="button"
+              onClick={() => openCallDialog(primaryPhone)}
+              disabled={!primaryPhone}
+              className={`flex-1 min-w-[100px] px-3 py-2 rounded text-sm font-medium transition-colors text-center ${
+                primaryPhone
+                  ? "bg-green-600 text-white hover:bg-green-700"
+                  : "bg-green-600/40 text-white cursor-not-allowed"
+              }`}
             >
               {t("company.call")}
-            </a>
+            </button>
             <button
               onClick={() => setMessageModalOpen(true)}
               className="flex-1 min-w-[100px] border-2 border-[#820251] text-[#820251] px-3 py-2 rounded text-sm font-medium hover:bg-[#820251] hover:text-white transition-colors"
@@ -1053,6 +1121,17 @@ function FullCompanyCard({ company, showCategory = false }: CompanyCardProps) {
         email={primaryEmail || undefined}
         phone={primaryPhone || undefined}
         hasAI={false}
+      />
+
+      <CompanyCallDialog
+        open={Boolean(callDialogPhone)}
+        companyId={company.id}
+        companyName={company.name}
+        phone={callDialogPhone}
+        email={primaryEmail || undefined}
+        website={primaryWebsiteHref || primaryWebsite || undefined}
+        address={company.address || undefined}
+        onClose={() => setCallDialogPhone(null)}
       />
     </>
   );

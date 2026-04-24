@@ -320,6 +320,8 @@ class AudioTranscriptionConfigurationError extends Error {
   }
 }
 
+export { AudioTranscriptionConfigurationError };
+
 async function extractAudioTextFromPath(absPath: string, mimeType: string): Promise<string> {
   const apiKey = String(process.env.OPENAI_API_KEY || "").trim();
   if (!apiKey) {
@@ -372,6 +374,66 @@ async function extractAudioTextFromPath(absPath: string, mimeType: string): Prom
     return "";
   } finally {
     clearTimeout(timer);
+  }
+}
+
+export async function transcribeAiAudioFile(params: {
+  file: File;
+  maxChars?: number;
+}): Promise<{ text: string; truncated: boolean; mimeType: string }> {
+  const file = params.file;
+  const displayName = basename(file?.name || "voice-input");
+  const mimeType = resolveAllowedUploadMimeType(displayName, file?.type);
+
+  if (!file || typeof file !== "object") {
+    throw new AiUploadValidationError("UnsupportedType", "Некорректный формат файла");
+  }
+
+  if (!Number.isFinite(file.size) || file.size <= 0) {
+    throw new AiUploadValidationError("EmptyFile", `Файл «${displayName}» пустой`, displayName);
+  }
+
+  if (file.size > AI_UPLOAD_MAX_FILE_SIZE) {
+    throw new AiUploadValidationError(
+      "FileTooLarge",
+      `Файл «${displayName}» превышает лимит 10 МБ`,
+      displayName,
+    );
+  }
+
+  if (!mimeType || !isAudioMimeType(mimeType)) {
+    throw new AiUploadValidationError(
+      "UnsupportedType",
+      `Формат файла «${displayName}» не поддерживается`,
+      displayName,
+    );
+  }
+
+  const rootDir = getUploadsRootDir();
+  await mkdir(rootDir, { recursive: true });
+
+  const tempFileName = `voice-transcription-${buildStoredFileName(displayName, mimeType)}`;
+  const absPath = resolve(rootDir, tempFileName);
+  assertPathInsideRoot(rootDir, absPath);
+
+  try {
+    const content = Buffer.from(await file.arrayBuffer());
+    await writeFile(absPath, content);
+
+    const rawText = await extractAudioTextFromPath(absPath, mimeType);
+    const normalized = normalizeExtractedText(rawText);
+    const maxChars = Math.max(
+      400,
+      Math.min(20_000, Math.floor(params.maxChars ?? AI_UPLOAD_TEXT_EXTRACT_DEFAULT_MAX_CHARS_PER_FILE)),
+    );
+    const truncated = normalized.length > maxChars;
+    return {
+      text: normalized.slice(0, maxChars).trimEnd(),
+      truncated,
+      mimeType,
+    };
+  } finally {
+    await unlink(absPath).catch(() => {});
   }
 }
 

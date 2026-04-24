@@ -1,4 +1,5 @@
 export const BIZNESINFO_LOGO_OVERRIDES: Record<string, string> = {
+  gordorstroy: "/companies/gordorstroy/logo.svg",
   msu23: "/companies/msu-23/logo.gif",
   "msu-23": "/companies/msu-23/logo.gif",
   // ООО «ИрИс интерн ГРУПП»

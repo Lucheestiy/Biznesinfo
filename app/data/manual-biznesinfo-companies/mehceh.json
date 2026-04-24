@@ -1,0 +1,116 @@
+{
+  "source": "biznesinfo",
+  "source_id": "mehceh",
+  "source_url": "/company/mehceh",
+  "name": "ООО \"МехЦех\"",
+  "unp": "192979116",
+  "country": "BY",
+  "region": "Минск",
+  "city": "Минск",
+  "address": "220026, г. Минск, пер. Бехтерева, 8, ком. 103",
+  "phones": [
+    "+375 (29) 575-20-10"
+  ],
+  "phones_ext": [
+    {
+      "number": "+375 (29) 575-20-10",
+      "labels": [
+        "основной телефон",
+        "заказ и консультация"
+      ]
+    }
+  ],
+  "emails": [
+    "mehceh18@gmail.com"
+  ],
+  "websites": [
+    "https://mehceh.by/"
+  ],
+  "description": "ООО \"МехЦех\" оказывает услуги металлообработки: токарная и фрезерная обработка на станках с ЧПУ, сварочные, слесарные и сборочные работы, изготовление деталей и проектов под ключ.",
+  "about": "ООО \"МехЦех\" более 8 лет работает в сфере металлообработки и выполняет заказы по чертежам клиента и техническому заданию. Компания изготавливает детали и узлы на токарных и фрезерных станках с ЧПУ, выполняет сварочные, слесарные и сборочные работы, а также берет проекты под ключ: от проработки задачи и разработки конструкторской документации до изготовления готовых изделий.\n\nПредприятие работает с единичными и мелкосерийными партиями, строго соблюдает технологические процессы, восстанавливает и ремонтирует запасные части по образцу, изготавливает штампы, пресс-формы, приспособления и технологическую оснастку. Организует доставку продукции по Беларуси и РФ, включая Москву и Московскую область.",
+  "contact_person": "",
+  "logo_url": "https://mehceh.by/wp-content/themes/mechcech/img/logo.png",
+  "hero_image": "https://mehceh.by/wp-content/uploads/2018/10/dreamstimemaximum_128110870.jpg",
+  "photos": [
+    {
+      "url": "https://mehceh.by/wp-content/uploads/2020/06/4.png",
+      "alt": "Примеры работ компании МехЦех"
+    },
+    {
+      "url": "https://mehceh.by/wp-content/uploads/2020/06/2.png",
+      "alt": "Детали и узлы, изготовленные компанией МехЦех"
+    },
+    {
+      "url": "https://mehceh.by/wp-content/uploads/2020/06/33.png",
+      "alt": "Металлообработка и готовые изделия компании МехЦех"
+    },
+    {
+      "url": "https://mehceh.by/wp-content/uploads/2020/06/43.png",
+      "alt": "Изготовленные изделия компании МехЦех"
+    }
+  ],
+  "work_hours": {
+    "work_time": "08:00-16:00",
+    "break_time": "",
+    "status": "Пн-Пт 08:00-16:00"
+  },
+  "categories": [
+    {
+      "slug": "metally-metalloobrabotka",
+      "name": "Металлы и металлообработка",
+      "url": "/catalog/metally-metalloobrabotka"
+    }
+  ],
+  "rubrics": [
+    {
+      "slug": "metally-metalloobrabotka/metall-metalloobrabotka",
+      "name": "Металл, металлообработка",
+      "url": "/catalog/metally-metalloobrabotka/metall-metalloobrabotka",
+      "category_slug": "metally-metalloobrabotka",
+      "category_name": "Металлы и металлообработка"
+    },
+    {
+      "slug": "metally-metalloobrabotka/metall-metalloobrabotka-i-metallurgiya",
+      "name": "Металл, металлообработка и металлургия",
+      "url": "/catalog/metally-metalloobrabotka/metall-metalloobrabotka-i-metallurgiya",
+      "category_slug": "metally-metalloobrabotka",
+      "category_name": "Металлы и металлообработка"
+    }
+  ],
+  "extra": {
+    "lat": 53.875331,
+    "lng": 27.642482
+  },
+  "services_list": [
+    {
+      "name": "Токарная обработка на станках с ЧПУ",
+      "description": "Изготовление деталей по чертежам заказчика и техническому заданию.",
+      "image_url": "https://mehceh.by/wp-content/uploads/2020/06/4.png"
+    },
+    {
+      "name": "Фрезерная обработка на станках с ЧПУ",
+      "description": "Фрезерование деталей и узлов с соблюдением требований конструкторской документации.",
+      "image_url": "https://mehceh.by/wp-content/uploads/2020/06/2.png"
+    },
+    {
+      "name": "Сварочные работы",
+      "description": "Сварка металлических изделий и узлов в составе проектов по металлообработке.",
+      "image_url": "https://mehceh.by/wp-content/uploads/2020/06/33.png"
+    },
+    {
+      "name": "Слесарные и сборочные работы",
+      "description": "Слесарная обработка, сборка изделий и выполнение заказов под ключ.",
+      "image_url": "https://mehceh.by/wp-content/uploads/2020/06/43.png"
+    },
+    {
+      "name": "Изготовление технологической оснастки, штампов и пресс-форм",
+      "description": "Производство приспособлений, пробивного и гибочного инструмента, штампов и пресс-форм.",
+      "image_url": "https://mehceh.by/wp-content/uploads/2020/06/5.png"
+    },
+    {
+      "name": "Восстановление и ремонт запасных частей",
+      "description": "Восстановление и ремонт деталей и запасных частей по образцу.",
+      "image_url": "https://mehceh.by/wp-content/uploads/2020/06/21.png"
+    }
+  ]
+}

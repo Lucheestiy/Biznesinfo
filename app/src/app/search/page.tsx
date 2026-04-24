@@ -8,7 +8,7 @@ import CompanyCard from "@/components/CompanyCard";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
 import { regions } from "@/data/regions";
-import type { BiznesinfoSearchResponse } from "@/lib/biznesinfo/types";
+import type { BiznesinfoCompanySummary, BiznesinfoSearchResponse } from "@/lib/biznesinfo/types";
 import { formatCompanyCount } from "@/lib/utils/plural";
 import { tokenizeHighlightQuery } from "@/lib/utils/highlight";
 import Pagination from "@/components/Pagination";
@@ -32,6 +32,45 @@ function hasCompanyLogo(logoUrl: string): boolean {
   const normalized = (logoUrl || "").trim().toLowerCase();
   if (!normalized) return false;
   return !EMPTY_LOGO_HINTS.some((hint) => normalized.includes(hint));
+}
+
+function getCompanyProfileCompletenessScore(company: BiznesinfoCompanySummary): number {
+  const descriptionLength = String(company.description || "").trim().length;
+  const aboutLength = String(company.about || "").trim().length;
+  const phonesCount = Array.isArray(company.phones) ? company.phones.filter(Boolean).length : 0;
+  const emailsCount = Array.isArray(company.emails) ? company.emails.filter(Boolean).length : 0;
+  const websitesCount = Array.isArray(company.websites) ? company.websites.filter(Boolean).length : 0;
+  const hasAddress = String(company.address || "").trim().length > 0;
+  const hasWorkHours = String(company.work_hours?.work_time || company.work_hours?.status || "").trim().length > 0;
+  const phoneLabelsCount = Array.isArray(company.phones_ext)
+    ? company.phones_ext.reduce((sum, entry) => sum + (Array.isArray(entry.labels) ? entry.labels.filter(Boolean).length : 0), 0)
+    : 0;
+  const hasPrimaryRubric = String(company.primary_rubric_name || "").trim().length > 0;
+  const hasPrimaryCategory = String(company.primary_category_name || "").trim().length > 0;
+
+  let score = 0;
+
+  if (descriptionLength >= 180) score += 4;
+  else if (descriptionLength >= 80) score += 3;
+  else if (descriptionLength >= 30) score += 2;
+  else if (descriptionLength > 0) score += 1;
+
+  if (aboutLength >= 500) score += 8;
+  else if (aboutLength >= 200) score += 6;
+  else if (aboutLength >= 80) score += 4;
+  else if (aboutLength > 0) score += 2;
+
+  score += Math.min(phonesCount, 4) * 1.5;
+  score += Math.min(emailsCount, 2) * 1.5;
+  score += Math.min(websitesCount, 2) * 1.5;
+  score += Math.min(phoneLabelsCount, 4) * 0.5;
+
+  if (hasAddress) score += 1.5;
+  if (hasWorkHours) score += 1.5;
+  if (hasPrimaryRubric) score += 1;
+  if (hasPrimaryCategory) score += 0.5;
+
+  return score;
 }
 
 function normalizeSupplyType(raw: string | null): SearchSupplyType {
@@ -87,6 +126,10 @@ function SearchResults() {
     "absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl bg-[#820251]/10 text-[#820251] hover:bg-[#820251]/15 active:bg-[#820251]/20 transition-colors flex items-center justify-center";
   const clearInputButtonClassName =
     "absolute right-14 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg text-[#820251]/60 hover:text-[#820251] hover:bg-[#820251]/10 active:bg-[#820251]/15 transition-colors flex items-center justify-center";
+
+  const preventInputBlurOnMouseDown = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+  };
 
   useEffect(() => {
     setCompanyDraft(query);
@@ -351,12 +394,14 @@ function SearchResults() {
       company,
       index,
       hasLogo: hasCompanyLogo(company.logo_url || ""),
+      completenessScore: getCompanyProfileCompletenessScore(company),
     }));
 
-    // User rule: in search, show cards with real logos first,
-    // then cards with initials placeholder; keep relative order inside each group.
+    // User rule: in search, show cards with real logos first.
+    // Inside each group prefer the most complete company profiles.
     items.sort((a, b) => {
       if (a.hasLogo !== b.hasLogo) return a.hasLogo ? -1 : 1;
+      if (a.completenessScore !== b.completenessScore) return b.completenessScore - a.completenessScore;
       return a.index - b.index;
     });
 
@@ -432,7 +477,20 @@ function SearchResults() {
         {/* Search Header */}
         <div className="bg-gradient-to-r from-[#b10a78] to-[#7a0150] text-white py-6">
           <div className="container mx-auto px-4">
-            <h1 className="text-2xl font-bold">{t("search.results")}</h1>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleStickyBackClick}
+                aria-label={t("common.back")}
+                title={t("common.back")}
+                className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#9a0667]"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <h1 className="min-w-0 text-2xl font-bold">{t("search.results")}</h1>
+            </div>
 
             <form
               className="mt-4 space-y-3"
@@ -471,6 +529,7 @@ function SearchResults() {
                 )}
                 <button
                   type="submit"
+                  onMouseDown={preventInputBlurOnMouseDown}
                   aria-label={t("search.find")}
                   className={inputButtonClassName}
                 >
@@ -537,6 +596,7 @@ function SearchResults() {
                 )}
                 <button
                   type="submit"
+                  onMouseDown={preventInputBlurOnMouseDown}
                   aria-label={t("search.find")}
                   className={inputButtonClassName}
                 >
@@ -626,7 +686,7 @@ function SearchResults() {
 
             <div className="relative">
               <label className="sr-only" htmlFor="filter-location">
-                {t("filter.city")}
+                {t("filter.location")}
               </label>
               <input
                 id="filter-location"
@@ -668,6 +728,7 @@ function SearchResults() {
               <button
                 type="button"
                 aria-label={t("search.find")}
+                onMouseDown={preventInputBlurOnMouseDown}
                 onClick={() => navigateToSearch("push")}
                 className={inputButtonClassName}
               >
@@ -702,7 +763,7 @@ function SearchResults() {
                 {(effectiveQuery || effectiveServiceQuery) && effectiveCity && <span className="text-gray-400"> · </span>}
                 {effectiveCity && (
                   <>
-                    {t("filter.city")}: <span className="font-bold text-[#820251]">{effectiveCity}</span>
+                    {t("filter.location")}: <span className="font-bold text-[#820251]">{effectiveCity}</span>
                   </>
                 )}
                 {selectedRegion && !effectiveCity && <span className="font-bold text-[#820251]"> — {regionName}</span>}

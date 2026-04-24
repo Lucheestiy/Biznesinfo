@@ -36,8 +36,16 @@ type AssistantRfqForm = {
   notes: string;
 };
 
+type AssistantRuntimeStatus = {
+  provider: "stub" | "openai" | "codex";
+  state: "online" | "fallback";
+  reason: "provider_ready" | "missing_openai_key" | "missing_codex_auth" | "stub_mode" | "last_reply_external" | "last_reply_fallback";
+};
+
 const ASSISTANT_CHAT_STATE_KEY_PREFIX = "biznesinfo:assistant:chat:v1";
 const ASSISTANT_STORED_MESSAGES_LIMIT = 60;
+// Keep UI stable: avoid rendering raw streaming deltas that may be rewritten by final quality-gate text.
+const ASSISTANT_RENDER_STREAM_DELTAS = false;
 const LEGACY_ASSISTANT_INTRO_FINGERPRINTS = [
   "я помогу разобраться с рубриками",
   "я ваш личный помощник лориэн",
@@ -158,6 +166,15 @@ function normalizeAssistantDisplayText(text: string): string {
     .replace(/\n{3,}/gu, "\n\n");
 }
 
+function hasMeaningfulTemplateValue(value: string | null | undefined): boolean {
+  const normalized = String(value || "").trim();
+  if (!normalized) return false;
+  if (/^(?:\.{2,}|…{1,}|[-_]{2,}|—{1,}|<[^>\n]+>)$/u.test(normalized)) return false;
+
+  const compact = normalized.replace(/[\s._\-—…<>()[\]{}:;,'"`]+/gu, "");
+  return compact.length >= 2;
+}
+
 function isLegacyAssistantIntroMessage(content: string): boolean {
   const normalized = normalizeAssistantMessageForCompare(content);
   if (!normalized) return false;
@@ -244,12 +261,84 @@ async function writeTextToClipboard(text: string): Promise<boolean> {
   }
 }
 
+const VOICE_RECORDER_MIME_CANDIDATES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/ogg;codecs=opus",
+  "audio/ogg",
+  "audio/mp4",
+  "audio/aac",
+];
+
+function supportsAudioRecording(): boolean {
+  if (typeof window === "undefined") return false;
+  if (typeof window.MediaRecorder === "undefined") return false;
+  return typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
+}
+
+function supportsSpeechRecognition(): boolean {
+  if (typeof window === "undefined") return false;
+  return Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+}
+
+function pickVoiceRecorderMimeType(): string {
+  if (typeof window === "undefined" || typeof window.MediaRecorder === "undefined") return "";
+  if (typeof window.MediaRecorder.isTypeSupported !== "function") return "";
+  for (const mimeType of VOICE_RECORDER_MIME_CANDIDATES) {
+    try {
+      if (window.MediaRecorder.isTypeSupported(mimeType)) return mimeType;
+    } catch {
+      // ignore unsupported browser checks
+    }
+  }
+  return "";
+}
+
+function normalizeRecordedAudioMimeType(raw: string): string {
+  const mimeType = String(raw || "")
+    .split(";")[0]
+    ?.trim()
+    .toLowerCase();
+  if (!mimeType) return "";
+  if (mimeType === "audio/mp3") return "audio/mpeg";
+  if (mimeType === "audio/x-m4a" || mimeType === "audio/m4a") return "audio/x-m4a";
+  if (mimeType === "audio/x-wav" || mimeType === "audio/wave") return "audio/wav";
+  return mimeType;
+}
+
+function voiceFileExtensionForMimeType(mimeType: string): string {
+  if (mimeType === "audio/ogg") return ".ogg";
+  if (mimeType === "audio/mp4" || mimeType === "audio/x-m4a") return ".m4a";
+  if (mimeType === "audio/aac") return ".aac";
+  if (mimeType === "audio/wav") return ".wav";
+  if (mimeType === "audio/mpeg") return ".mp3";
+  return ".webm";
+}
+
+function resolveVoiceStartErrorMessage(error: unknown): string {
+  const name = String((error as any)?.name || "").toLowerCase();
+  if (name === "notallowederror" || name === "permissiondeniederror" || name === "securityerror") {
+    return "Доступ к микрофону запрещен. Разрешите микрофон в браузере.";
+  }
+  if (name === "notfounderror" || name === "devicesnotfounderror") {
+    return "Микрофон не найден на этом устройстве.";
+  }
+  if (name === "notreadableerror" || name === "trackstarterror") {
+    return "Не удалось получить доступ к микрофону. Попробуйте ещё раз.";
+  }
+  return "Не удалось запустить голосовой ввод.";
+}
+
 export default function AssistantClient({
   user,
   initialUsage,
+  audioTranscriptionAvailable = false,
+  initialRuntimeStatus,
 }: {
   user: { name: string | null; email: string; plan: UserPlan; aiRequestsPerDay: number };
   initialUsage?: { used: number; limit: number; day: string };
+  audioTranscriptionAvailable?: boolean;
+  initialRuntimeStatus: AssistantRuntimeStatus;
 }) {
   const { t } = useLanguage();
   const router = useRouter();
@@ -262,6 +351,7 @@ export default function AssistantClient({
   const companyNameFromUrl = (searchParams.get("companyName") || "").trim();
   const companyIdsFromUrl = (searchParams.get("companyIds") || "").trim();
   const returnToFromUrl = (searchParams.get("returnTo") || "").trim();
+  const rfqOpenFromUrl = (searchParams.get("rfqOpen") || "").trim() === "1";
   const [referrerCompanyPath, setReferrerCompanyPath] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -275,7 +365,7 @@ export default function AssistantClient({
   const [openActionsId, setOpenActionsId] = useState<string | null>(null);
   const [feedbackOpenId, setFeedbackOpenId] = useState<string | null>(null);
   const [feedbackSendingId, setFeedbackSendingId] = useState<string | null>(null);
-  const [rfqOpen, setRfqOpen] = useState(false);
+  const [rfqOpen, setRfqOpen] = useState(Boolean(rfqOpenFromUrl && companyIdFromUrl));
   const [rfqForm, setRfqForm] = useState<AssistantRfqForm>({
     companyTarget: companyIdFromUrl || "",
     what: "",
@@ -291,6 +381,7 @@ export default function AssistantClient({
   const [newDialogModalOpen, setNewDialogModalOpen] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(false);
   const [voiceRecording, setVoiceRecording] = useState(false);
+  const [voiceProcessing, setVoiceProcessing] = useState(false);
   const [voiceInterim, setVoiceInterim] = useState("");
   const [voiceError, setVoiceError] = useState<string | null>(null);
 
@@ -299,6 +390,15 @@ export default function AssistantClient({
   const copiedTimeoutRef = useRef<number | null>(null);
   const sendingRef = useRef(false);
   const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const voiceChunksRef = useRef<Blob[]>([]);
+  const voiceAbortRef = useRef(false);
+  const voiceRequestRef = useRef<AbortController | null>(null);
+  const voiceKeepListeningRef = useRef(false);
+  const voiceRestartTimeoutRef = useRef<number | null>(null);
+  const voiceLastInterimRef = useRef("");
+  const voiceStopRequestedRef = useRef(false);
 
   const canChat = user.plan === "paid" || user.plan === "partner";
   const planLabel = useMemo(() => formatPlanLabel(user.plan), [user.plan]);
@@ -314,6 +414,19 @@ export default function AssistantClient({
     if (!companyId && !companyName) return null;
     return { companyId, companyName };
   }, [companyIdFromUrl, companyNameFromUrl]);
+  const canUseRfqConstructor = Boolean(companyContext?.companyId);
+
+  useEffect(() => {
+    if (rfqOpenFromUrl && companyIdFromUrl) {
+      setRfqOpen(true);
+    }
+  }, [rfqOpenFromUrl, companyIdFromUrl]);
+
+  useEffect(() => {
+    if (!canUseRfqConstructor && rfqOpen) {
+      setRfqOpen(false);
+    }
+  }, [canUseRfqConstructor, rfqOpen]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -334,27 +447,152 @@ export default function AssistantClient({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    setVoiceSupported(Boolean(ctor));
-  }, []);
+    setVoiceSupported(supportsSpeechRecognition() || (audioTranscriptionAvailable && supportsAudioRecording()));
+  }, [audioTranscriptionAvailable]);
 
-  const stopVoiceInput = (abort = false) => {
-    const recognition = recognitionRef.current;
-    if (!recognition) return;
-    try {
-      if (abort) recognition.abort();
-      else recognition.stop();
-    } catch {
-      // ignore
-    }
-    recognitionRef.current = null;
-    setVoiceRecording(false);
-    setVoiceInterim("");
+  const clearVoiceRestartTimeout = () => {
+    if (voiceRestartTimeoutRef.current == null) return;
+    window.clearTimeout(voiceRestartTimeoutRef.current);
+    voiceRestartTimeoutRef.current = null;
   };
 
-  const startVoiceInput = () => {
-    if (sending) return;
-    if (typeof window === "undefined") return;
+  const stopVoiceStream = () => {
+    const stream = mediaStreamRef.current;
+    mediaStreamRef.current = null;
+    if (!stream) return;
+    for (const track of stream.getTracks()) {
+      try {
+        track.stop();
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const transcribeVoiceBlob = async (blob: Blob, rawMimeType: string) => {
+    if (!blob.size) {
+      setVoiceInterim("");
+      setVoiceError("Не удалось записать голос. Попробуйте ещё раз.");
+      return;
+    }
+
+    const mimeType = normalizeRecordedAudioMimeType(rawMimeType || blob.type) || "audio/webm";
+    const extension = voiceFileExtensionForMimeType(mimeType);
+    const form = new FormData();
+    const normalizedBlob = blob.type === mimeType ? blob : blob.slice(0, blob.size, mimeType);
+    form.append("file", normalizedBlob, `assistant-voice-${Date.now()}${extension}`);
+
+    const controller = new AbortController();
+    voiceRequestRef.current?.abort();
+    voiceRequestRef.current = controller;
+
+    setVoiceProcessing(true);
+    setVoiceError(null);
+    setVoiceInterim("Расшифровываю запись...");
+
+    try {
+      const res = await fetch("/api/ai/transcribe", {
+        method: "POST",
+        body: form,
+        signal: controller.signal,
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401) {
+          setVoiceError(t("auth.loginRequired") || "Нужно войти в кабинет.");
+          return;
+        }
+        if (res.status === 403 && data?.error === "UpgradeRequired") {
+          setVoiceError("Голосовой ввод доступен в платном плане.");
+          return;
+        }
+        if (res.status === 429) {
+          setVoiceError("Слишком много попыток. Подождите немного и попробуйте ещё раз.");
+          return;
+        }
+        if (res.status === 503) {
+          setVoiceError("Расшифровка сейчас недоступна. Попробуйте чуть позже.");
+          return;
+        }
+        setVoiceError(
+          typeof data?.message === "string" && data.message.trim()
+            ? data.message
+            : "Не удалось расшифровать запись. Попробуйте ещё раз.",
+        );
+        return;
+      }
+
+      const text = typeof data?.text === "string" ? data.text.trim() : "";
+      if (!text) {
+        setVoiceInterim("");
+        setVoiceError("Не удалось распознать речь. Попробуйте ещё раз.");
+        return;
+      }
+
+      setDraft((prev) => {
+        const base = prev.trim();
+        return base ? `${base} ${text}`.trim() : text;
+      });
+      setVoiceInterim(data?.truncated ? "Часть длинной записи была сокращена." : "");
+      setVoiceError(null);
+      setTimeout(() => draftRef.current?.focus(), 0);
+    } catch (error) {
+      if ((error as any)?.name === "AbortError") return;
+      setVoiceInterim("");
+      setVoiceError("Не удалось расшифровать запись. Проверьте интернет и попробуйте ещё раз.");
+    } finally {
+      if (voiceRequestRef.current === controller) {
+        voiceRequestRef.current = null;
+      }
+      setVoiceProcessing(false);
+    }
+  };
+
+  const stopVoiceInput = (abort = false) => {
+    voiceKeepListeningRef.current = false;
+    clearVoiceRestartTimeout();
+    voiceRequestRef.current?.abort();
+    voiceRequestRef.current = null;
+
+    const recognition = recognitionRef.current;
+    if (recognition) {
+      voiceStopRequestedRef.current = !abort;
+      voiceLastInterimRef.current = voiceInterim.trim();
+      try {
+        if (abort) recognition.abort();
+        else recognition.stop();
+      } catch {
+        // ignore
+      }
+      recognitionRef.current = null;
+      if (abort) {
+        voiceStopRequestedRef.current = false;
+        voiceLastInterimRef.current = "";
+      }
+    }
+
+    const recorder = mediaRecorderRef.current;
+    if (recorder) {
+      voiceAbortRef.current = abort;
+      try {
+        if (recorder.state !== "inactive") recorder.stop();
+      } catch {
+        // ignore
+      }
+    } else if (abort) {
+      voiceChunksRef.current = [];
+      stopVoiceStream();
+    }
+
+    if (abort) {
+      setVoiceRecording(false);
+      setVoiceProcessing(false);
+      setVoiceInterim("");
+    }
+  };
+
+  const startSpeechVoiceInput = () => {
     const Ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!Ctor) {
       setVoiceError("Голосовой ввод не поддерживается в этом браузере.");
@@ -363,68 +601,206 @@ export default function AssistantClient({
 
     setVoiceError(null);
     setVoiceInterim("");
+    voiceKeepListeningRef.current = true;
+    voiceLastInterimRef.current = "";
+    voiceStopRequestedRef.current = false;
+    clearVoiceRestartTimeout();
+
+    const startRecognitionSession = () => {
+      if (!voiceKeepListeningRef.current) return;
+
+      try {
+        const recognition = new Ctor();
+        recognition.lang = "ru-RU";
+        recognition.interimResults = true;
+        recognition.continuous = true;
+        recognition.maxAlternatives = 1;
+
+        let finalChunk = "";
+
+        recognition.onstart = () => {
+          setVoiceRecording(true);
+          setVoiceError(null);
+          setVoiceInterim("");
+        };
+
+        recognition.onresult = (event: any) => {
+          let interimChunk = "";
+          for (let i = event.resultIndex; i < event.results.length; i += 1) {
+            const result = event.results[i];
+            const text = String(result?.[0]?.transcript || "").trim();
+            if (!text) continue;
+            if (result.isFinal) finalChunk += `${text} `;
+            else interimChunk += `${text} `;
+          }
+
+          const finalText = finalChunk.trim();
+          if (finalText) {
+            setDraft((prev) => {
+              const base = prev.trim();
+              return base ? `${base} ${finalText}`.trim() : finalText;
+            });
+            finalChunk = "";
+            voiceLastInterimRef.current = "";
+          }
+          const normalizedInterim = interimChunk.trim();
+          voiceLastInterimRef.current = normalizedInterim;
+          setVoiceInterim(normalizedInterim);
+        };
+
+        recognition.onerror = (event: any) => {
+          const code = String(event?.error || "");
+          if (code === "aborted" || code === "no-speech" || code === "audio-capture") {
+            setVoiceError(null);
+            return;
+          }
+          if (code === "not-allowed" || code === "service-not-allowed") {
+            voiceKeepListeningRef.current = false;
+            clearVoiceRestartTimeout();
+            setVoiceError("Доступ к микрофону запрещен. Разрешите микрофон в браузере.");
+            return;
+          }
+          if (code === "network") {
+            setVoiceError("Распознавание прервалось. Пробую продолжить...");
+            return;
+          }
+          setVoiceError("Голосовой ввод прервался. Пробую продолжить...");
+        };
+
+        recognition.onend = () => {
+          recognitionRef.current = null;
+          setVoiceInterim("");
+
+          if (!voiceKeepListeningRef.current) {
+            const leftoverFinal = finalChunk.trim();
+            if (leftoverFinal) {
+              setDraft((prev) => {
+                const base = prev.trim();
+                return base ? `${base} ${leftoverFinal}`.trim() : leftoverFinal;
+              });
+            } else if (voiceStopRequestedRef.current && voiceLastInterimRef.current) {
+              setDraft((prev) => {
+                const base = prev.trim();
+                const text = voiceLastInterimRef.current.trim();
+                return text ? (base ? `${base} ${text}`.trim() : text) : base;
+              });
+            }
+            voiceStopRequestedRef.current = false;
+            voiceLastInterimRef.current = "";
+            setVoiceRecording(false);
+            return;
+          }
+
+          const leftoverFinal = finalChunk.trim();
+          if (leftoverFinal) {
+            setDraft((prev) => {
+              const base = prev.trim();
+              return base ? `${base} ${leftoverFinal}`.trim() : leftoverFinal;
+            });
+            finalChunk = "";
+            voiceLastInterimRef.current = "";
+          }
+
+          clearVoiceRestartTimeout();
+          voiceRestartTimeoutRef.current = window.setTimeout(() => {
+            startRecognitionSession();
+          }, 180);
+        };
+
+        recognitionRef.current = recognition;
+        recognition.start();
+      } catch {
+        voiceKeepListeningRef.current = false;
+        clearVoiceRestartTimeout();
+        setVoiceRecording(false);
+        setVoiceInterim("");
+        setVoiceError("Не удалось запустить голосовой ввод.");
+      }
+    };
+
+    startRecognitionSession();
+  };
+
+  const startRecordedVoiceInput = async () => {
+    if (typeof window === "undefined") return;
+    if (!supportsAudioRecording()) {
+      setVoiceError("Голосовой ввод не поддерживается в этом браузере.");
+      return;
+    }
+
+    setVoiceError(null);
+    setVoiceInterim("");
 
     try {
-      const recognition = new Ctor();
-      recognition.lang = "ru-RU";
-      recognition.interimResults = true;
-      recognition.continuous = true;
-      recognition.maxAlternatives = 1;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferredMimeType = pickVoiceRecorderMimeType();
+      const recorder = preferredMimeType ? new MediaRecorder(stream, { mimeType: preferredMimeType }) : new MediaRecorder(stream);
 
-      let finalChunk = "";
+      voiceAbortRef.current = false;
+      voiceChunksRef.current = [];
+      mediaStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
 
-      recognition.onstart = () => {
+      recorder.onstart = () => {
         setVoiceRecording(true);
         setVoiceError(null);
-      };
-
-      recognition.onresult = (event: any) => {
-        let interimChunk = "";
-        for (let i = event.resultIndex; i < event.results.length; i += 1) {
-          const result = event.results[i];
-          const text = String(result?.[0]?.transcript || "").trim();
-          if (!text) continue;
-          if (result.isFinal) finalChunk += `${text} `;
-          else interimChunk += `${text} `;
-        }
-
-        const finalText = finalChunk.trim();
-        if (finalText) {
-          setDraft((prev) => {
-            const base = prev.trim();
-            return base ? `${base} ${finalText}`.trim() : finalText;
-          });
-          finalChunk = "";
-        }
-        setVoiceInterim(interimChunk.trim());
-      };
-
-      recognition.onerror = (event: any) => {
-        const code = String(event?.error || "");
-        if (code === "aborted" || code === "no-speech") {
-          setVoiceError(null);
-          return;
-        }
-        if (code === "not-allowed" || code === "service-not-allowed") {
-          setVoiceError("Доступ к микрофону запрещен. Разрешите микрофон в браузере.");
-          return;
-        }
-        setVoiceError("Не удалось распознать речь. Попробуйте еще раз.");
-      };
-
-      recognition.onend = () => {
-        recognitionRef.current = null;
-        setVoiceRecording(false);
         setVoiceInterim("");
       };
 
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch {
-      setVoiceRecording(false);
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          voiceChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onerror = () => {
+        setVoiceInterim("");
+        setVoiceError("Не удалось записать голос. Попробуйте ещё раз.");
+      };
+
+      recorder.onstop = () => {
+        const wasAborted = voiceAbortRef.current;
+        const chunks = voiceChunksRef.current;
+        const recorderMimeType =
+          normalizeRecordedAudioMimeType(recorder.mimeType || preferredMimeType || chunks[0]?.type || "");
+
+        mediaRecorderRef.current = null;
+        voiceChunksRef.current = [];
+        stopVoiceStream();
+        setVoiceRecording(false);
+
+        if (wasAborted) {
+          setVoiceInterim("");
+          return;
+        }
+
+        const blob = recorderMimeType ? new Blob(chunks, { type: recorderMimeType }) : new Blob(chunks);
+        void transcribeVoiceBlob(blob, recorderMimeType);
+      };
+
+      recorder.start();
+    } catch (error) {
+      voiceChunksRef.current = [];
+      mediaRecorderRef.current = null;
+      stopVoiceStream();
       setVoiceInterim("");
-      setVoiceError("Не удалось запустить голосовой ввод.");
+      setVoiceRecording(false);
+      setVoiceError(resolveVoiceStartErrorMessage(error));
     }
+  };
+
+  const startVoiceInput = async () => {
+    if (sending || voiceProcessing) return;
+    if (typeof window === "undefined") return;
+    if (audioTranscriptionAvailable && supportsAudioRecording()) {
+      await startRecordedVoiceInput();
+      return;
+    }
+    if (supportsSpeechRecognition()) {
+      startSpeechVoiceInput();
+      return;
+    }
+    setVoiceError("Голосовой ввод не поддерживается в этом браузере.");
   };
 
   useEffect(() => {
@@ -803,6 +1179,65 @@ export default function AssistantClient({
     return value;
   };
 
+  const effectiveRuntimeStatus = useMemo<AssistantRuntimeStatus>(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      if (message.role !== "assistant" || message.id === "intro") continue;
+
+      if (message.localFallbackUsed || message.provider === "stub") {
+        return {
+          provider:
+            message.provider === "openai" || message.provider === "codex" ? message.provider : initialRuntimeStatus.provider,
+          state: "fallback",
+          reason: "last_reply_fallback",
+        };
+      }
+
+      if (message.provider === "openai" || message.provider === "codex") {
+        return {
+          provider: message.provider,
+          state: "online",
+          reason: "last_reply_external",
+        };
+      }
+    }
+
+    return initialRuntimeStatus;
+  }, [initialRuntimeStatus, messages]);
+
+  const runtimeStatusTitle =
+    effectiveRuntimeStatus.state === "online"
+      ? tr("ai.status.online", "Внешний AI отвечает")
+      : tr("ai.status.fallback", "Локальный режим");
+  const runtimeStatusDescription =
+    effectiveRuntimeStatus.state === "online"
+      ? tr("ai.status.onlineHint", "Зелёный статус означает, что ассистент отвечает через внешний AI.")
+      : (
+          effectiveRuntimeStatus.reason === "stub_mode"
+            ? tr(
+                "ai.status.fallbackHintStub",
+                "Жёлтый статус означает, что внешний AI сейчас не подключен, поэтому ассистент работает в резервном режиме.",
+              )
+            : tr(
+                "ai.status.fallbackHint",
+                "Жёлтый статус означает, что внешний AI сейчас не отвечает, поэтому ассистент работает в резервном режиме.",
+              )
+        );
+  const runtimeStatusTone =
+    effectiveRuntimeStatus.state === "online"
+      ? {
+          panelClass: "border-emerald-200 bg-emerald-50",
+          dotClass: "bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.15)]",
+          titleClass: "text-emerald-900",
+          descriptionClass: "text-emerald-800",
+        }
+      : {
+          panelClass: "border-amber-200 bg-amber-50",
+          dotClass: "bg-amber-500 shadow-[0_0_0_4px_rgba(245,158,11,0.15)]",
+          titleClass: "text-amber-900",
+          descriptionClass: "text-amber-800",
+        };
+
   const buildChatCopyText = (): string => {
     const userLabel = tr("ai.copyChatUserLabel", "Пользователь");
     const assistantLabel = tr("ai.copyChatAssistantLabel", "AI-ассистент");
@@ -882,13 +1317,23 @@ export default function AssistantClient({
 
     const parts = extractEmailParts(displayContent);
     const hasTemplateMarkers = parts.markers.subject || parts.markers.body || parts.markers.whatsapp;
-    if (!hasTemplateMarkers) return renderLinkifiedText(displayContent);
+    const hasRenderableTemplateContent =
+      hasMeaningfulTemplateValue(parts.subject) ||
+      hasMeaningfulTemplateValue(parts.body) ||
+      hasMeaningfulTemplateValue(parts.whatsapp);
 
-    const subjectValue = parts.subject || (t("ai.export.defaultSubject") || "Запрос через Biznesinfo");
+    if (!hasTemplateMarkers || message.id === streamingReplyId || !hasRenderableTemplateContent) {
+      return renderLinkifiedText(displayContent);
+    }
+
+    const subjectValue = parts.subject || "";
     const subjectLabel = tr("ai.export.subjectLabel", "Тема");
     const bodyLabel = tr("ai.export.bodyLabel", "Текст");
     const whatsappLabel = tr("ai.export.messengerLabel", "Сообщение для мессенджера");
     const copyLabel = tr("ai.copy", "Копировать");
+    const showSubjectCard = hasMeaningfulTemplateValue(subjectValue);
+    const showBodyCard = hasMeaningfulTemplateValue(parts.body);
+    const showWhatsAppCard = hasMeaningfulTemplateValue(parts.whatsapp);
 
     return (
       <div className="space-y-3">
@@ -898,35 +1343,39 @@ export default function AssistantClient({
           </div>
         )}
 
-        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-[11px] font-semibold text-gray-600">{subjectLabel}</div>
-            <button
-              type="button"
-              onClick={() => void copyRawText({ messageId: message.id, kind: "subject", text: subjectValue })}
-              className="inline-flex items-center justify-center rounded-lg px-2 py-1 text-[11px] text-gray-500 hover:text-gray-800 hover:bg-white border border-transparent hover:border-gray-200 transition"
-            >
-              {copyLabel}
-            </button>
+        {showSubjectCard && (
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[11px] font-semibold text-gray-600">{subjectLabel}</div>
+              <button
+                type="button"
+                onClick={() => void copyRawText({ messageId: message.id, kind: "subject", text: subjectValue })}
+                className="inline-flex items-center justify-center rounded-lg px-2 py-1 text-[11px] text-gray-500 hover:text-gray-800 hover:bg-white border border-transparent hover:border-gray-200 transition"
+              >
+                {copyLabel}
+              </button>
+            </div>
+            <div className="mt-1 text-sm text-gray-900">{renderLinkifiedText(subjectValue)}</div>
           </div>
-          <div className="mt-1 text-sm text-gray-900">{renderLinkifiedText(subjectValue)}</div>
-        </div>
+        )}
 
-        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-[11px] font-semibold text-gray-600">{bodyLabel}</div>
-            <button
-              type="button"
-              onClick={() => void copyRawText({ messageId: message.id, kind: "body", text: parts.body || "" })}
-              className="inline-flex items-center justify-center rounded-lg px-2 py-1 text-[11px] text-gray-500 hover:text-gray-800 hover:bg-white border border-transparent hover:border-gray-200 transition"
-            >
-              {copyLabel}
-            </button>
+        {showBodyCard && (
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[11px] font-semibold text-gray-600">{bodyLabel}</div>
+              <button
+                type="button"
+                onClick={() => void copyRawText({ messageId: message.id, kind: "body", text: parts.body || "" })}
+                className="inline-flex items-center justify-center rounded-lg px-2 py-1 text-[11px] text-gray-500 hover:text-gray-800 hover:bg-white border border-transparent hover:border-gray-200 transition"
+              >
+                {copyLabel}
+              </button>
+            </div>
+            <div className="mt-1 text-sm text-gray-900 whitespace-pre-wrap">{renderLinkifiedText(parts.body || "")}</div>
           </div>
-          <div className="mt-1 text-sm text-gray-900 whitespace-pre-wrap">{renderLinkifiedText(parts.body || "")}</div>
-        </div>
+        )}
 
-        {parts.whatsapp && (
+        {showWhatsAppCard && (
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
             <div className="flex items-center justify-between gap-2">
               <div className="text-[11px] font-semibold text-gray-600">{whatsappLabel}</div>
@@ -938,7 +1387,7 @@ export default function AssistantClient({
                 {copyLabel}
               </button>
             </div>
-            <div className="mt-1 text-sm text-gray-900 whitespace-pre-wrap">{renderLinkifiedText(parts.whatsapp)}</div>
+            <div className="mt-1 text-sm text-gray-900 whitespace-pre-wrap">{renderLinkifiedText(parts.whatsapp || "")}</div>
           </div>
         )}
       </div>
@@ -1061,16 +1510,26 @@ export default function AssistantClient({
     if (!text) return;
     if (!canChat) return;
     if (sendingRef.current) return;
-    if (voiceRecording) stopVoiceInput();
+    if (voiceRecording) {
+      setError("Сначала остановите запись голоса, затем отправьте запрос.");
+      return;
+    }
+    if (voiceProcessing) {
+      setError("Подождите, пока завершится расшифровка голосового ввода.");
+      return;
+    }
     setError(null);
 
     const outreachIntent = looksLikeOutreachIntent(text);
     const outreachHowToIntent = looksLikeOutreachHowToIntent(text);
     const outreachDraftIntent = looksLikeOutreachDraftIntent(text);
     const hasTextTarget = looksLikeExplicitCompanyTargetInText(text);
+    const hasCompanyCabinetContext = Boolean(companyContext?.companyId);
     const hasExplicitTarget = Boolean(companyContext?.companyName || resolvedSendCompanyId || hasTextTarget);
     const requiresExplicitCompanyTarget = outreachIntent && !outreachHowToIntent && !outreachDraftIntent;
-    const draftOnlyOutreachMode = requiresExplicitCompanyTarget && !hasExplicitTarget;
+    const cabinetOnlyOutreachMode = requiresExplicitCompanyTarget && !hasCompanyCabinetContext;
+    const draftOnlyOutreachMode = cabinetOnlyOutreachMode || (requiresExplicitCompanyTarget && !hasExplicitTarget);
+    const allowTargetedDispatch = !requiresExplicitCompanyTarget || hasCompanyCabinetContext;
     if (
       requiresExplicitCompanyTarget &&
       !draftOnlyOutreachMode &&
@@ -1114,7 +1573,7 @@ export default function AssistantClient({
       if (draftOnlyOutreachMode) payload.outreachMode = "draft_only_no_target";
 
       const requestMessage = draftOnlyOutreachMode
-        ? `${text}\n\nВажно: подготовь общий черновик коммерческого предложения без выбора конкретной компании и без отправки запроса в компании.`
+        ? `${text}\n\nВажно: подготовь общий черновик коммерческого предложения без выбора конкретной компании и без отправки запроса в компании. Отправка заявки в компанию доступна только из личного кабинета на странице выбранной компании.`
         : text;
 
       const requestBody: Record<string, unknown> = {
@@ -1123,8 +1582,8 @@ export default function AssistantClient({
         payload,
       };
       if (conversationId) requestBody.conversationId = conversationId;
-      if (!draftOnlyOutreachMode && resolvedSendCompanyId) requestBody.companyId = resolvedSendCompanyId;
-      if (!draftOnlyOutreachMode && !resolvedSendCompanyId && shortlistCompanyIds.length > 0 && !hasTextTarget) {
+      if (!draftOnlyOutreachMode && allowTargetedDispatch && resolvedSendCompanyId) requestBody.companyId = resolvedSendCompanyId;
+      if (!draftOnlyOutreachMode && allowTargetedDispatch && !resolvedSendCompanyId && shortlistCompanyIds.length > 0 && !hasTextTarget) {
         requestBody.companyIds = shortlistCompanyIds;
       }
 
@@ -1185,6 +1644,13 @@ export default function AssistantClient({
       let fallbackNotice: string | null = null;
       let provider: string | null = null;
       let done = false;
+      const loadingText = t("common.loading") || "Загрузка...";
+      const buildAssistantContent = () => {
+        if (ASSISTANT_RENDER_STREAM_DELTAS || done) {
+          return assistantText || loadingText;
+        }
+        return loadingText;
+      };
 
       const addAssistantIfNeeded = () => {
         if (assistantAdded) return;
@@ -1193,7 +1659,7 @@ export default function AssistantClient({
         const assistantMessage: AssistantMessage = {
           id: assistantMessageId,
           role: "assistant",
-          content: assistantText || (t("common.loading") || "Загрузка..."),
+          content: buildAssistantContent(),
           requestId,
           localFallbackUsed,
           fallbackNotice,
@@ -1213,7 +1679,7 @@ export default function AssistantClient({
             m.id === assistantMessageId
               ? {
                   ...m,
-                  content: assistantText || (t("common.loading") || "Загрузка..."),
+                  content: buildAssistantContent(),
                   requestId: requestId ?? m.requestId,
                   localFallbackUsed: localFallbackUsed || m.localFallbackUsed || false,
                   fallbackNotice: fallbackNotice ?? m.fallbackNotice ?? null,
@@ -1267,9 +1733,13 @@ export default function AssistantClient({
             const delta = typeof data?.delta === "string" ? data.delta : "";
             if (!delta) continue;
             assistantText += delta;
-            updateAssistant();
-            const el = scrollRef.current;
-            if (el) el.scrollTop = el.scrollHeight;
+            if (ASSISTANT_RENDER_STREAM_DELTAS) {
+              updateAssistant();
+              const el = scrollRef.current;
+              if (el) el.scrollTop = el.scrollHeight;
+            } else {
+              addAssistantIfNeeded();
+            }
             continue;
           }
 
@@ -1363,6 +1833,18 @@ export default function AssistantClient({
     !outreachHowToDraftPreview &&
     !outreachDraftDraftPreview &&
     !hasExplicitTargetDraftPreview;
+  const loadingLabel = t("common.loading") || "Загрузка...";
+  const loadingLeadText = loadingLabel.replace(/\.+$/u, "").trim() || "Загрузка";
+  const renderLoadingWithRunningDots = () => (
+    <span className="inline-flex items-center text-gray-500">
+      <span>{loadingLeadText}</span>
+      <span className="ml-1 inline-flex leading-none" aria-hidden="true">
+        <span className="inline-block animate-bounce" style={{ animationDelay: "-0.32s", animationDuration: "1.1s" }}>.</span>
+        <span className="inline-block animate-bounce" style={{ animationDelay: "-0.16s", animationDuration: "1.1s" }}>.</span>
+        <span className="inline-block animate-bounce" style={{ animationDuration: "1.1s" }}>.</span>
+      </span>
+    </span>
+  );
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-gray-100">
@@ -1413,6 +1895,15 @@ export default function AssistantClient({
 
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{t("ai.title")}</h1>
               <p className="mt-2 text-gray-600">{t("ai.personalAssistant")}</p>
+              <div className={`mt-3 rounded-2xl border px-4 py-3 ${runtimeStatusTone.panelClass}`}>
+                <div className="flex items-start gap-3">
+                  <span className={`mt-1 inline-flex h-2.5 w-2.5 flex-shrink-0 rounded-full ${runtimeStatusTone.dotClass}`} />
+                  <div className="min-w-0">
+                    <div className={`text-sm font-semibold ${runtimeStatusTone.titleClass}`}>{runtimeStatusTitle}</div>
+                    <p className={`mt-1 text-xs leading-5 ${runtimeStatusTone.descriptionClass}`}>{runtimeStatusDescription}</p>
+                  </div>
+                </div>
+              </div>
 
               {!canChat ? (
                 <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
@@ -1522,7 +2013,7 @@ export default function AssistantClient({
                   </div>
                   <div
                     ref={scrollRef}
-                    className="h-[clamp(320px,55dvh,520px)] sm:h-[420px] overflow-y-auto p-2 sm:p-5 space-y-4 bg-gradient-to-b from-white to-gray-50"
+                    className="min-h-[150px] max-h-[46dvh] overflow-y-auto p-3 pb-4 sm:h-[420px] sm:min-h-[420px] sm:max-h-[420px] sm:p-5 space-y-4 bg-gradient-to-b from-white to-gray-50"
                   >
                     {messages.map((m) => (
                       <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
@@ -1533,7 +2024,7 @@ export default function AssistantClient({
                               : "relative group bg-white border border-gray-200 text-gray-900 rounded-bl-md pr-11 whitespace-pre-wrap break-words"
                           }`}
                         >
-                          {m.role === "assistant" && m.id !== "intro" && (
+                          {m.role === "assistant" && m.id !== "intro" && m.id !== streamingReplyId && (
                             <div className="absolute right-2 top-2">
                               <button
                                 type="button"
@@ -1592,14 +2083,16 @@ export default function AssistantClient({
                               )}
                             </div>
                           )}
-                          {renderAssistantMessageContent(m)}
+                          {m.role === "assistant" && m.id === streamingReplyId && String(m.content || "").trim() === loadingLabel
+                            ? renderLoadingWithRunningDots()
+                            : renderAssistantMessageContent(m)}
                           {m.role === "assistant" && m.id !== "intro" && m.localFallbackUsed && m.fallbackNotice && (
                             <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
                               {m.fallbackNotice}
                             </div>
                           )}
 
-                          {m.role === "assistant" && m.id !== "intro" && m.requestId && (
+                          {m.role === "assistant" && m.id !== "intro" && m.requestId && m.id !== streamingReplyId && (
                             <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
                               {m.feedback ? (
                                 <div className="flex items-center gap-2">
@@ -1694,8 +2187,8 @@ export default function AssistantClient({
                     ))}
                     {sending && !streamingReplyId && (
                       <div className="flex justify-start">
-                        <div className="max-w-[98%] sm:max-w-[90%] rounded-2xl px-3 sm:px-4 py-3 text-[15px] sm:text-sm leading-relaxed shadow-sm bg-white border border-gray-200 text-gray-500 rounded-bl-md animate-pulse">
-                          {t("common.loading") || "Загрузка..."}
+                        <div className="max-w-[98%] sm:max-w-[90%] rounded-2xl px-3 sm:px-4 py-3 text-[15px] sm:text-sm leading-relaxed shadow-sm bg-white border border-gray-200 rounded-bl-md">
+                          {renderLoadingWithRunningDots()}
                         </div>
                       </div>
                     )}
@@ -1721,7 +2214,7 @@ export default function AssistantClient({
                             value={draft}
                             onChange={(e) => setDraft(e.target.value)}
                             onKeyDown={(e) => {
-                              if (sending) return;
+                              if (sending || voiceRecording || voiceProcessing) return;
                               if (e.key !== "Enter") return;
                               if (e.shiftKey) return;
                               if (e.nativeEvent.isComposing) return;
@@ -1730,7 +2223,7 @@ export default function AssistantClient({
                             }}
                             placeholder={t("ai.placeholder") || "Опишите, что вам нужно найти или заказать..."}
                             rows={3}
-                            className="w-full min-h-[112px] max-h-[260px] resize-y overflow-y-auto rounded-2xl border-0 bg-transparent px-3 sm:px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-0"
+                            className="w-full min-h-[88px] sm:min-h-[112px] max-h-[260px] resize-y overflow-y-auto rounded-2xl border-0 bg-transparent px-3 sm:px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-0"
                             disabled={sending}
                           />
                         </div>
@@ -1740,22 +2233,22 @@ export default function AssistantClient({
                               type="button"
                               onClick={() => {
                                 if (voiceRecording) stopVoiceInput();
-                                else startVoiceInput();
+                                else void startVoiceInput();
                               }}
-                              disabled={sending}
+                              disabled={sending || voiceProcessing}
                               className={`inline-flex items-center justify-center rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
                                 voiceRecording
                                   ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
-                                  : "border-[#820251]/30 bg-white text-[#820251] hover:bg-[#820251]/10"
+                                  : voiceProcessing
+                                    ? "border-[#820251]/20 bg-[#820251]/5 text-[#820251]"
+                                    : "border-[#820251]/30 bg-white text-[#820251] hover:bg-[#820251]/10"
                               } disabled:opacity-60 disabled:cursor-not-allowed`}
                             >
-                              {voiceRecording ? "Остановить запись" : "Голосовой ввод"}
+                              {voiceRecording ? "Остановить запись" : (voiceProcessing ? "Расшифровываю..." : "Голосовой ввод")}
                             </button>
                           )}
                           {voiceInterim && (
-                            <span className="text-xs text-gray-600">
-                              Распознаю: {voiceInterim}
-                            </span>
+                            <span className="text-xs text-gray-600">{voiceInterim}</span>
                           )}
                           {voiceError && (
                             <span className="text-xs text-red-700">{voiceError}</span>
@@ -1764,14 +2257,14 @@ export default function AssistantClient({
                       </div>
                       {draftOnlyOutreachHintVisible && (
                         <div className="w-full sm:w-auto sm:self-end sm:max-w-[340px] rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                          Компания не выбрана. Отправим общий черновик без рассылки в компании.
-                          Для отправки в компанию выберите ее в «Конструкторе запроса».
+                          Компания не выбрана. Подготовлю общий черновик без отправки в компании.
+                          Для отправки откройте страницу нужной компании и перейдите в AI-ассистент из личного кабинета.
                         </div>
                       )}
                       <button
                         type="button"
                         onClick={send}
-                        disabled={sending || !draft.trim()}
+                        disabled={sending || voiceRecording || voiceProcessing || !draft.trim()}
                         className="w-full sm:w-auto sm:self-end inline-flex items-center justify-center rounded-xl bg-[#820251] text-white px-6 py-3 font-semibold hover:bg-[#6a0143] disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         {sending ? (t("common.loading") || "Загрузка...") : (t("ai.sendRequest") || "Отправить")}
@@ -1786,21 +2279,30 @@ export default function AssistantClient({
                         </button>
                       )}
                     </div>
-                    <div className="mt-3 rounded-xl border border-[#820251]/20 bg-[#820251]/5 px-3 py-2 text-xs text-[#6a0143]">
-                      <div className="whitespace-pre-line">
-                        {t("ai.oneClickHelp") ||
-                          "Как отправить заявку быстро:\n1) Выберите конкретную компанию в конструкторе и опишите задачу.\n2) Нажмите «Отправить запрос».\n3) В ответе нажмите «Скопировать как письмо» или «Скопировать как сообщение» и отправьте контакту компании."}
+                    {canUseRfqConstructor ? (
+                      <div className="mt-3 rounded-xl border border-[#820251]/20 bg-[#820251]/5 px-3 py-2 text-xs text-[#6a0143]">
+                        <div className="whitespace-pre-line">
+                          {t("ai.oneClickHelp") ||
+                            "Как отправить заявку быстро:\n1) Выберите конкретную компанию в конструкторе и опишите задачу.\n2) Нажмите «Отправить запрос».\n3) В ответе нажмите «Скопировать как письмо» или «Скопировать как сообщение» и отправьте контакту компании."}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setRfqOpen((prev) => !prev)}
+                          className="mt-2 inline-flex items-center justify-center rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-[#820251] border border-[#820251]/30 hover:bg-[#820251]/10"
+                        >
+                          {rfqOpen ? `${t("common.hide") || "Скрыть"} конструктор` : (t("ai.rfq.open") || "Конструктор запроса")}
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setRfqOpen((prev) => !prev)}
-                        className="mt-2 inline-flex items-center justify-center rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-[#820251] border border-[#820251]/30 hover:bg-[#820251]/10"
-                      >
-                        {rfqOpen ? `${t("common.hide") || "Скрыть"} конструктор` : (t("ai.rfq.open") || "Конструктор запроса")}
-                      </button>
-                    </div>
+                    ) : (
+                      <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+                        {tr(
+                          "ai.outreachCompanyPageOnly",
+                          "Отправка заявки в компанию доступна из AI-ассистента на странице выбранной компании (через личный кабинет). На главной странице я помогаю составить черновик заявки/КП.",
+                        )}
+                      </div>
+                    )}
 
-                    {rfqOpen && (
+                    {canUseRfqConstructor && rfqOpen && (
                       <div className="mt-3">
                         <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                           <div className="text-xs font-semibold text-gray-800">

@@ -3,6 +3,9 @@
 
 # local DBs/state (not committed)
 data/
+!app/data/
+!app/data/manual-companies/
+!app/data/manual-companies/*.json
 
 # env (keep example)
 .env
@@ -40,4 +43,3 @@ secrets/
 .trash/
 .cli-bridge*/
 nginx/conf.d/.htpasswd
-

@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { use, useEffect, useState } from "react";
+import { Suspense, use, useEffect, useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SearchBar from "@/components/SearchBar";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useRegion } from "@/contexts/RegionContext";
-import { regions } from "@/data/regions";
 import { localizeCatalogCategoryName, localizeCatalogRubricName } from "@/lib/biznesinfo/catalog-localization";
 import type { BiznesinfoCatalogCategory, BiznesinfoCatalogResponse } from "@/lib/biznesinfo/types";
 
@@ -18,12 +17,12 @@ interface PageProps {
 const LEGACY_CATEGORY_ALIAS_REDIRECTS: Record<string, string> = {
   sporttovary: "/catalog/sport-zdorove-krasota/sportivnye-tovary-snaryajenie",
   "selskoe-hozyaystvo": "/catalog/apk-selskoe-i-lesnoe-hozyaystvo/selskoe-hozyaystvo",
+  "transport-logistika": "/catalog/transport-logistika-perevozki",
 };
 
 export default function CategoryPage({ params }: PageProps) {
   const { category } = use(params);
   const { t, language } = useLanguage();
-  const { selectedRegion, setSelectedRegion, regionName } = useRegion();
   const router = useRouter();
 
   const [catalog, setCatalog] = useState<BiznesinfoCatalogResponse | null>(null);
@@ -32,8 +31,7 @@ export default function CategoryPage({ params }: PageProps) {
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
-    const region = selectedRegion || "";
-    fetch(`/api/biznesinfo/catalog?region=${encodeURIComponent(region)}`)
+    fetch("/api/biznesinfo/catalog")
       .then((r) => (r.ok ? r.json() : null))
       .then((data: BiznesinfoCatalogResponse | null) => {
         if (!isMounted) return;
@@ -48,7 +46,7 @@ export default function CategoryPage({ params }: PageProps) {
     return () => {
       isMounted = false;
     };
-  }, [selectedRegion]);
+  }, []);
 
   const categoryData: BiznesinfoCatalogCategory | null =
     (catalog?.categories || []).find((c: BiznesinfoCatalogCategory) => c.slug === category) || null;
@@ -94,34 +92,13 @@ export default function CategoryPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Region Filter */}
-        <div className="bg-white border-b border-gray-200 py-4">
+        {/* Search block (same behavior as on home page) */}
+        <div className="bg-gradient-to-br from-[#a0006d] to-[#a0006d] text-white pt-4 pb-8">
           <div className="container mx-auto px-4">
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-sm text-gray-600 font-medium">{t("filter.region")}:</span>
-              <button
-                onClick={() => setSelectedRegion(null)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  !selectedRegion
-                    ? "bg-[#820251] text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                {t("search.allRegions")}
-              </button>
-              {regions.map((region) => (
-                <button
-                  key={region.slug}
-                  onClick={() => setSelectedRegion(region.slug)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                    selectedRegion === region.slug
-                      ? "bg-[#820251] text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  {t(`region.${region.slug}`)}
-                </button>
-              ))}
+            <div className="relative z-[120]">
+              <Suspense fallback={<div className="h-[200px]" />}>
+                <SearchBar variant="subrubric" />
+              </Suspense>
             </div>
           </div>
         </div>
@@ -131,11 +108,6 @@ export default function CategoryPage({ params }: PageProps) {
           <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
             <span className="w-1 h-6 bg-[#820251] rounded"></span>
             {t("catalog.subcategories")}
-            {selectedRegion && (
-              <span className="text-sm font-normal text-gray-500">
-                — {regionName}
-              </span>
-            )}
           </h2>
 
           {isLoading ? (

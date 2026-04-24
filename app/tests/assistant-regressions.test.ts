@@ -673,7 +673,7 @@ test("post-process appends /company links when reply lists companies without car
 
   assert.match(result, /\/company\/dubai-orekhi/u);
   assert.match(result, /\/company\/smakata-by/u);
-  assert.match(result, /Конкретные компании из текущего списка|Ссылки на карточки компаний/u);
+  assert.match(result, /Конкретные компании из текущего списка|Ссылки на карточки компаний|^Подобрал по запросу:/mu);
 });
 
 test("post-process returns direct company card link for explicit card-link request", () => {
@@ -699,6 +699,91 @@ test("post-process returns direct company card link for explicit card-link reque
 
   assert.match(result, /Ссылка на карточку компании:\s*\/company\/iris-intern-grupp/u);
   assert.doesNotMatch(result, /\/catalog\//u);
+});
+
+test("Iran freight rule keeps iris inter group in top-3 when candidate passes current filters", () => {
+  const iris = makeVendorCandidate({
+    id: "biznesinfo-101566",
+    name: "Ирис Интерн Групп",
+    primary_rubric_name: "Транспорт, логистика, перевозки",
+    description: "Международные грузоперевозки, доставка грузов в Иран и мультимодальная логистика.",
+  });
+  const candidate1 = makeVendorCandidate({
+    id: "iran-cargo-1",
+    name: "Каспий Карго",
+    primary_rubric_name: "Транспорт, логистика, перевозки",
+    description: "Международные грузоперевозки и доставка грузов в Иран.",
+  });
+  const candidate2 = makeVendorCandidate({
+    id: "iran-cargo-2",
+    name: "Транс Азия",
+    primary_rubric_name: "Транспорт, логистика, перевозки",
+    description: "Логистика, экспорт и автоперевозки в страны Ближнего Востока, включая Иран.",
+  });
+  const candidate3 = makeVendorCandidate({
+    id: "iran-cargo-3",
+    name: "Шелковый Путь Логистик",
+    primary_rubric_name: "Транспорт, логистика, перевозки",
+    description: "Грузоперевозки, сборные грузы и международная логистика.",
+  });
+
+  const ranked = __assistantRouteTestHooks.filterAndRankVendorCandidates({
+    companies: [candidate1, candidate2, candidate3, iris],
+    searchTerms: ["грузоперевозки", "Иран"],
+    region: null,
+    city: null,
+    limit: 3,
+    sourceText: "Нужны грузоперевозки в Иран",
+  });
+
+  assert.equal(ranked.length, 3);
+  assert.ok(ranked.some((company) => company.id === "biznesinfo-101566"));
+});
+
+test("catalog shortlist template formatter builds required response structure", () => {
+  const iris = makeVendorCandidate({
+    id: "biznesinfo-101566",
+    name: "Ирис Интерн Групп",
+    primary_rubric_name: "Транспорт, логистика, перевозки",
+    description: "Международные грузоперевозки, доставка грузов в Иран и мультимодальная логистика.",
+  });
+  const candidate1 = makeVendorCandidate({
+    id: "iran-cargo-1",
+    name: "Каспий Карго",
+    primary_rubric_name: "Транспорт, логистика, перевозки",
+    description: "Международные грузоперевозки и доставка грузов в Иран.",
+  });
+  const candidate2 = makeVendorCandidate({
+    id: "iran-cargo-2",
+    name: "Транс Азия",
+    primary_rubric_name: "Транспорт, логистика, перевозки",
+    description: "Логистика, экспорт и автоперевозки в страны Ближнего Востока, включая Иран.",
+  });
+
+  const result = __assistantRouteTestHooks.buildCatalogShortlistTemplateReply({
+    message: "Нужны грузоперевозки в Иран",
+    history: [],
+    existingReply: "Подбираю релевантные компании из каталога.",
+    mode: { templateRequested: false, rankingRequested: false, checklistRequested: false },
+    vendorCandidates: [candidate1, iris, candidate2],
+    vendorLookupContext: {
+      shouldLookup: true,
+      searchText: "грузоперевозки в Иран",
+      region: null,
+      city: null,
+      derivedFromHistory: false,
+      sourceMessage: "Нужны грузоперевозки в Иран",
+      excludeTerms: [],
+    },
+  });
+
+  assert.ok(result);
+  assert.match(result, /^Подобрал по запросу:/u);
+  assert.match(result, /^Рубрика:/mu);
+  assert.match(result, /^Фильтры:/mu);
+  assert.match(result, /^Компании:/mu);
+  assert.match(result, /\/company\/biznesinfo-101566/u);
+  assert.match(result, /^Следующий шаг:/mu);
 });
 
 test("normalize shortlist wording removes standalone budget question line", () => {
@@ -1387,6 +1472,13 @@ test("semantic expansion adds agriculture terms for rye sourcing request", () =>
   assert.ok(expanded.includes("зерно"));
 });
 
+test("semantic expansion does not misread percentage wording as consult intent for milk request", () => {
+  const expanded = __assistantRouteTestHooks.suggestSemanticExpansionTerms("Где купить молоко 3,0 процентное");
+  assert.ok(!expanded.includes("сравнение поставщиков"));
+  assert.ok(!expanded.includes("оценка подрядчика"));
+  assert.ok(!expanded.includes("проверка условий"));
+});
+
 test("stylist generic advice leak is detected", () => {
   const leakReply = [
     "Отличный вопрос 🙂 Чтобы посоветовать действительно уместно, уточню 2 момента:",
@@ -1551,6 +1643,67 @@ test("final quality gate rewrites dining shortlist to city clarification when cu
   assert.match(result, /В каком городе\/регионе ищете/u);
   assert.doesNotMatch(result, /\/company\/dompapr/u);
   assert.doesNotMatch(result, /сейчас вижу:/u);
+});
+
+test("final quality gate strips unsolicited cabinet submission guidance from plain company lookup", () => {
+  const source = [
+    "Если вы вошли в личный кабинет, после подтверждения я могу провести заявку через AI-ассистента даже с главной страницы или со страницы компании. Если отправка сейчас недоступна, подготовлю готовый черновик заявки/КП для ручной отправки.",
+    "",
+    "Подобрал по запросу: компании, которые занимаются красками в Беларуси.",
+    "Рубрика: Лаки, краски - /catalog/himiya-energetika-syre/laki-kraski",
+    "Компании:",
+    "1) Белкраска - /company/belkraska - подходит по профилю лакокрасочной продукции.",
+  ].join("\n");
+
+  const result = __assistantRouteTestHooks.applyFinalAssistantQualityGate({
+    replyText: source,
+    message: "Какие компании занимаются красками?",
+    history: [],
+  });
+
+  assert.doesNotMatch(result, /личн\p{L}*\s+кабинет/u);
+  assert.doesNotMatch(result, /черновик\s+заявк/u);
+  assert.match(result, /Подобрал по запросу:\s*компании,\s*которые занимаются красками/u);
+  assert.match(result, /\/company\/belkraska/u);
+});
+
+test("commercial proposal drafting request does not leak add-company appendix from placement history", () => {
+  const result = __assistantRouteTestHooks.buildHardFormattedReply("Сделай коммерческое предложение", [
+    { role: "user", content: "Как добавить компанию на портал без регистрации?" },
+  ]);
+
+  assert.equal(result, null);
+});
+
+test("final quality gate rewrites leaked placement appendix into template for commercial proposal drafting", () => {
+  const source = [
+    "По интерактивному справочно-информационному порталу biznesinfo.by это делается через страницу: /add-company.",
+    "Пошагово:",
+    "1. Откройте /add-company и заполните обязательные поля компании и контактов.",
+    "2. Выберите категорию/подкатегорию и регион, добавьте короткое описание деятельности.",
+    "3. Отправьте форму и дождитесь модерации карточки.",
+  ].join("\n");
+
+  const history = [{ role: "user", content: "Как добавить компанию без регистрации?" }];
+  const mode = __assistantRouteTestHooks.detectAssistantResponseMode({
+    message: "Сделай коммерческое пиедложение",
+    history,
+    hasShortlist: false,
+  });
+  const result = __assistantRouteTestHooks.postProcessAssistantReply({
+    replyText: source,
+    message: "Сделай коммерческое пиедложение",
+    history,
+    mode,
+    vendorCandidates: [],
+  });
+
+  assert.equal(mode.templateRequested, true);
+  assert.match(result, /^Тема:/u);
+  assert.match(result, /^Текст:/mu);
+  assert.match(result, /^Сообщение\s+для\s+мессенджера:/mu);
+  assert.doesNotMatch(result, /\/add-company/u);
+  assert.doesNotMatch(result, /модераци/u);
 });
 
 test("final quality gate replaces deprecated clarifying question block with filter guidance", () => {
@@ -1752,4 +1905,34 @@ test("rubric picker prefers forestry rubric over broad agriculture for timber in
 
   assert.ok(hint);
   assert.equal(hint?.slug, "lesnoe-hozyaystvo");
+});
+
+test("rubric picker prefers dairy rubric over construction distractor for milk intent", () => {
+  const hint = __assistantRouteTestHooks.pickPrimaryRubricHintForClarification({
+    message: "Где купить молоко 3,0 процентное",
+    seedText: "где купить молоко 3,0 процентное",
+    hints: [
+      {
+        type: "rubric",
+        name: "Строительство, строительные работы",
+        slug: "stroitelstvo-stroitelnye-raboty",
+        url: "/catalog/stroitelstvo-nedvizhimost/stroitelstvo-stroitelnye-raboty",
+        category_slug: "stroitelstvo-nedvizhimost",
+        category_name: "Строительство и недвижимость",
+        count: 800,
+      } as any,
+      {
+        type: "rubric",
+        name: "Молочная продукция",
+        slug: "molochnaya-produkciya",
+        url: "/catalog/produkty-pitaniya/molochnaya-produkciya",
+        category_slug: "produkty-pitaniya",
+        category_name: "Продукты питания",
+        count: 120,
+      } as any,
+    ],
+  });
+
+  assert.ok(hint);
+  assert.equal(hint?.slug, "molochnaya-produkciya");
 });

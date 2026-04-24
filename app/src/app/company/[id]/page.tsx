@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { companySlugForUrl } from "@/lib/biznesinfo/slug";
 import { biznesinfoGetCompany } from "@/lib/biznesinfo/store";
 import { buildCompanyShortDescription, getCompanyOgImagePath } from "@/lib/biznesinfo/preview";
+import { buildCompanyJsonLd, buildCompanyBreadcrumbJsonLd } from "@/lib/biznesinfo/schema";
 
 import CompanyPageClient from "./CompanyPageClient";
 
@@ -106,5 +107,21 @@ export default async function CompanyPage({ params }: PageProps) {
     redirect(`/company/${encodeURIComponent(canonicalId)}`);
   }
 
-  return <CompanyPageClient id={requested} initialData={initialData} />;
+  return (
+    <>
+      {initialData && (
+        <>
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(buildCompanyJsonLd(initialData)) }}
+          />
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(buildCompanyBreadcrumbJsonLd(initialData)) }}
+          />
+        </>
+      )}
+      <CompanyPageClient id={requested} initialData={initialData} />
+    </>
+  );
 }

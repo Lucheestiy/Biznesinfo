@@ -243,15 +243,17 @@ export function renderLinkifiedText(text: string): React.ReactNode {
 
     const isExternal = token.kind === "url";
     return (
-      <a
-        key={`${token.kind}:${idx}`}
-        href={token.href}
-        className="text-[#820251] underline underline-offset-2 break-words hover:text-[#6a0143]"
-        target={isExternal ? "_blank" : undefined}
-        rel={isExternal ? "noreferrer noopener" : undefined}
-      >
-        {token.text}
-      </a>
+      <React.Fragment key={`${token.kind}:${idx}`}>
+        <a
+          href={token.href}
+          className="text-[#820251] underline underline-offset-2 break-words hover:text-[#6a0143]"
+          target={isExternal ? "_blank" : undefined}
+          rel={isExternal ? "noreferrer noopener" : undefined}
+        >
+          {token.text}
+        </a>
+        {token.trailing}
+      </React.Fragment>
     );
   });
 }

@@ -1,0 +1,12 @@
+[Unit]
+Description=Watch Biznesinfo password-protected configs
+
+[Path]
+PathChanged=/home/mlweb/biznesinfo.lucheestiy.com/nginx/conf.d/default.conf
+PathChanged=/etc/nginx/sites-available/biznesinfo.lucheestiy.com
+PathChanged=/home/mlweb/biznesinfo.lucheestiy.com/nginx/conf.d/.htpasswd
+PathExists=/home/mlweb/biznesinfo.lucheestiy.com/.biznesinfo-password.lock
+Unit=biznesinfo-auth-guard.service
+
+[Install]
+WantedBy=multi-user.target

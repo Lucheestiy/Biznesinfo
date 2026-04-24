@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/browser/safeStorage";
 
 export type Language = "ru" | "en" | "be" | "zh";
 
@@ -58,6 +59,9 @@ const translations: Record<Language, Record<string, string>> = {
     "stats.regions": "Регионов",
     "home.mapNearby": "Искать на карте рядом со мной",
     "home.employeeSearch": "Поиск сотрудников",
+    "home.sharePortal": "Поделиться порталом",
+    "home.shareCopied": "Ссылка на портал скопирована!",
+    "home.shareCopyFailed": "Не удалось скопировать ссылку на портал.",
 
     // Catalog
     "catalog.title": "Каталог по категориям",
@@ -107,6 +111,9 @@ const translations: Record<Language, Record<string, string>> = {
     "company.openOriginal": "Открыть оригинал",
     "company.photoViewer": "Просмотр фото",
     "company.openPhoto": "Открыть фото",
+    "company.callContactHint": "Браузер передаёт в телефон только номер. Сохраните контакт, чтобы название компании отображалось в звонках.",
+    "company.saveContact": "Сохранить контакт",
+    "company.lastCalled": "Последний звонок с этого устройства",
     "company.close": "Закрыть",
     "company.prevPhoto": "Предыдущее фото",
     "company.nextPhoto": "Следующее фото",
@@ -121,6 +128,11 @@ const translations: Record<Language, Record<string, string>> = {
     "ai.newBadge": "НОВОЕ",
     "ai.inactive": "AI-ассистент недоступен",
     "ai.personalAssistant": "Ваш персональный помощник",
+    "ai.status.online": "Внешний AI отвечает",
+    "ai.status.onlineHint": "Зелёный статус означает, что ассистент отвечает через внешний AI.",
+    "ai.status.fallback": "Локальный режим",
+    "ai.status.fallbackHint": "Жёлтый статус означает, что внешний AI сейчас не отвечает, поэтому ассистент работает в резервном режиме.",
+    "ai.status.fallbackHintStub": "Жёлтый статус означает, что внешний AI сейчас не подключен, поэтому ассистент работает в резервном режиме.",
     "ai.disclaimer": "Ответы генерируются AI и могут быть неточными. Не передавайте чувствительные данные и проверяйте важную информацию.",
     "ai.chatIntro": "Здравствуйте! Я ваш личный помощник Лориэн. Подберу релевантные рубрики на портале, которые соответствуют вашему запросу, а также помогу составить и отправить коммерческое предложение/заявку по вопросам сотрудничества.",
     "ai.newChat": "Новый чат",
@@ -498,6 +510,7 @@ const translations: Record<Language, Record<string, string>> = {
     "map.coordsFromAddressNote": "Координаты определены по адресу. Уточните точку на карте через поиск, если нужно.",
 
 		    // Filter labels
+		    "filter.location": "Локация",
 		    "filter.locationLabel": "Область, город, улица, дом",
 		    "filter.chooseRegion": "Выбрать регион",
 		    "filter.region": "Регион",
@@ -798,6 +811,9 @@ const translations: Record<Language, Record<string, string>> = {
     "stats.regions": "Regions",
     "home.mapNearby": "Search on map near me",
     "home.employeeSearch": "Employee search",
+    "home.sharePortal": "Share portal",
+    "home.shareCopied": "Portal link copied!",
+    "home.shareCopyFailed": "Couldn't copy the portal link.",
 
     // Catalog
     "catalog.title": "Catalog by categories",
@@ -847,6 +863,9 @@ const translations: Record<Language, Record<string, string>> = {
     "company.openOriginal": "Open original",
     "company.photoViewer": "Photo viewer",
     "company.openPhoto": "Open photo",
+    "company.callContactHint": "The browser can pass only the phone number to the dialer. Save the contact so the company name shows up in calls.",
+    "company.saveContact": "Save contact",
+    "company.lastCalled": "Last call from this device",
     "company.close": "Close",
     "company.prevPhoto": "Previous photo",
     "company.nextPhoto": "Next photo",
@@ -861,6 +880,11 @@ const translations: Record<Language, Record<string, string>> = {
     "ai.newBadge": "NEW",
     "ai.inactive": "AI assistant unavailable",
     "ai.personalAssistant": "Your personal assistant",
+    "ai.status.online": "External AI is responding",
+    "ai.status.onlineHint": "A green status means the assistant is currently replying through the external AI provider.",
+    "ai.status.fallback": "Local fallback mode",
+    "ai.status.fallbackHint": "A yellow status means the external AI is not responding right now, so the assistant is using the backup mode.",
+    "ai.status.fallbackHintStub": "A yellow status means the external AI is not connected right now, so the assistant is using the backup mode.",
     "ai.disclaimer": "AI-generated responses may be inaccurate. Don't share sensitive data and verify important information.",
     "ai.chatIntro": "Hi! I'm your personal assistant Lorien. I can help draft supplier requests, find suitable companies by your criteria, select relevant keywords, and write unique text.",
     "ai.newChat": "New chat",
@@ -1238,6 +1262,7 @@ const translations: Record<Language, Record<string, string>> = {
     "map.coordsFromAddressNote": "Coordinates were resolved from the address. Use the map search to fine-tune the location if needed.",
 
 		    // Filter labels
+		    "filter.location": "Location",
 		    "filter.locationLabel": "Region, city, street, house",
 		    "filter.chooseRegion": "Choose region",
 		    "filter.region": "Region",
@@ -1538,6 +1563,9 @@ const translations: Record<Language, Record<string, string>> = {
     "stats.regions": "Рэгіёнаў",
     "home.mapNearby": "Шукаць на карце побач са мной",
     "home.employeeSearch": "Пошук супрацоўнікаў",
+    "home.sharePortal": "Падзяліцца парталам",
+    "home.shareCopied": "Спасылка на партал скапіявана!",
+    "home.shareCopyFailed": "Не ўдалося скапіраваць спасылку на партал.",
 
     // Catalog
     "catalog.title": "Каталог па катэгорыях",
@@ -1587,6 +1615,9 @@ const translations: Record<Language, Record<string, string>> = {
     "company.openOriginal": "Адкрыць арыгінал",
     "company.photoViewer": "Прагляд фота",
     "company.openPhoto": "Адкрыць фота",
+    "company.callContactHint": "Браўзер перадае ў тэлефон толькі нумар. Захавайце кантакт, каб назва кампаніі адлюстроўвалася пры званках.",
+    "company.saveContact": "Захаваць кантакт",
+    "company.lastCalled": "Апошні званок з гэтай прылады",
     "company.close": "Закрыць",
     "company.prevPhoto": "Папярэдняе фота",
     "company.nextPhoto": "Наступнае фота",
@@ -1601,6 +1632,11 @@ const translations: Record<Language, Record<string, string>> = {
     "ai.newBadge": "НОВАЕ",
     "ai.inactive": "AI-асістэнт недаступны",
     "ai.personalAssistant": "Ваш персанальны памочнік",
+    "ai.status.online": "Знешні AI адказвае",
+    "ai.status.onlineHint": "Зялёны статус азначае, што асістэнт адказвае праз знешні AI.",
+    "ai.status.fallback": "Рэзервовы рэжым",
+    "ai.status.fallbackHint": "Жоўты статус азначае, што знешні AI зараз не адказвае, таму асістэнт працуе ў рэзервовым рэжыме.",
+    "ai.status.fallbackHintStub": "Жоўты статус азначае, што знешні AI зараз не падключаны, таму асістэнт працуе ў рэзервовым рэжыме.",
     "ai.disclaimer": "Адказы генеруюцца AI і могуць быць недакладнымі. Не перадавайце адчувальныя даныя і правярайце важную інфармацыю.",
     "ai.chatIntro": "Вітаю! Я ваш асабісты памочнік Лорыэн. Я магу дапамагчы сфармуляваць запыт пастаўшчыкам, знаходзіць патрэбныя кампаніі па зададзеных крытэрыях, падбіраць рэлевантныя ключавыя словы і пісаць унікальны тэкст.",
     "ai.newChat": "Новы чат",
@@ -1963,6 +1999,7 @@ const translations: Record<Language, Record<string, string>> = {
     "map.coordsFromAddressNote": "Каардынаты вызначаны па адрасе. Удакладніце кропку на карце праз пошук, калі трэба.",
 
 		    // Filter labels
+		    "filter.location": "Лакацыя",
 		    "filter.locationLabel": "Вобласць, горад, вуліца, дом",
 		    "filter.chooseRegion": "Выбраць рэгіён",
 		    "filter.region": "Рэгіён",
@@ -2263,6 +2300,9 @@ const translations: Record<Language, Record<string, string>> = {
     "stats.regions": "地区",
     "home.mapNearby": "在地图上搜索我附近",
     "home.employeeSearch": "搜索员工",
+    "home.sharePortal": "分享门户",
+    "home.shareCopied": "门户链接已复制！",
+    "home.shareCopyFailed": "无法复制门户链接。",
 
     // Catalog
     "catalog.title": "按类别目录",
@@ -2312,6 +2352,9 @@ const translations: Record<Language, Record<string, string>> = {
     "company.openOriginal": "打开原图",
     "company.photoViewer": "图片查看",
     "company.openPhoto": "打开图片",
+    "company.callContactHint": "浏览器只能向拨号界面传递电话号码。请先保存联系人，这样通话时才能显示公司名称。",
+    "company.saveContact": "保存联系人",
+    "company.lastCalled": "此设备上的最近一次通话",
     "company.close": "关闭",
     "company.prevPhoto": "上一张图片",
     "company.nextPhoto": "下一张图片",
@@ -2326,6 +2369,11 @@ const translations: Record<Language, Record<string, string>> = {
     "ai.newBadge": "新",
     "ai.inactive": "AI助手不可用",
     "ai.personalAssistant": "您的个人助手",
+    "ai.status.online": "外部AI正在响应",
+    "ai.status.onlineHint": "绿色状态表示助手当前通过外部AI提供回答。",
+    "ai.status.fallback": "本地备用模式",
+    "ai.status.fallbackHint": "黄色状态表示外部AI当前没有响应，因此助手正在使用备用模式。",
+    "ai.status.fallbackHintStub": "黄色状态表示外部AI当前未连接，因此助手正在使用备用模式。",
     "ai.disclaimer": "AI生成的回答可能不准确。请勿分享敏感信息，并核实重要内容。",
     "ai.chatIntro": "你好！我是您的个人助手洛里恩。我可以帮您起草供应商询价请求，按条件寻找合适的公司，选择相关关键词，并撰写原创文本。",
     "ai.newChat": "新对话",
@@ -2688,6 +2736,7 @@ const translations: Record<Language, Record<string, string>> = {
     "map.coordsFromAddressNote": "坐标由地址解析得到。如有需要，可通过地图搜索来微调位置。",
 
 		    // Filter labels
+		    "filter.location": "位置",
 		    "filter.locationLabel": "地区、城市、街道、门牌号",
 		    "filter.chooseRegion": "选择地区",
 		    "filter.region": "地区",
@@ -2952,19 +3001,17 @@ const translations: Record<Language, Record<string, string>> = {
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>("ru");
-  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY) as Language | null;
+    const stored = safeLocalStorageGet(LANGUAGE_STORAGE_KEY) as Language | null;
     if (stored && ["ru", "en", "be", "zh"].includes(stored)) {
       setLanguageState(stored);
     }
-    setIsInitialized(true);
   }, []);
 
   const setLanguage = useCallback((lang: Language) => {
     setLanguageState(lang);
-    localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
+    safeLocalStorageSet(LANGUAGE_STORAGE_KEY, lang);
   }, []);
 
   const t = useCallback(
@@ -2973,10 +3020,6 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     },
     [language]
   );
-
-  if (!isInitialized) {
-    return null;
-  }
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage, t }}>

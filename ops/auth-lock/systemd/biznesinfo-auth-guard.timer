@@ -1,0 +1,10 @@
+[Unit]
+Description=Re-check Biznesinfo password lock every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=1min
+Unit=biznesinfo-auth-guard.service
+
+[Install]
+WantedBy=timers.target

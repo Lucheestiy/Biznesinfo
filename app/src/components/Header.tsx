@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage, Language } from "@/contexts/LanguageContext";
 import { useRegion } from "@/contexts/RegionContext";
@@ -78,13 +78,13 @@ export default function Header() {
   const { favorites } = useFavorites();
   const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const headerRef = useRef<HTMLElement | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [contactMenuOpen, setContactMenuOpen] = useState(false);
+  const [shareState, setShareState] = useState<"idle" | "copied" | "error">("idle");
   const [favoriteCompanies, setFavoriteCompanies] = useState<BiznesinfoCompanySummary[]>([]);
   const [favoritesLoading, setFavoritesLoading] = useState(false);
   const favoritesLoadedKeyRef = useRef<string>("");
@@ -100,7 +100,6 @@ export default function Header() {
     () => isCompanySection || isAddCompanySection,
     [isCompanySection, isAddCompanySection],
   );
-  const searchParamsString = searchParams?.toString() || "";
 
   const handleMobileLogoClick = () => {
     setMobileMenuOpen(false);
@@ -194,7 +193,7 @@ export default function Header() {
     }
 
     upsertNavigationState(current);
-  }, [pathname, searchParamsString]);
+  }, [pathname]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -240,19 +239,83 @@ export default function Header() {
     }
   }, [mobileMenuOpen, expandedItem]);
 
+  useEffect(() => {
+    if (shareState === "idle") return;
+
+    const timeoutId = window.setTimeout(() => {
+      setShareState("idle");
+    }, 2500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [shareState]);
+
+  const copyPortalLinkFallback = useCallback(async (url: string): Promise<boolean> => {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+      return true;
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = url;
+    textarea.setAttribute("readonly", "true");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    textarea.style.pointerEvents = "none";
+    document.body.appendChild(textarea);
+    textarea.select();
+
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } finally {
+      document.body.removeChild(textarea);
+    }
+
+    return copied;
+  }, []);
+
+  const handleSharePortal = useCallback(async (): Promise<void> => {
+    if (typeof window === "undefined") return;
+
+    const url = new URL("/", window.location.origin).toString();
+    const sharePayload = {
+      title: `Biznesinfo.by — ${t("hero.title")}`,
+      text: t("hero.subtitle"),
+      url,
+    };
+
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share(sharePayload);
+        setShareState("idle");
+        return;
+      } catch (error: unknown) {
+        const err = error as { name?: string };
+        if (err?.name === "AbortError") return;
+      }
+    }
+
+    try {
+      const copied = await copyPortalLinkFallback(url);
+      setShareState(copied ? "copied" : "error");
+    } catch {
+      setShareState("error");
+    }
+  }, [copyPortalLinkFallback, t]);
+
   return (
     <header ref={headerRef} className="bg-[#a0006d] text-white shadow-lg sticky top-0 z-50">
       <div className="container mx-auto px-3 sm:px-4">
         {/* Mobile Header - Compact single row */}
         <div className="md:hidden flex items-center justify-between py-2.5 gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
             {showMobileBackButton && (
               <button
                 type="button"
                 onClick={handleMobileBackClick}
                 aria-label="Назад"
                 title="Назад"
-                className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 border border-white/20 text-white shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d]"
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d]"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -264,9 +327,9 @@ export default function Header() {
             <Link
               href="/"
               onClick={handleMobileLogoClick}
-              className="flex items-center gap-2 group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d] active:bg-white/10 rounded-lg transition-colors min-w-0"
+              className="group flex min-w-0 items-center gap-2 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d] active:bg-white/10"
             >
-              <div className="relative w-11 h-11 flex-shrink-0 animate-[float_4s_ease-in-out_infinite]">
+              <div className="relative h-11 w-11 flex-shrink-0 animate-[float_4s_ease-in-out_infinite]">
                 <svg
                   viewBox="0 0 80 80"
                   fill="none"
@@ -286,30 +349,47 @@ export default function Header() {
                   <path d="M30 34 Q36 30 44 34 Q48 38 46 42 Q42 44 36 42 Q30 40 30 36Z" fill="#9D174D" opacity="0.7" />
                 </svg>
               </div>
-              <span className="text-xl font-extrabold leading-none truncate">
+              <span
+                className="whitespace-nowrap font-extrabold leading-none tracking-[-0.01em]"
+                style={{ fontSize: "clamp(1rem, 4.2vw, 1.18rem)" }}
+              >
                 <span className="text-yellow-400 transition-colors duration-200 group-active:text-yellow-300">Biznesinfo</span>
-                <span className="text-white transition-colors duration-200 group-active:text-yellow-100">.by</span>
+                <span className="hidden min-[380px]:inline text-white transition-colors duration-200 group-active:text-yellow-100">.by</span>
               </span>
             </Link>
           </div>
 
           {/* Right side - Lang, Menu */}
-          <div className="flex items-center gap-0.5 flex-shrink-0">
+          <div className="flex flex-shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                void handleSharePortal();
+              }}
+              aria-label={t("home.sharePortal")}
+              title={t("home.sharePortal")}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d]"
+            >
+              <svg className="h-5 w-5 text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+              </svg>
+            </button>
+
             {/* Language Button - Compact */}
             <button
               onClick={() => setLangMenuOpen(!langMenuOpen)}
               aria-expanded={langMenuOpen}
               aria-haspopup="menu"
-              className="flex items-center gap-1.5 px-2.5 h-9 rounded-lg bg-white/10 border border-white/20 text-white text-sm font-bold shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d]"
+              className="flex h-9 items-center gap-1.5 px-2.5 rounded-lg border border-white/20 bg-white/10 text-sm font-bold text-white shadow-sm transition-colors hover:bg-white/15 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#a0006d]"
             >
-              <svg className="w-[18px] h-[18px] text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <svg className="h-5 w-5 text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 21a9 9 0 100-18 9 9 0 000 18z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.6 9h16.8" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.6 15h16.8" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3c2.6 2.4 4.1 5.6 4.1 9s-1.5 6.6-4.1 9c-2.6-2.4-4.1-5.6-4.1-9S9.4 5.4 12 3z" />
               </svg>
-              <span className="text-yellow-300 text-sm">{currentLang.flag}</span>
-              <svg className="w-4 h-4 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <span className="text-[15px] text-yellow-300">{currentLang.flag}</span>
+              <svg className="h-4 w-4 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
@@ -317,7 +397,7 @@ export default function Header() {
             {/* Menu Button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-white"
             >
               {mobileMenuOpen ? (
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -331,6 +411,14 @@ export default function Header() {
             </button>
           </div>
         </div>
+
+        {shareState !== "idle" && (
+          <div className="md:hidden -mt-1 pb-2 text-right">
+            <p className={`text-xs ${shareState === "copied" ? "text-yellow-200" : "text-pink-100"}`}>
+              {shareState === "copied" ? t("home.shareCopied") : t("home.shareCopyFailed")}
+            </p>
+          </div>
+        )}
 
         {/* Mobile Region Dropdown */}
         {regionMenuOpen && (
@@ -688,6 +776,22 @@ export default function Header() {
           <div className="md:hidden py-4 border-t border-white/30">
             <nav className="flex flex-col gap-2 text-sm">
               {/* Favorites (quick list) */}
+              <div className="border-b border-white/10">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    void handleSharePortal();
+                  }}
+                  className="w-full flex items-center justify-between py-3 px-2 hover:text-yellow-400 transition-colors text-left font-medium"
+                >
+                  <span className="flex items-center gap-2">
+                    <span aria-hidden>🔗</span>
+                    <span>{t("home.sharePortal")}</span>
+                  </span>
+                </button>
+              </div>
+
               <div className="border-b border-white/10">
                 <button
                   type="button"

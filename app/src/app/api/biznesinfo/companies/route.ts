@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { biznesinfoGetCompaniesSummary } from "@/lib/biznesinfo/store";
-import { filterOutLiquidatedByKartoteka } from "@/lib/biznesinfo/kartoteka";
 
 export const runtime = "nodejs";
 
@@ -18,6 +17,7 @@ export async function GET(request: Request) {
     .slice(0, 200);
 
   const companies = await biznesinfoGetCompaniesSummary(ids);
-  const filtered = await filterOutLiquidatedByKartoteka(companies);
-  return NextResponse.json({ companies: filtered.items });
+  // This endpoint serves explicit user-picked IDs (favorites, shortlist, header menu).
+  // Do not silently hide cards here even if they are later flagged by liquidation filters.
+  return NextResponse.json({ companies });
 }

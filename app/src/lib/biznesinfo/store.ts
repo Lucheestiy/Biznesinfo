@@ -2,6 +2,7 @@ import { meiliSearch } from "@/lib/meilisearch";
 
 import type {
   BiznesinfoCatalogResponse,
+  BiznesinfoCatalogStats,
   BiznesinfoCompanyResponse,
   BiznesinfoCompanySummary,
   BiznesinfoRubricResponse,
@@ -13,6 +14,7 @@ import {
   type BiznesinfoRubricHint,
   biznesinfoDetectRubricHintsFromPg,
   biznesinfoGetCatalogFromPg,
+  biznesinfoGetCatalogStatsFromPg,
   biznesinfoGetCompaniesSummaryByIds,
   biznesinfoGetCompanyById,
   biznesinfoGetRubricCompaniesFromPg,
@@ -38,6 +40,10 @@ export function biznesinfoWarmStore(): Promise<void> {
 
 export async function biznesinfoGetCatalog(region: string | null): Promise<BiznesinfoCatalogResponse> {
   return biznesinfoGetCatalogFromPg(region);
+}
+
+export async function biznesinfoGetCatalogStats(region: string | null): Promise<BiznesinfoCatalogStats> {
+  return biznesinfoGetCatalogStatsFromPg(region);
 }
 
 export async function biznesinfoGetRubricCompanies(params: {

@@ -4,7 +4,16 @@ export const runtime = "nodejs";
 
 const GEOCODER_TIMEOUT_MS = 5000;
 const GEOCODER_RESULTS_LIMIT = "20";
-type GeocoderKind = "house" | "street" | null;
+type GeocoderKind = "house" | "street" | "district" | null;
+const DISTRICT_MARKER_RE =
+  /(^|[^\p{L}\p{N}])(р-?н|район\p{L}*|district\p{L}*)(?=$|[^\p{L}\p{N}])/iu;
+
+interface GeocodeBounds {
+  southLat: number;
+  westLng: number;
+  northLat: number;
+  eastLng: number;
+}
 
 interface GeocodeCandidate {
   lat: number;
@@ -12,6 +21,7 @@ interface GeocodeCandidate {
   address: string;
   kind: string;
   precision: string;
+  bounds: GeocodeBounds | null;
 }
 
 function parseCoordinate(value: string | null): number | null {
@@ -40,6 +50,29 @@ function parseCoordinates(rawPos: string): { lat: number; lng: number } | null {
   return { lat, lng };
 }
 
+function parseBounds(lowerCornerRaw: string, upperCornerRaw: string): GeocodeBounds | null {
+  const lower = parseCoordinates(lowerCornerRaw);
+  const upper = parseCoordinates(upperCornerRaw);
+  if (!lower || !upper) return null;
+
+  const southLat = Math.min(lower.lat, upper.lat);
+  const northLat = Math.max(lower.lat, upper.lat);
+  const westLng = Math.min(lower.lng, upper.lng);
+  const eastLng = Math.max(lower.lng, upper.lng);
+
+  if (!Number.isFinite(southLat) || !Number.isFinite(northLat) || !Number.isFinite(westLng) || !Number.isFinite(eastLng)) {
+    return null;
+  }
+  if (northLat < southLat || eastLng < westLng) return null;
+
+  return {
+    southLat,
+    westLng,
+    northLat,
+    eastLng,
+  };
+}
+
 function extractCandidates(payload: any): GeocodeCandidate[] {
   const featureMembers = payload?.response?.GeoObjectCollection?.featureMember;
   if (!Array.isArray(featureMembers)) return [];
@@ -51,12 +84,17 @@ function extractCandidates(payload: any): GeocodeCandidate[] {
     const coords = parseCoordinates(geoObject?.Point?.pos);
     if (!coords) continue;
     const address = String(metadata?.Address?.formatted || metadata?.text || "").trim();
+    const bounds = parseBounds(
+      String(geoObject?.boundedBy?.Envelope?.lowerCorner || ""),
+      String(geoObject?.boundedBy?.Envelope?.upperCorner || ""),
+    );
     out.push({
       lat: coords.lat,
       lng: coords.lng,
       address,
       kind: String(metadata?.kind || "").trim(),
       precision: String(metadata?.precision || "").trim(),
+      bounds,
     });
   }
   return out;
@@ -146,8 +184,12 @@ async function resolveCoordinates(
   query: string,
   nearbyHint: { lat: number; lng: number } | null,
 ): Promise<GeocodeCandidate | null> {
+  const normalizedQuery = String(query || "").toLowerCase().replace(/ё/gu, "е");
+  const hasDistrictMarker = DISTRICT_MARKER_RE.test(normalizedQuery);
   const houseFirst = /\d/u.test(query);
-  const attempts: GeocoderKind[] = houseFirst ? ["house", "street", null] : ["street", "house", null];
+  const attempts: GeocoderKind[] = hasDistrictMarker
+    ? ["district", "street", "house", null]
+    : (houseFirst ? ["house", "street", null] : ["street", "house", null]);
 
   for (const kind of attempts) {
     try {
@@ -206,6 +248,7 @@ export async function GET(request: Request) {
         address: candidate.address || null,
         kind: candidate.kind || null,
         precision: candidate.precision || null,
+        bounds: candidate.bounds,
       },
       { headers: { "Cache-Control": "public, max-age=120" } },
     );

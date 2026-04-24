@@ -1,0 +1,11 @@
+[Unit]
+Description=Enforce Biznesinfo password lock
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/mlweb/biznesinfo.lucheestiy.com
+ExecStart=/bin/bash /home/mlweb/biznesinfo.lucheestiy.com/scripts/enforce-biznesinfo-password-lock.sh
+User=root
+Group=root

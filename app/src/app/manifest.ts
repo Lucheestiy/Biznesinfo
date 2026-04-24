@@ -1,8 +1,22 @@
 import type { MetadataRoute } from "next";
+import { headers } from "next/headers";
 
 const ICON_VERSION = "20260312-3";
 
-export default function manifest(): MetadataRoute.Manifest {
+export const dynamic = "force-dynamic";
+
+function isIosHomeScreenRiskUa(userAgent: string): boolean {
+  const ua = userAgent || "";
+  if (/iPhone|iPod/i.test(ua)) return true;
+  if (/iPad/i.test(ua)) return true;
+  return /Macintosh/i.test(ua) && /Mobile\//i.test(ua);
+}
+
+export default async function manifest(): Promise<MetadataRoute.Manifest> {
+  const headerStore = await headers();
+  const userAgent = headerStore.get("user-agent") || "";
+  const displayMode = isIosHomeScreenRiskUa(userAgent) ? "browser" : "standalone";
+
   return {
     name: "Biznesinfo.by — Бизнес-справочник Беларуси",
     short_name: "Biznesinfo.by",
@@ -10,7 +24,7 @@ export default function manifest(): MetadataRoute.Manifest {
       "Поиск предприятий, организаций и компаний. Товары и услуги от надежных партнеров.",
     start_url: "/",
     scope: "/",
-    display: "standalone",
+    display: displayMode,
     orientation: "portrait",
     background_color: "#a0006d",
     theme_color: "#a0006d",

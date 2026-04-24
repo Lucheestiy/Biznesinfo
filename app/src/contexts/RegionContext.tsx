@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { regions } from "@/data/regions";
+import { safeLocalStorageRemove, safeLocalStorageSet } from "@/lib/browser/safeStorage";
 
 interface RegionContextType {
   selectedRegion: string | null;
@@ -17,28 +18,22 @@ const regionNames: Record<string, string> = Object.fromEntries(regions.map((r) =
 
 export function RegionProvider({ children }: { children: ReactNode }) {
   const [selectedRegion, setSelectedRegionState] = useState<string | null>(null);
-  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     // Don't restore saved region - always start with "Выбрать регион"
-    localStorage.removeItem(REGION_STORAGE_KEY);
-    setIsInitialized(true);
+    safeLocalStorageRemove(REGION_STORAGE_KEY);
   }, []);
 
   const setSelectedRegion = useCallback((region: string | null) => {
     setSelectedRegionState(region);
     if (region) {
-      localStorage.setItem(REGION_STORAGE_KEY, region);
+      safeLocalStorageSet(REGION_STORAGE_KEY, region);
     } else {
-      localStorage.removeItem(REGION_STORAGE_KEY);
+      safeLocalStorageRemove(REGION_STORAGE_KEY);
     }
   }, []);
 
   const regionName = selectedRegion ? regionNames[selectedRegion] || selectedRegion : "Все регионы";
-
-  if (!isInitialized) {
-    return null;
-  }
 
   return (
     <RegionContext.Provider value={{ selectedRegion, setSelectedRegion, regionName }}>

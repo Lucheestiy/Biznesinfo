@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from "react";
 import { useAuth } from "./AuthContext";
 import { companySlugForUrl } from "@/lib/biznesinfo/slug";
+import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/browser/safeStorage";
 
 interface FavoritesContextType {
   favorites: string[];
@@ -45,7 +46,7 @@ function areSameFavorites(a: string[], b: string[]): boolean {
 export function FavoritesProvider({ children }: { children: ReactNode }) {
   const { enabled, user, loading: authLoading } = useAuth();
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [storageReady, setStorageReady] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const didMigrateRef = useRef(false);
   const favoritesRef = useRef<string[]>([]);
@@ -55,7 +56,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   }, [favorites]);
 
   useEffect(() => {
-    const stored = localStorage.getItem(FAVORITES_STORAGE_KEY);
+    const stored = safeLocalStorageGet(FAVORITES_STORAGE_KEY);
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
@@ -70,12 +71,12 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
         // Invalid JSON, ignore
       }
     }
-    setIsInitialized(true);
+    setStorageReady(true);
   }, []);
 
   // Sync favorites with server when logged in.
   useEffect(() => {
-    if (!isInitialized) return;
+    if (!storageReady) return;
     if (authLoading) return;
     if (!enabled || !user) return;
     let cancelled = false;
@@ -125,13 +126,13 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [enabled, user, authLoading, isInitialized]);
+  }, [enabled, user, authLoading, storageReady]);
 
   useEffect(() => {
-    if (isInitialized) {
-      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
+    if (storageReady) {
+      safeLocalStorageSet(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
     }
-  }, [favorites, isInitialized]);
+  }, [favorites, storageReady]);
 
   const addFavorite = useCallback((companyId: string) => {
     const normalizedId = normalizeFavoriteId(companyId);
@@ -177,10 +178,6 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
         .catch(() => {});
     }
   }, [enabled, favorites, user]);
-
-  if (!isInitialized) {
-    return null;
-  }
 
   return (
     <FavoritesContext.Provider

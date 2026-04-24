@@ -26,6 +26,9 @@ const EMPTY_LOGO_HINTS = [
   "/images/logo/noimage",
   "/images/logo/no-image",
 ];
+const LEGACY_CATEGORY_ALIAS_REDIRECTS: Record<string, string> = {
+  "transport-logistika": "transport-logistika-perevozki",
+};
 
 function hasCompanyLogo(logoUrl: string): boolean {
   const normalized = (logoUrl || "").trim().toLowerCase();
@@ -149,6 +152,17 @@ export default function SubcategoryPage({ params }: PageProps) {
       setCurrentPage(totalPages);
     }
   }, [data, currentPage, totalPages]);
+
+  useEffect(() => {
+    if (isLoading || data) return;
+    const legacyCategory = String(category || "").trim().toLowerCase();
+    const canonicalCategory = LEGACY_CATEGORY_ALIAS_REDIRECTS[legacyCategory];
+    if (!canonicalCategory) return;
+    const nextPath = rubricPath
+      ? `/catalog/${canonicalCategory}/${rubricPath}`
+      : `/catalog/${canonicalCategory}`;
+    router.replace(nextPath);
+  }, [category, data, isLoading, router, rubricPath]);
 
   const sortedCompanies = useMemo(() => {
     const items = (data?.companies || []).map((company, index) => ({

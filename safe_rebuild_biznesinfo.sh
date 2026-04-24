@@ -33,6 +33,12 @@ PRUNE_BUILDER=0
 CLEAR_LOGO_CACHE=0
 FOLLOW_LOGS=0
 
+resolve_tailscale_ip() {
+  if command -v tailscale >/dev/null 2>&1; then
+    tailscale ip -4 2>/dev/null | head -n1 || true
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "${1}" in
     --project-dir)
@@ -98,8 +104,21 @@ else
   die "docker compose is not installed"
 fi
 
+AUTH_ENFORCER="${PROJECT_DIR}/scripts/enforce-biznesinfo-password-lock.sh"
+TAILSCALE_BIND_IP="${TAILSCALE_BIND_IP:-$(resolve_tailscale_ip)}"
+
+if [[ -n "${TAILSCALE_BIND_IP}" ]]; then
+  export TAILSCALE_BIND_IP
+  echo "==> Tailscale bind IP: ${TAILSCALE_BIND_IP}"
+fi
+
 echo "==> Project: ${PROJECT_DIR}"
 echo "==> Compose: ${COMPOSE_FILE}"
+
+if [[ -x "${AUTH_ENFORCER}" ]]; then
+  echo "==> Enforcing Biznesinfo password lock (if enabled)..."
+  "${AUTH_ENFORCER}"
+fi
 
 if [[ "${PRUNE_SYSTEM}" -eq 1 ]]; then
   echo "==> Pruning unused Docker images/build cache (safe: no volumes)..."
@@ -128,6 +147,11 @@ fi
 
 echo "==> Starting stack (force recreate)..."
 "${COMPOSE[@]}" up -d --force-recreate --remove-orphans
+
+if [[ -x "${AUTH_ENFORCER}" ]]; then
+  echo "==> Re-checking Biznesinfo password lock after recreate..."
+  "${AUTH_ENFORCER}"
+fi
 
 echo "==> Status:"
 "${COMPOSE[@]}" ps

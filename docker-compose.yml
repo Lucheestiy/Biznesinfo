@@ -46,7 +46,7 @@ services:
       AI_ASSISTANT_PROVIDER: ${AI_ASSISTANT_PROVIDER:-stub}
       CODEX_AUTH_JSON_PATH: ${CODEX_AUTH_JSON_PATH:-/run/secrets/codex_auth_json}
       CODEX_BASE_URL: ${CODEX_BASE_URL:-https://chatgpt.com/backend-api/codex}
-      CODEX_MODEL: ${CODEX_MODEL:-gpt-5.2-codex}
+      CODEX_MODEL: ${CODEX_MODEL:-gpt-5.4}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
@@ -117,7 +117,8 @@ services:
     container_name: biznesinfo-nginx
     restart: unless-stopped
     ports:
-      - "${HOST_PORT:-8116}:80"
+      - "127.0.0.1:${HOST_PORT:-8116}:80"
+      - "${TAILSCALE_BIND_IP:-100.93.127.52}:${HOST_PORT:-8116}:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
