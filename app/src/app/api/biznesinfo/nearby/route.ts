@@ -3,7 +3,7 @@ import { getCompaniesIndex, isMeiliHealthy } from "@/lib/meilisearch";
 import { isExcludedBiznesinfoCompany } from "@/lib/biznesinfo/exclusions";
 import { isLiquidatedByKartoteka } from "@/lib/biznesinfo/kartoteka";
 import { biznesinfoGetCompanyCardsByIds } from "@/lib/biznesinfo/postgres";
-import { isAddressLikeLocationQuery, normalizeLocationQueryForSearch } from "@/lib/utils/location";
+import { isAddressLikeLocationQuery, normalizeCityForFilter, normalizeLocationQueryForSearch } from "@/lib/utils/location";
 import minskDistrictStreetLists from "@/lib/biznesinfo/minsk-district-streets.json";
 
 export const runtime = "nodejs";
@@ -12,6 +12,40 @@ const DEFAULT_NEARBY_RADIUS = 10000; // 10 km
 const MIN_NEARBY_RADIUS = 1000; // 1 km
 const MAX_NEARBY_RADIUS = 100000; // 100 km
 const MAX_NEARBY_LIMIT = 200;
+const DECLARED_CITY_GEO_MAX_DRIFT_METERS = 70_000;
+
+type BelarusCityCenter = {
+  canonical: string;
+  lat: number;
+  lng: number;
+  aliases: string[];
+};
+
+// Guard nearby results from known bad geocodes: if a company explicitly says it is in
+// another Belarus city, its stored point should still land near that city.
+const BELARUS_CITY_CENTERS: BelarusCityCenter[] = [
+  { canonical: "Минск", lat: 53.9006011, lng: 27.558972, aliases: ["минск", "minsk"] },
+  { canonical: "Брест", lat: 52.0976214, lng: 23.7340503, aliases: ["брест", "brest"] },
+  { canonical: "Витебск", lat: 55.1848061, lng: 30.201622, aliases: ["витебск", "vitebsk"] },
+  { canonical: "Гомель", lat: 52.4251638, lng: 31.0150396, aliases: ["гомель", "gomel", "homel"] },
+  { canonical: "Гродно", lat: 53.6693538, lng: 23.8131306, aliases: ["гродно", "grodno", "hrodna"] },
+  { canonical: "Могилев", lat: 53.8980613, lng: 30.3325338, aliases: ["могилев", "могилёв", "mogilev", "mohilev"] },
+  { canonical: "Бобруйск", lat: 53.1383887, lng: 29.2213722, aliases: ["бобруйск", "bobruisk"] },
+  { canonical: "Пинск", lat: 52.1222261, lng: 26.0951316, aliases: ["пинск", "pinsk"] },
+  { canonical: "Барановичи", lat: 53.1327058, lng: 26.0139001, aliases: ["барановичи", "baranovichi"] },
+  { canonical: "Лида", lat: 53.8836632, lng: 25.2992454, aliases: ["лида", "lida"] },
+  { canonical: "Орша", lat: 54.5080497, lng: 30.4172198, aliases: ["орша", "orsha"] },
+  { canonical: "Солигорск", lat: 52.7874113, lng: 27.5413684, aliases: ["солигорск", "soligorsk"] },
+  { canonical: "Молодечно", lat: 54.3079678, lng: 26.838699, aliases: ["молодечно", "molodechno"] },
+  { canonical: "Жодино", lat: 54.0984585, lng: 28.3337079, aliases: ["жодино", "zhodino"] },
+  { canonical: "Слуцк", lat: 53.0273781, lng: 27.5596767, aliases: ["слуцк", "slutsk"] },
+];
+
+const BELARUS_CITY_CENTER_BY_ALIAS = new Map<string, BelarusCityCenter>(
+  BELARUS_CITY_CENTERS.flatMap((city) =>
+    city.aliases.map((alias) => [alias, city] as const),
+  ),
+);
 
 type MinskDistrictKey =
   | "frunzensky"
@@ -1201,6 +1235,93 @@ interface NearbySearchResponse {
   radius: number;
 }
 
+function normalizeNearbyTagNames(rawItems: unknown): string[] {
+  if (!Array.isArray(rawItems)) return [];
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of rawItems) {
+    const name = String(item || "").trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
+}
+
+function normalizeNearbyCategoryList(rawItems: unknown): Array<{ slug: string; name: string }> {
+  return normalizeNearbyTagNames(rawItems).map((name) => ({ slug: "", name }));
+}
+
+function normalizeNearbyRubricList(
+  rawItems: unknown,
+): Array<{ slug: string; name: string; category_slug: string | null; category_name: string | null }> {
+  return normalizeNearbyTagNames(rawItems).map((name) => ({
+    slug: "",
+    name,
+    category_slug: null,
+    category_name: null,
+  }));
+}
+
+function nearbyPseudoCardFromHit(hit: any): any {
+  return {
+    id: String(hit?.id || "").trim(),
+    name: String(hit?.name || "").trim(),
+    description: String(hit?.description || hit?.about || "").trim(),
+    address: String(hit?.address || "").trim(),
+    city: String(hit?.city || "").trim(),
+    categories: normalizeNearbyCategoryList(hit?.category_names),
+    rubrics: normalizeNearbyRubricList(hit?.rubric_names),
+  };
+}
+
+function nearbyCompanyFromHit(
+  hit: any,
+  params: {
+    distanceOriginLat: number;
+    distanceOriginLng: number;
+    fallbackGeo?: { lat: number; lng: number } | null;
+  },
+): NearbyCompany | null {
+  const id = String(hit?.id || "").trim();
+  const name = String(hit?.name || "").trim();
+  if (!id || !name) return null;
+
+  const rawGeo = hit?._geo;
+  const geo =
+    Number.isFinite(rawGeo?.lat) && Number.isFinite(rawGeo?.lng)
+      ? { lat: rawGeo.lat as number, lng: rawGeo.lng as number }
+      : params.fallbackGeo || null;
+
+  const normalizedCity = normalizeNearbyCityByAddress(hit?.address || "", hit?.city || "");
+  const normalizedAddress = normalizeNearbyAddressByCity(hit?.address || "", normalizedCity);
+  if (!hasPlausibleGeoForDeclaredCity(normalizedAddress, normalizedCity || String(hit?.city || "").trim(), geo)) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    description: String(hit?.description || hit?.about || "").trim(),
+    address: normalizedAddress,
+    city: normalizedCity || String(hit?.city || "").trim(),
+    phones: Array.isArray(hit?.phones)
+      ? hit.phones.map((value: unknown) => String(value || "").trim()).filter(Boolean)
+      : [],
+    emails: Array.isArray(hit?.emails)
+      ? hit.emails.map((value: unknown) => String(value || "").trim()).filter(Boolean)
+      : [],
+    logo_url: String(hit?.logo_url || "").trim(),
+    categories: normalizeNearbyCategoryList(hit?.category_names),
+    rubrics: normalizeNearbyRubricList(hit?.rubric_names),
+    distance: distanceMetersBetweenPoints(params.distanceOriginLat, params.distanceOriginLng, geo?.lat, geo?.lng),
+    _geo: geo,
+  };
+}
+
 function toRadians(value: number): number {
   return (value * Math.PI) / 180;
 }
@@ -1224,6 +1345,35 @@ function distanceMetersBetweenPoints(
       Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return Math.round(earthRadiusMeters * c);
+}
+
+function resolveKnownBelarusCityCenter(raw: string): BelarusCityCenter | null {
+  const normalized = normalizeCityForFilter(raw || "").replace(/ё/gu, "е").trim();
+  if (!normalized) return null;
+  return BELARUS_CITY_CENTER_BY_ALIAS.get(normalized) || null;
+}
+
+function resolveKnownBelarusCityCenterFromAddress(rawAddress: string): BelarusCityCenter | null {
+  const address = String(rawAddress || "").trim().replace(/^\s*\d{6}\s*,?\s*/u, "");
+  if (!address) return null;
+  const localityCandidate = (address.split(",")[0] || "").trim();
+  return resolveKnownBelarusCityCenter(localityCandidate);
+}
+
+function hasPlausibleGeoForDeclaredCity(
+  rawAddress: string,
+  rawCity: string,
+  geo: { lat: number; lng: number } | null,
+): boolean {
+  if (!Number.isFinite(geo?.lat) || !Number.isFinite(geo?.lng)) return true;
+
+  const declaredCity =
+    resolveKnownBelarusCityCenterFromAddress(rawAddress) ||
+    resolveKnownBelarusCityCenter(rawCity);
+  if (!declaredCity) return true;
+
+  const drift = distanceMetersBetweenPoints(declaredCity.lat, declaredCity.lng, geo?.lat, geo?.lng);
+  return Number.isFinite(drift) && (drift as number) <= DECLARED_CITY_GEO_MAX_DRIFT_METERS;
 }
 
 function hasMinskPostalCode(addressRaw: string): boolean {
@@ -1427,7 +1577,13 @@ export async function GET(request: Request) {
         "id",
         "unp",
         "name",
+        "city",
         "address",
+        "description",
+        "about",
+        "logo_url",
+        "phones",
+        "emails",
         "category_names",
         "rubric_names",
         "_geoDistance",
@@ -1478,42 +1634,69 @@ export async function GET(request: Request) {
       }
     }
 
-    const cards = await biznesinfoGetCompanyCardsByIds(hitIds);
+    let cards: any[] = [];
+    if (hitIds.length > 0) {
+      try {
+        cards = await biznesinfoGetCompanyCardsByIds(hitIds);
+      } catch (error) {
+        console.warn("Nearby DB hydration failed, falling back to Meilisearch hit payloads:", error);
+      }
+    }
+
     const companies: NearbyCompany[] = [];
+    const emittedIds = new Set<string>();
+    const suppressedIds = new Set<string>();
     for (const card of cards) {
-      if (
-        await isLiquidatedByKartoteka({
+      let isLiquidated = false;
+      try {
+        isLiquidated = await isLiquidatedByKartoteka({
           source_id: card.id,
           unp: card.unp || "",
           name: card.name || "",
           city: card.city || "",
           address: card.address || "",
-        })
-      ) {
+        });
+      } catch (error) {
+        console.warn(`Nearby liquidation check failed for company ${String(card?.id || "").trim() || "unknown"}:`, error);
+      }
+
+      if (isLiquidated) {
+        suppressedIds.add(card.id);
         continue;
       }
       if (applyMilkFilter && !cardMatchesMilkIntent(card)) {
+        suppressedIds.add(card.id);
         continue;
       }
       if (applyFoodVenueFilter && !cardMatchesFoodVenueIntent(card)) {
+        suppressedIds.add(card.id);
         continue;
       }
       if (applyBreadFilter && !cardMatchesBreadIntent(card)) {
+        suppressedIds.add(card.id);
         continue;
       }
       if (applySchoolFilter && !cardMatchesSchoolIntent(card)) {
+        suppressedIds.add(card.id);
         continue;
       }
       if (applyKindergartenFilter && !cardMatchesKindergartenIntent(card)) {
+        suppressedIds.add(card.id);
         continue;
       }
       if (applyDistrictFilter && !cardMatchesDistrictFilter(card, districtName)) {
+        suppressedIds.add(card.id);
         continue;
       }
 
       const geo = hitGeoById.get(card.id) ?? card.geo ?? null;
       const normalizedCity = normalizeNearbyCityByAddress(card.address || "", card.city || "");
       const normalizedAddress = normalizeNearbyAddressByCity(card.address || "", normalizedCity);
+      if (!hasPlausibleGeoForDeclaredCity(normalizedAddress, normalizedCity || card.city, geo)) {
+        suppressedIds.add(card.id);
+        continue;
+      }
+      emittedIds.add(card.id);
       companies.push({
         id: card.id,
         name: card.name,
@@ -1528,6 +1711,28 @@ export async function GET(request: Request) {
         distance: distanceMetersBetweenPoints(distanceOriginLat, distanceOriginLng, geo?.lat, geo?.lng),
         _geo: geo,
       });
+    }
+
+    for (const hit of filteredHits) {
+      const hitId = String(hit?.id || "").trim();
+      if (!hitId || emittedIds.has(hitId) || suppressedIds.has(hitId)) continue;
+
+      const fallbackCard = nearbyPseudoCardFromHit(hit);
+      if (applyMilkFilter && !cardMatchesMilkIntent(fallbackCard)) continue;
+      if (applyFoodVenueFilter && !cardMatchesFoodVenueIntent(fallbackCard)) continue;
+      if (applyBreadFilter && !cardMatchesBreadIntent(fallbackCard)) continue;
+      if (applySchoolFilter && !cardMatchesSchoolIntent(fallbackCard)) continue;
+      if (applyKindergartenFilter && !cardMatchesKindergartenIntent(fallbackCard)) continue;
+      if (applyDistrictFilter && !cardMatchesDistrictFilter(fallbackCard, districtName)) continue;
+
+      const fallbackCompany = nearbyCompanyFromHit(hit, {
+        distanceOriginLat,
+        distanceOriginLng,
+        fallbackGeo: hitGeoById.get(hitId) ?? null,
+      });
+      if (!fallbackCompany) continue;
+      companies.push(fallbackCompany);
+      emittedIds.add(hitId);
     }
 
     // Deduplicate by ID

@@ -702,6 +702,13 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function getMapOverride(companyId: string): (typeof BIZNESINFO_MAP_OVERRIDES)[string] | null {
+  const raw = (companyId || "").trim();
+  if (!raw) return null;
+  const key = raw.toLowerCase();
+  return BIZNESINFO_MAP_OVERRIDES[raw] ?? BIZNESINFO_MAP_OVERRIDES[key] ?? null;
+}
+
 function applyWebsiteOverride(companyId: string, websites: string[]): string[] {
   const raw = (companyId || "").trim();
   if (!raw) return websites;
@@ -717,11 +724,7 @@ function applyWebsiteOverride(companyId: string, websites: string[]): string[] {
 }
 
 function applyMapOverride(company: BiznesinfoCompany): void {
-  const raw = (company.source_id || "").trim();
-  if (!raw) return;
-  const key = raw.toLowerCase();
-
-  const override = BIZNESINFO_MAP_OVERRIDES[raw] ?? BIZNESINFO_MAP_OVERRIDES[key];
+  const override = getMapOverride(company.source_id || "");
   if (!override) return;
 
   const address = String(override.address || "").trim();
@@ -1449,8 +1452,9 @@ function computeDataQualityScore(input: {
 }
 
 function mapSearchIndexDbRow(row: BiznesinfoSearchIndexDbRow): BiznesinfoSearchIndexCompany {
-  const lat = Number.isFinite(row.lat) ? row.lat : null;
-  const lng = Number.isFinite(row.lng) ? row.lng : null;
+  const mapOverride = getMapOverride(row.id);
+  const lat = isFiniteNumber(mapOverride?.lat) ? mapOverride.lat : (Number.isFinite(row.lat) ? row.lat : null);
+  const lng = isFiniteNumber(mapOverride?.lng) ? mapOverride.lng : (Number.isFinite(row.lng) ? row.lng : null);
   const logoUrl = normalizeSearchText(row.logo_url || "");
   const normalizedName = normalizeNameForSearchIndex(row.name || "", row.normalized_name || "");
   const serviceTitles = dedupeNormalizedSearchValues((row.service_titles || []).map((raw) => String(raw || "")));
@@ -1505,7 +1509,7 @@ function mapSearchIndexDbRow(row: BiznesinfoSearchIndexDbRow): BiznesinfoSearchI
     categoryNames,
     region: normalizeSearchText(row.region || ""),
     city: normalizeSearchText(row.city || ""),
-    address: normalizeSearchText(row.address || ""),
+    address: normalizeSearchText(mapOverride?.address || row.address || ""),
     status: normalizeSearchText(row.status || "active") || "active",
     logo_url: logoUrl,
     logo_rank: computeLogoRankFromUrl(logoUrl),
@@ -1563,10 +1567,11 @@ export async function biznesinfoGetSearchItemsByIds(ids: string[]): Promise<Bizn
 
   const byId = new Map<string, BiznesinfoSearchItem>();
   for (const row of result.rows) {
-    const lat = Number.isFinite(row.lat) ? row.lat : null;
-    const lng = Number.isFinite(row.lng) ? row.lng : null;
     const rowId = String(row.id || "").trim();
     const rowIdLower = rowId.toLowerCase();
+    const mapOverride = getMapOverride(rowId);
+    const lat = isFiniteNumber(mapOverride?.lat) ? mapOverride.lat : (Number.isFinite(row.lat) ? row.lat : null);
+    const lng = isFiniteNumber(mapOverride?.lng) ? mapOverride.lng : (Number.isFinite(row.lng) ? row.lng : null);
     const logoOverride =
       BIZNESINFO_LOGO_OVERRIDES[rowId] ??
       BIZNESINFO_LOGO_OVERRIDES[rowIdLower] ??
@@ -1577,7 +1582,7 @@ export async function biznesinfoGetSearchItemsByIds(ids: string[]): Promise<Bizn
       description: normalizeSearchText(row.description || ""),
       region: normalizeSearchText(row.region || ""),
       city: normalizeSearchText(row.city || ""),
-      address: normalizeSearchText(row.address || ""),
+      address: normalizeSearchText(mapOverride?.address || row.address || ""),
       status: normalizeSearchText(row.status || ""),
       logo_url: normalizeSearchText(logoOverride || row.logo_url || ""),
       createdAt: toIsoString(row.created_at),

@@ -127,7 +127,9 @@ function SearchResults() {
   const clearInputButtonClassName =
     "absolute right-14 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg text-[#820251]/60 hover:text-[#820251] hover:bg-[#820251]/10 active:bg-[#820251]/15 transition-colors flex items-center justify-center";
 
-  const preventInputBlurOnMouseDown = (e: React.MouseEvent<HTMLButtonElement>) => {
+  const preventInputBlurOnPress = (
+    e: React.MouseEvent<HTMLButtonElement> | React.PointerEvent<HTMLButtonElement>,
+  ) => {
     e.preventDefault();
   };
 
@@ -529,7 +531,7 @@ function SearchResults() {
                 )}
                 <button
                   type="submit"
-                  onMouseDown={preventInputBlurOnMouseDown}
+                  onPointerDown={preventInputBlurOnPress}
                   aria-label={t("search.find")}
                   className={inputButtonClassName}
                 >
@@ -596,7 +598,7 @@ function SearchResults() {
                 )}
                 <button
                   type="submit"
-                  onMouseDown={preventInputBlurOnMouseDown}
+                  onPointerDown={preventInputBlurOnPress}
                   aria-label={t("search.find")}
                   className={inputButtonClassName}
                 >
@@ -728,7 +730,7 @@ function SearchResults() {
               <button
                 type="button"
                 aria-label={t("search.find")}
-                onMouseDown={preventInputBlurOnMouseDown}
+                onPointerDown={preventInputBlurOnPress}
                 onClick={() => navigateToSearch("push")}
                 className={inputButtonClassName}
               >

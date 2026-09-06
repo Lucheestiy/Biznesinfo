@@ -1115,13 +1115,13 @@ function CompanyMap({
               key={company.id}
               className="p-3 rounded-lg border border-gray-100 hover:border-[#820251]/30 hover:bg-gray-50 transition-colors"
             >
-              <a href={`/company/${company.id}`} className="flex items-center gap-3 min-w-0">
+              <a href={`/company/${company.id}`} className="flex items-start gap-3 min-w-0">
                 <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   <CompanyListLogo companyId={company.id} logoUrl={company.logo_url} alt={company.name} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 truncate">{company.name}</div>
-                  <div className="text-sm text-gray-500 truncate">{company.address}</div>
+                  <div className="font-medium leading-tight text-gray-900 whitespace-normal break-words">{company.name}</div>
+                  <div className="mt-0.5 text-sm leading-tight text-gray-500 whitespace-normal break-words">{company.address}</div>
                   <div className="mt-1 space-y-0.5">
                     <div className="text-xs text-gray-600 leading-tight line-clamp-1">
                       <span className="font-medium text-gray-700">{mapText.profileLabel}:</span> {infoLines.profile}

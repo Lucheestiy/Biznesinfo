@@ -289,6 +289,11 @@ export default function MapPage() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchButtonBusy = searchingAddress;
   const searchButtonLoading = searchingAddress || searchingCompanies;
+  const preventInputBlurOnPress = (
+    e: React.MouseEvent<HTMLButtonElement> | React.PointerEvent<HTMLButtonElement>,
+  ) => {
+    e.preventDefault();
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -485,6 +490,12 @@ export default function MapPage() {
     }
   }, [searchInput, userLocation, userCityHint, mapText]);
 
+  const handleSearchSubmit = useCallback((e?: React.FormEvent | React.MouseEvent) => {
+    e?.preventDefault();
+    if (searchButtonBusy) return;
+    void applySearch();
+  }, [applySearch, searchButtonBusy]);
+
   useEffect(() => {
     const geolocationOptions: PositionOptions = {
       enableHighAccuracy: true,
@@ -622,7 +633,7 @@ export default function MapPage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 {mapText.searchLabel}
               </label>
-              <div className="flex gap-2">
+              <form onSubmit={handleSearchSubmit} className="flex gap-2">
                 <div className="relative flex-1">
                   <input
                     ref={searchInputRef}
@@ -636,8 +647,7 @@ export default function MapPage() {
                     className="w-full rounded-lg border border-gray-300 px-4 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-[#820251]/30 focus:border-[#820251]"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
-                        e.preventDefault();
-                        applySearch();
+                        handleSearchSubmit(e);
                       }
                     }}
                   />
@@ -646,6 +656,7 @@ export default function MapPage() {
                       type="button"
                       aria-label={mapText.clearSearchLabel}
                       title={mapText.clearSearchLabel}
+                      onPointerDown={preventInputBlurOnPress}
                       onClick={() => {
                         setSearchInput("");
                         setSearchHint("");
@@ -660,13 +671,14 @@ export default function MapPage() {
                   )}
                 </div>
                 <button
-                  onClick={applySearch}
+                  type="submit"
                   disabled={searchButtonBusy}
+                  onPointerDown={preventInputBlurOnPress}
                   className="px-6 py-2.5 bg-[#820251] text-white rounded-lg font-medium hover:bg-[#7a0150] transition-colors"
                 >
                   {searchButtonLoading ? mapText.searchingButton : mapText.searchButton}
                 </button>
-              </div>
+              </form>
               <p className="mt-2 text-xs text-gray-500">
                 {mapText.searchHelp}
               </p>

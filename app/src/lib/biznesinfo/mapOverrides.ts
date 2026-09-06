@@ -10,6 +10,12 @@ export const BIZNESINFO_MAP_OVERRIDES: Record<string, BiznesinfoMapOverride> = {
     lat: 53.92528,
     lng: 27.549605,
   },
+  // Типография «Градиент» — адрес обновлен по актуальному контакту с сайта компании.
+  gradient: {
+    address: "г. Минск, ул. Асаналиева, 84 к.2",
+    lat: 53.8397365,
+    lng: 27.5423438,
+  },
   "msu-23": {
     address: "Минск, Белорусская улица, 17",
     lat: 53.890436,

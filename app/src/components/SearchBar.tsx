@@ -208,7 +208,9 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
     router.push(url);
   };
 
-  const preventInputBlurOnMouseDown = (e: React.MouseEvent<HTMLButtonElement>) => {
+  const preventInputBlurOnPress = (
+    e: React.MouseEvent<HTMLButtonElement> | React.PointerEvent<HTMLButtonElement>,
+  ) => {
     e.preventDefault();
   };
 
@@ -445,7 +447,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
               {companyQuery.trim().length > 0 && (
                 <button
                   type="button"
-                  onMouseDown={(e) => e.preventDefault()}
+                  onPointerDown={preventInputBlurOnPress}
                   onClick={clearCompanyInput}
                   className="w-8 h-8 shrink-0 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors flex items-center justify-center"
                   aria-label="Очистить поиск"
@@ -459,7 +461,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
               {/* Search button inside input */}
               <button
                 type="button"
-                onMouseDown={preventInputBlurOnMouseDown}
+                onPointerDown={preventInputBlurOnPress}
                 onClick={handleSearch}
                 className="m-2 w-10 h-10 shrink-0 flex items-center justify-center bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-xl shadow-md
                   hover:shadow-[0_0_20px_rgba(255,255,255,0.6)] hover:scale-110
@@ -541,7 +543,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
             {renderPhoneSearchHint("mobile")}
             <button
               type="button"
-              onMouseDown={preventInputBlurOnMouseDown}
+              onPointerDown={preventInputBlurOnPress}
               onClick={handleSearch}
               className="m-2 w-10 h-10 shrink-0 flex items-center justify-center bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-xl shadow-md
                 hover:shadow-[0_0_20px_rgba(255,255,255,0.6)] hover:scale-110
@@ -608,13 +610,14 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
               value={cityQuery}
               onChange={(e) => setCityQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="portal-dialog-typography flex-grow min-w-0 py-3.5 px-3 text-gray-600 focus:outline-none text-base bg-transparent"
+              className="portal-dialog-typography flex-grow min-w-0 py-3.5 pl-2.5 pr-2 text-[15px] leading-tight text-gray-600 focus:outline-none sm:px-3 sm:text-base bg-transparent"
             />
             <button
               type="button"
-              onMouseDown={preventInputBlurOnMouseDown}
+              onPointerDown={preventInputBlurOnPress}
               onClick={handleSearch}
-              className="m-2 w-10 h-10 shrink-0 flex items-center justify-center bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-xl shadow-md
+              className="m-1.5 h-9 w-9 shrink-0 flex items-center justify-center rounded-xl bg-gradient-to-r from-[#820251] to-[#a80368] text-white shadow-md
+                sm:m-2 sm:h-10 sm:w-10
                 hover:shadow-[0_0_20px_rgba(255,255,255,0.6)] hover:scale-110
                 active:scale-95 transition-all duration-300 group/btn"
               title={t("search.find")}
@@ -666,7 +669,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
               {companyQuery.trim().length > 0 && (
                 <button
                   type="button"
-                  onMouseDown={(e) => e.preventDefault()}
+                  onPointerDown={preventInputBlurOnPress}
                   onClick={clearCompanyInput}
                   className="mr-4 w-8 h-8 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors flex items-center justify-center shrink-0"
                   aria-label="Очистить поиск"
@@ -822,7 +825,7 @@ export default function SearchBar({ variant = "hero" }: SearchBarProps) {
         {/* Search button */}
         <button
           type="button"
-          onMouseDown={preventInputBlurOnMouseDown}
+          onPointerDown={preventInputBlurOnPress}
           onClick={handleSearch}
           className="flex-shrink-0 w-16 bg-gradient-to-r from-[#820251] to-[#a80368] text-white rounded-2xl shadow-lg
             hover:shadow-[0_0_25px_rgba(255,255,255,0.6)] hover:scale-110
